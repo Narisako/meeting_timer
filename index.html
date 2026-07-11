@@ -240,6 +240,9 @@
 
 <!-- ===================== ① ルーター（トリアージ） ===================== -->
 <section id="screen-triage" class="screen active">
+  <!-- AIオートルーター: sekisho.llm.enabled 時のみ JS で中身を注入（OFF時はDOMに残さない） -->
+  <div id="ai-router-card" class="card hidden"></div>
+
   <div class="card">
     <h2>伝えたいことは、いつの話ですか？</h2>
     <p class="note">会議を開けるのは「相談（未来の話）」だけです。報告と連絡は、ここで済ませて会議を1件減らしましょう。</p>
@@ -697,6 +700,7 @@ function saveLlmFromUI() {
   if (ep) ep.value = saved.endpoint; // 空入力は既定値に正規化して反映
   const st = document.getElementById('llm-save-status');
   if (st) st.textContent = '保存しました（' + (saved.enabled ? 'ON' : 'OFF') + '）';
+  renderAiRouterCard(); // 保存で即座にAI仕分けカードの表示/非表示を反映
 }
 
 function llmUrl(endpoint, kind) {
@@ -1011,6 +1015,7 @@ function showScreen(name) {
     document.getElementById('tab-' + s).classList.toggle('active', s === name);
   });
   if (name === 'a3') renderA3();
+  if (name === 'triage') renderAiRouterCard();
 }
 function unlockTab(name, on) { document.getElementById('tab-' + name).disabled = !on; }
 
@@ -1054,6 +1059,88 @@ function renderTemplate() {
     ta.value = `【報告】${topic}\n\n■ 結論（1行で）\n・\n\n■ 事実・経緯\n・\n\n■ 数字・実績\n・\n\n■ 所感・学び\n・\n\n※質問は本レポートへの返信でお願いします（会議は開きません）`;
   } else {
     ta.value = `【連絡】${topic}\n\n・いつ：\n・何が：\n・誰に影響：\n・お願いしたいこと：\n\n※確認したら 👍 リアクションをお願いします（返信・会議は不要です）`;
+  }
+}
+
+// --- AIオートルーター（R1 / Issue #15） ---
+// サーバの kind をアプリの3レーンへ対応づける: report=報告(過去) / chat=連絡(現在) / meeting=相談(未来)
+const AI_ROUTE_MAP = {
+  report:  { tense: 'past',    label: '報告' },
+  chat:    { tense: 'present', label: '連絡' },
+  meeting: { tense: 'future',  label: '相談' }
+};
+
+// AI仕分けカードの表示制御。LLM有効時のみ中身をDOMへ注入する。
+// OFF時は空にしてDOMから撤去し、既存の手動フロー（button.primary 等の想定）を無劣化に保つ。
+const AI_ROUTER_CARD_HTML =
+  '<h2>AIに仕分けてもらう <span class="badge meet">AIアシスト</span></h2>' +
+  '<p class="note">伝えたい内容をそのまま貼り付けて「仕分ける」を押すと、報告／連絡／相談のどれに当たるかをAIが判定し、テンプレートまで用意します。送信前に内容を確認する同意画面が出ます。判定に納得できないときは、下の3択から手動で選べます。</p>' +
+  '<label for="ai-router-input">仕分けたい自由文</label>' +
+  '<textarea id="ai-router-input" rows="4" placeholder="例）先週の展示会の結果を共有したいです。来場者は前年比120%で、名刺は80枚集まりました。"></textarea>' +
+  '<div class="row" style="margin-top:8px">' +
+    '<div><button class="primary" id="ai-router-btn" onclick="aiRoute()">仕分ける</button></div>' +
+    '<div><span id="ai-router-status" class="note"></span></div>' +
+  '</div>' +
+  '<div id="ai-router-result" class="alert ok hidden" style="margin-top:10px"></div>';
+
+function renderAiRouterCard() {
+  const card = document.getElementById('ai-router-card');
+  if (!card) return;
+  const on = loadLlm().enabled;
+  if (on) {
+    if (!document.getElementById('ai-router-btn')) card.innerHTML = AI_ROUTER_CARD_HTML;
+    card.classList.remove('hidden');
+  } else {
+    card.innerHTML = '';
+    card.classList.add('hidden');
+  }
+}
+
+// 自由文を llmAssist('route') に投げ、判定→該当時制のtriageを自動実行、formattedをテンプレへ反映。
+async function aiRoute() {
+  const inputEl = document.getElementById('ai-router-input');
+  const status = document.getElementById('ai-router-status');
+  const resultBox = document.getElementById('ai-router-result');
+  const input = (inputEl.value || '').trim();
+  resultBox.classList.add('hidden');
+  resultBox.textContent = '';
+  if (!input) { status.textContent = '仕分けたい内容を入力してください。'; return; }
+  status.textContent = '仕分け中…';
+
+  let resp = null;
+  try { resp = await llmAssist('route', { input }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（エラーを露出させない）。
+  const result = resp && resp.ok && resp.result ? resp.result : null;
+  if (!result || !AI_ROUTE_MAP[result.kind]) {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' 下の3択から手動で選んで続けられます。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+
+  const m = AI_ROUTE_MAP[result.kind];
+  resultBox.className = 'alert ok';
+  const b = document.createElement('b');
+  b.textContent = m.label;
+  resultBox.appendChild(b);
+  resultBox.appendChild(document.createTextNode(' と判定しました — ' + (result.reason || '')));
+  resultBox.classList.remove('hidden');
+
+  // 該当時制のトリアージを自動実行（既存フローを再利用）。
+  triage(m.tense);
+
+  const formatted = typeof result.formatted === 'string' ? result.formatted : '';
+  if (m.tense === 'future') {
+    // 相談（要会議）は分岐（単発／A3案件）へ誘導。案件名候補に先頭行を流し込む。
+    if (formatted) {
+      const t = document.getElementById('new-series-title');
+      if (t && !t.value.trim()) t.value = formatted.split('\n')[0].slice(0, 60);
+    }
+  } else if (formatted) {
+    // 報告／連絡は整形済み本文をテンプレエリアに反映（ユーザー編集可）。
+    document.getElementById('triage-template').value = formatted;
   }
 }
 
@@ -2793,6 +2880,7 @@ renderDesign();
 renderDash();
 renderA3();
 renderLlmSettings();
+renderAiRouterCard();
 </script>
 </body>
 </html>
