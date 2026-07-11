@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>会議関所 — Meeting Gatekeeper</title>
+<style>
+  :root {
+    --ink: #1a2333;
+    --sub: #5b6575;
+    --bg: #f2f4f8;
+    --card: #ffffff;
+    --line: #dde3ec;
+    --accent: #0f62fe;
+    --accent-soft: #e8f0fe;
+    --ok: #0e8a5f;
+    --ok-soft: #e2f5ec;
+    --warn: #b3540a;
+    --warn-soft: #fdeede;
+    --bad: #c92a2a;
+    --bad-soft: #fdeaea;
+    --gold: #8a6d00;
+    --gold-soft: #fdf6dc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+    line-height: 1.6;
+  }
+  header {
+    background: var(--ink); color: #fff; padding: 14px 20px;
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: 2px; }
+  header .tagline { font-size: 12px; opacity: .75; }
+  nav {
+    display: flex; gap: 4px; background: var(--ink); padding: 0 12px 10px; flex-wrap: wrap;
+  }
+  nav button {
+    border: none; border-radius: 8px 8px 0 0; padding: 8px 16px; cursor: pointer;
+    background: rgba(255,255,255,.12); color: #fff; font-size: 13px;
+  }
+  nav button.active { background: var(--bg); color: var(--ink); font-weight: 700; }
+  nav button:disabled { opacity: .35; cursor: not-allowed; }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
+  section.screen { display: none; }
+  section.screen.active { display: block; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 16px;
+  }
+  h2 { font-size: 17px; margin: 0 0 6px; }
+  h3 { font-size: 14px; margin: 16px 0 6px; color: var(--sub); }
+  p.note { font-size: 13px; color: var(--sub); margin: 4px 0 12px; }
+  .triage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .triage-card {
+    border: 2px solid var(--line); border-radius: 12px; padding: 16px; cursor: pointer;
+    background: var(--card); text-align: left; font: inherit;
+  }
+  .triage-card:hover { border-color: var(--accent); }
+  .triage-card .tense { font-size: 12px; color: var(--sub); }
+  .triage-card .kind { font-size: 20px; font-weight: 700; margin: 2px 0; }
+  .triage-card .dest { font-size: 13px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; font-weight: 700; }
+  .badge.report { background: var(--ok-soft); color: var(--ok); }
+  .badge.chat { background: var(--gold-soft); color: var(--gold); }
+  .badge.meet { background: var(--accent-soft); color: var(--accent); }
+  label { display: block; font-size: 13px; font-weight: 700; margin: 10px 0 4px; }
+  input[type="text"], input[type="number"], textarea, select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+    font: inherit; font-size: 14px; background: #fff; color: var(--ink);
+  }
+  textarea { resize: vertical; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .row > div { flex: 1; min-width: 140px; }
+  button.primary {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 10px 20px; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  button.primary:disabled { background: #9db4d8; cursor: not-allowed; }
+  button.ghost {
+    background: #fff; color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer;
+  }
+  button.danger { background: var(--bad); color: #fff; border: none; border-radius: 8px; padding: 10px 20px; font-weight: 700; cursor: pointer; }
+  button.small { padding: 4px 10px; font-size: 12px; }
+  .alert { border-radius: 8px; padding: 10px 14px; font-size: 13px; margin: 10px 0; }
+  .alert.ok { background: var(--ok-soft); color: var(--ok); }
+  .alert.warn { background: var(--warn-soft); color: var(--warn); }
+  .alert.bad { background: var(--bad-soft); color: var(--bad); }
+  ul.plain { list-style: none; padding: 0; margin: 8px 0; }
+  ul.plain li {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; font-size: 14px; background: #fff;
+  }
+  ul.plain li .grow { flex: 1; }
+  .pricetag {
+    background: var(--ink); color: #fff; border-radius: 12px; padding: 16px 20px;
+    display: flex; gap: 24px; flex-wrap: wrap; align-items: center;
+  }
+  .pricetag .big { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .pricetag .sub { font-size: 12px; opacity: .75; }
+  .budget-display { text-align: center; padding: 10px 0 4px; }
+  .budget-display .label { font-size: 13px; color: var(--sub); }
+  .budget-display .amount {
+    font-size: 56px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 1px;
+  }
+  .budget-display .amount.over { color: var(--bad); }
+  .meter { height: 10px; background: var(--line); border-radius: 999px; overflow: hidden; margin: 8px 0 4px; }
+  .meter > div { height: 100%; background: var(--ok); transition: width .3s linear; }
+  .meter > div.warn { background: var(--warn); }
+  .meter > div.over { background: var(--bad); }
+  .cockpit-stats { display: flex; gap: 16px; justify-content: center; font-size: 13px; color: var(--sub); flex-wrap: wrap; }
+  .cockpit-stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .agenda-item { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+  .agenda-item.current { border-color: var(--accent); background: var(--accent-soft); }
+  .agenda-item.done { opacity: .65; }
+  .agenda-item .q { font-weight: 700; }
+  .agenda-item .decision { font-size: 13px; color: var(--ok); }
+  .agenda-timer { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .agenda-timer.over { color: var(--bad); }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .stat .v { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size: 12px; color: var(--sub); }
+  .stat.gold { background: var(--gold-soft); border-color: #e8d98a; }
+  .hidden { display: none !important; }
+  pre.report {
+    background: #f7f8fa; border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px; font-size: 13px; white-space: pre-wrap; word-break: break-word;
+    font-family: inherit;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>会議関所</h1>
+  <span class="tagline">会議は1分でも短く、1人でも少なく。相談だけが関所を通れる。</span>
+</header>
+<nav>
+  <button id="tab-triage" class="active" onclick="showScreen('triage')">① 関所（報連相仕分け）</button>
+  <button id="tab-design" onclick="showScreen('design')" disabled>② 会議設計</button>
+  <button id="tab-cockpit" onclick="showScreen('cockpit')" disabled>③ コックピット</button>
+  <button id="tab-report" onclick="showScreen('report')" disabled>④ レポート</button>
+  <button id="tab-dash" onclick="showScreen('dash')">節約ダッシュボード</button>
+</nav>
+
+<main>
+
+<!-- ===================== ① 関所（トリアージ） ===================== -->
+<section id="screen-triage" class="screen active">
+  <div class="card">
+    <h2>伝えたいことは、いつの話ですか？</h2>
+    <p class="note">会議を開けるのは「相談（未来の話）」だけです。報告と連絡は、ここで済ませて会議を1件減らしましょう。</p>
+    <div class="triage-grid">
+      <button class="triage-card" onclick="triage('past')">
+        <div class="tense">過去のこと ─ すでに起きた・終わった</div>
+        <div class="kind">報告</div>
+        <div class="dest"><span class="badge report">レポートで済む</span> 結果・経緯・実績の共有</div>
+      </button>
+      <button class="triage-card" onclick="triage('present')">
+        <div class="tense">現在のこと ─ いま知らせたい</div>
+        <div class="kind">連絡</div>
+        <div class="dest"><span class="badge chat">チャットで済む</span> 予定変更・周知・依頼</div>
+      </button>
+      <button class="triage-card" onclick="triage('future')">
+        <div class="tense">未来のこと ─ これから決めたい</div>
+        <div class="kind">相談</div>
+        <div class="dest"><span class="badge meet">会議へ進める</span> 判断・意思決定・合意形成</div>
+      </button>
+    </div>
+  </div>
+
+  <div id="triage-result" class="card hidden">
+    <h2 id="triage-result-title"></h2>
+    <p class="note" id="triage-result-note"></p>
+    <label for="triage-topic">件名・要点</label>
+    <input type="text" id="triage-topic" placeholder="例）4月度の販売実績について" oninput="renderTemplate()">
+    <label for="triage-template">自動生成テンプレート（コピーして送るだけ）</label>
+    <textarea id="triage-template" rows="9"></textarea>
+    <div class="row" style="margin-top:8px">
+      <div><button class="ghost" onclick="copyText('triage-template', this)">テンプレートをコピー</button></div>
+    </div>
+    <h3>この件、従来なら会議を開いていましたか？</h3>
+    <p class="note">開いていたはずの会議の規模を入力すると、「回避コスト」として節約実績に記録されます。</p>
+    <div class="row">
+      <div>
+        <label for="avoid-people">想定していた人数</label>
+        <input type="number" id="avoid-people" min="2" max="30" value="4" oninput="renderAvoided()">
+      </div>
+      <div>
+        <label for="avoid-min">想定していた時間（分）</label>
+        <input type="number" id="avoid-min" min="5" max="240" step="5" value="30" oninput="renderAvoided()">
+      </div>
+      <div>
+        <label for="avoid-rate">人時単価（円）</label>
+        <input type="number" id="avoid-rate" min="500" step="500" oninput="renderAvoided()">
+      </div>
+    </div>
+    <div class="alert ok" id="avoid-preview"></div>
+    <button class="primary" onclick="recordAvoided()">会議を開かずに済ませた！（節約を記録）</button>
+    <span id="avoid-done" class="hidden" style="margin-left:10px; color:var(--ok); font-weight:700">記録しました 🎉</span>
+  </div>
+</section>
+
+<!-- ===================== ② 会議設計 ===================== -->
+<section id="screen-design" class="screen">
+  <div class="card">
+    <h2>相談の設計 <span class="badge meet">関所通過</span></h2>
+    <p class="note">議題は「未来の問い（〜するか？〜すべきか？）」だけ。参加者は役割がある人だけ。値札を見てから開きます。</p>
+    <label for="mtg-title">会議名</label>
+    <input type="text" id="mtg-title" placeholder="例）新製品の価格をどう設定するか">
+    <h3>議題（疑問形で入力 → Enter か追加ボタン）</h3>
+    <div class="row">
+      <div style="flex:3">
+        <input type="text" id="agenda-input" placeholder="例）発売日を6月に前倒しすべきか？" onkeydown="if(event.key==='Enter')addAgenda()">
+      </div>
+      <div style="flex:1">
+        <select id="agenda-min">
+          <option value="5">5分</option>
+          <option value="10" selected>10分</option>
+          <option value="15">15分</option>
+        </select>
+      </div>
+      <div style="flex:0"><button class="ghost" onclick="addAgenda()">追加</button></div>
+    </div>
+    <div id="agenda-error" class="alert bad hidden"></div>
+    <ul class="plain" id="agenda-list"></ul>
+    <h3>参加者（役割は必須。「聞くだけ」は招集できません）</h3>
+    <div class="row">
+      <div style="flex:2">
+        <input type="text" id="member-name" placeholder="名前" onkeydown="if(event.key==='Enter')addMember()">
+      </div>
+      <div style="flex:2">
+        <select id="member-role">
+          <option value="decider">決める人（決裁者）</option>
+          <option value="opinion">意見を出す人</option>
+          <option value="info">情報を持っている人</option>
+          <option value="listener">聞くだけ</option>
+        </select>
+      </div>
+      <div style="flex:0"><button class="ghost" onclick="addMember()">追加</button></div>
+    </div>
+    <div id="listener-notice" class="alert warn hidden"></div>
+    <ul class="plain" id="member-list"></ul>
+    <h3>会議に呼ばず、レポートを送る人</h3>
+    <p class="note">「聞くだけ」の人は自動でこちらに回ります。会議終了後のレポートの送付先になります。</p>
+    <ul class="plain" id="recipient-list"></ul>
+    <div class="row">
+      <div>
+        <label for="mtg-rate">人時単価（円/時）</label>
+        <input type="number" id="mtg-rate" min="500" step="500" oninput="renderPricetag()">
+      </div>
+    </div>
+    <div id="design-warnings"></div>
+    <h3>この会議の値札</h3>
+    <div class="pricetag">
+      <div>
+        <div class="big" id="price-amount">¥0</div>
+        <div class="sub" id="price-detail">参加者 0人 × 0分</div>
+      </div>
+      <div class="sub" id="price-hint"></div>
+    </div>
+    <div style="margin-top:14px">
+      <button class="primary" id="btn-start" onclick="startMeeting()" disabled>この予算で会議を開始する</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ③ コックピット ===================== -->
+<section id="screen-cockpit" class="screen">
+  <div class="card">
+    <h2 id="cockpit-title"></h2>
+    <div class="budget-display">
+      <div class="label">コスト予算 残高</div>
+      <div class="amount" id="budget-amount">¥0</div>
+      <div class="meter"><div id="budget-meter" style="width:100%"></div></div>
+      <div class="cockpit-stats">
+        <span>経過 <b id="stat-elapsed">0:00</b></span>
+        <span>予算時間 <b id="stat-planned">0分</b></span>
+        <span>参加者 <b id="stat-people">0人</b></span>
+        <span>延べ消費 <b id="stat-personmin">0人分</b></span>
+      </div>
+    </div>
+    <div id="budget-over-alert" class="alert bad hidden"></div>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">議題 — 決定を記録しないと次へ進めません</h3>
+    <div id="cockpit-agendas"></div>
+    <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+      <button class="danger" onclick="endMeeting(true)">会議を途中終了する</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ④ レポート ===================== -->
+<section id="screen-report" class="screen">
+  <div class="card">
+    <h2>会議レポート（自動生成）</h2>
+    <p class="note">相談（会議）の結果は、そのまま報告（レポート）になります。呼ばなかった人へコピーして送付してください。</p>
+    <div id="report-summary"></div>
+    <pre class="report" id="report-body"></pre>
+    <div class="row">
+      <div><button class="ghost" onclick="copyReport(this)">レポートをコピー</button></div>
+      <div><button class="primary" onclick="resetFlow()">次の案件を関所にかける</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ダッシュボード ===================== -->
+<section id="screen-dash" class="screen">
+  <div class="card">
+    <h2>節約ダッシュボード</h2>
+    <p class="note">使った額ではなく、取り返した時間とお金を数えます。</p>
+    <div class="stat-grid">
+      <div class="stat gold"><div class="v" id="dash-total-saved">¥0</div><div class="k">累計節約額（回避＋短縮）</div></div>
+      <div class="stat"><div class="v" id="dash-avoided-count">0件</div><div class="k">開かずに済ませた会議</div></div>
+      <div class="stat"><div class="v" id="dash-avoided-cost">¥0</div><div class="k">会議回避による節約</div></div>
+      <div class="stat"><div class="v" id="dash-held-count">0件</div><div class="k">開いた会議</div></div>
+      <div class="stat"><div class="v" id="dash-shorten-cost">¥0</div><div class="k">予定より早く終えた節約</div></div>
+      <div class="stat"><div class="v" id="dash-saved-min">0分</div><div class="k">取り返した延べ時間</div></div>
+      <div class="stat"><div class="v" id="dash-spared">0人</div><div class="k">会議に呼ばずに済んだ人（延べ）</div></div>
+      <div class="stat"><div class="v" id="dash-decisions">0件</div><div class="k">記録された決定</div></div>
+    </div>
+    <div style="margin-top:14px">
+      <button class="ghost small" onclick="resetStats()">統計をリセット</button>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+'use strict';
+
+// ---------- 永続化 ----------
+const DEFAULT_RATE = 5000;
+const STATS_KEY = 'sekisho.stats';
+const RATE_KEY = 'sekisho.rate';
+
+function loadStats() {
+  try {
+    return Object.assign({
+      totalSaved: 0, avoidedCount: 0, avoidedCost: 0,
+      heldCount: 0, shortenCost: 0, savedMin: 0, spared: 0, decisions: 0
+    }, JSON.parse(localStorage.getItem(STATS_KEY) || '{}'));
+  } catch (e) { return { totalSaved:0, avoidedCount:0, avoidedCost:0, heldCount:0, shortenCost:0, savedMin:0, spared:0, decisions:0 }; }
+}
+function saveStats() { localStorage.setItem(STATS_KEY, JSON.stringify(stats)); renderDash(); }
+function loadRate() { return Number(localStorage.getItem(RATE_KEY)) || DEFAULT_RATE; }
+function saveRate(r) { localStorage.setItem(RATE_KEY, String(r)); }
+
+let stats = loadStats();
+
+// ---------- 画面制御 ----------
+const SCREENS = ['triage', 'design', 'cockpit', 'report', 'dash'];
+function showScreen(name) {
+  const tab = document.getElementById('tab-' + (name === 'dash' ? 'dash' : name));
+  if (tab.disabled) return;
+  SCREENS.forEach(s => {
+    document.getElementById('screen-' + s).classList.toggle('active', s === name);
+    document.getElementById('tab-' + s).classList.toggle('active', s === name);
+  });
+}
+function unlockTab(name, on) { document.getElementById('tab-' + name).disabled = !on; }
+
+// ---------- ① 関所（トリアージ） ----------
+let triageKind = null; // 'past' | 'present' | 'future'
+
+function triage(kind) {
+  triageKind = kind;
+  const result = document.getElementById('triage-result');
+  const title = document.getElementById('triage-result-title');
+  const note = document.getElementById('triage-result-note');
+  document.getElementById('avoid-done').classList.add('hidden');
+  document.getElementById('avoid-rate').value = loadRate();
+
+  if (kind === 'future') {
+    result.classList.add('hidden');
+    unlockTab('design', true);
+    showScreen('design');
+    document.getElementById('mtg-rate').value = loadRate();
+    renderPricetag();
+    return;
+  }
+  result.classList.remove('hidden');
+  if (kind === 'past') {
+    title.innerHTML = '報告 → <span class="badge report">レポートで済みます</span>';
+    note.textContent = '過去に起きたことは、集まって読み上げる必要はありません。下のテンプレートを埋めて共有すれば完了です。';
+  } else {
+    title.innerHTML = '連絡 → <span class="badge chat">チャットで済みます</span>';
+    note.textContent = 'いま知らせたいことは、スピードが命。チャットに貼れば全員に同時に届き、記録も残ります。';
+  }
+  renderTemplate();
+  renderAvoided();
+  result.scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderTemplate() {
+  const topic = document.getElementById('triage-topic').value.trim() || '（件名）';
+  const ta = document.getElementById('triage-template');
+  if (triageKind === 'past') {
+    ta.value = `【報告】${topic}\n\n■ 結論（1行で）\n・\n\n■ 事実・経緯\n・\n\n■ 数字・実績\n・\n\n■ 所感・学び\n・\n\n※質問は本レポートへの返信でお願いします（会議は開きません）`;
+  } else {
+    ta.value = `【連絡】${topic}\n\n・いつ：\n・何が：\n・誰に影響：\n・お願いしたいこと：\n\n※確認したら 👍 リアクションをお願いします（返信・会議は不要です）`;
+  }
+}
+
+function avoidedCostNow() {
+  const p = Number(document.getElementById('avoid-people').value) || 0;
+  const m = Number(document.getElementById('avoid-min').value) || 0;
+  const r = Number(document.getElementById('avoid-rate').value) || 0;
+  return { p, m, r, cost: Math.round(p * m * r / 60) };
+}
+function renderAvoided() {
+  const a = avoidedCostNow();
+  document.getElementById('avoid-preview').textContent =
+    `この会議を開かないことで ¥${a.cost.toLocaleString()}（${a.p}人 × ${a.m}分）を節約できます`;
+}
+function recordAvoided() {
+  const a = avoidedCostNow();
+  if (a.cost <= 0) return;
+  saveRate(a.r);
+  stats.avoidedCount += 1;
+  stats.avoidedCost += a.cost;
+  stats.totalSaved += a.cost;
+  stats.savedMin += a.p * a.m;
+  saveStats();
+  document.getElementById('avoid-done').classList.remove('hidden');
+}
+
+// ---------- ② 会議設計 ----------
+let agendas = [];   // {q, min}
+let members = [];   // {name, role}
+let recipients = []; // {name}
+const ROLE_LABEL = { decider: '決める人', opinion: '意見', info: '情報提供' };
+
+function isQuestionForm(s) {
+  // 「未来の問い」= 疑問形で終わること（〜か／〜か？／〜?）
+  return /(か|かどうか)[？?]?$|[？?]$/.test(s);
+}
+
+function addAgenda() {
+  const input = document.getElementById('agenda-input');
+  const err = document.getElementById('agenda-error');
+  const q = input.value.trim();
+  if (!q) return;
+  if (!isQuestionForm(q)) {
+    err.textContent = '議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。「〜の報告」「〜の共有」なら、この会議は不要です——関所に戻ってレポート／チャットで済ませましょう。';
+    err.classList.remove('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+  agendas.push({ q, min: Number(document.getElementById('agenda-min').value) });
+  input.value = '';
+  renderDesign();
+}
+function removeAgenda(i) { agendas.splice(i, 1); renderDesign(); }
+
+function addMember() {
+  const nameEl = document.getElementById('member-name');
+  const name = nameEl.value.trim();
+  const role = document.getElementById('member-role').value;
+  const notice = document.getElementById('listener-notice');
+  if (!name) return;
+  if (role === 'listener') {
+    recipients.push({ name });
+    notice.textContent = `${name} さんは「聞くだけ」なので招集しません。会議後レポートの送付先に登録しました。1人分の時間がまるごと節約されます。`;
+    notice.classList.remove('hidden');
+  } else {
+    members.push({ name, role });
+    notice.classList.add('hidden');
+  }
+  nameEl.value = '';
+  renderDesign();
+}
+function removeMember(i) { members.splice(i, 1); renderDesign(); }
+function demoteMember(i) {
+  const m = members.splice(i, 1)[0];
+  recipients.push({ name: m.name });
+  renderDesign();
+}
+function removeRecipient(i) { recipients.splice(i, 1); renderDesign(); }
+
+function totalPlannedMin() { return agendas.reduce((s, a) => s + a.min, 0); }
+function currentRate() { return Number(document.getElementById('mtg-rate').value) || 0; }
+function plannedBudget() { return Math.round(members.length * totalPlannedMin() * currentRate() / 60); }
+
+function renderDesign() {
+  const al = document.getElementById('agenda-list');
+  al.innerHTML = '';
+  agendas.forEach((a, i) => {
+    const li = document.createElement('li');
+    const span = document.createElement('span');
+    span.className = 'grow';
+    span.textContent = `${i + 1}. ${a.q}（${a.min}分）`;
+    const del = document.createElement('button');
+    del.className = 'ghost small';
+    del.textContent = '削除';
+    del.onclick = () => removeAgenda(i);
+    li.append(span, del);
+    al.appendChild(li);
+  });
+
+  const ml = document.getElementById('member-list');
+  ml.innerHTML = '';
+  members.forEach((m, i) => {
+    const li = document.createElement('li');
+    const span = document.createElement('span');
+    span.className = 'grow';
+    span.textContent = `${m.name}（${ROLE_LABEL[m.role]}）`;
+    const demote = document.createElement('button');
+    demote.className = 'ghost small';
+    demote.textContent = 'レポート送付に回す';
+    demote.onclick = () => demoteMember(i);
+    const del = document.createElement('button');
+    del.className = 'ghost small';
+    del.textContent = '削除';
+    del.onclick = () => removeMember(i);
+    li.append(span, demote, del);
+    ml.appendChild(li);
+  });
+
+  const rl = document.getElementById('recipient-list');
+  rl.innerHTML = '';
+  if (recipients.length === 0) {
+    const li = document.createElement('li');
+    li.style.color = 'var(--sub)';
+    li.textContent = '（まだいません）';
+    rl.appendChild(li);
+  }
+  recipients.forEach((r, i) => {
+    const li = document.createElement('li');
+    const span = document.createElement('span');
+    span.className = 'grow';
+    span.textContent = `${r.name} 📄`;
+    const del = document.createElement('button');
+    del.className = 'ghost small';
+    del.textContent = '削除';
+    del.onclick = () => removeRecipient(i);
+    li.append(span, del);
+    rl.appendChild(li);
+  });
+
+  renderPricetag();
+}
+
+function renderPricetag() {
+  const min = totalPlannedMin();
+  const n = members.length;
+  const budget = plannedBudget();
+  document.getElementById('price-amount').textContent = '¥' + budget.toLocaleString();
+  document.getElementById('price-detail').textContent = `参加者 ${n}人 × ${min}分（人時単価 ¥${currentRate().toLocaleString()}）`;
+
+  const hints = [];
+  if (n > 0 && min > 0) {
+    hints.push(`参加者を1人減らすと ¥${Math.round(min * currentRate() / 60).toLocaleString()} の節約。`);
+    hints.push(`各議題を5分短くすると ¥${Math.round(n * 5 * agendas.length * currentRate() / 60).toLocaleString()} の節約。`);
+  }
+  document.getElementById('price-hint').textContent = hints.join(' ');
+
+  const warnings = [];
+  if (min > 30) warnings.push(`合計 ${min}分 は長すぎます。30分を超える相談は、議題を分割して別の相談にすることを検討してください。`);
+  if (n > 5) warnings.push(`参加者 ${n}人 は多すぎます。意思決定に6人以上は不要なことがほとんどです。「情報提供」の人は事前レポートで代替できませんか？`);
+  if (agendas.length > 0 && n > 0 && !members.some(m => m.role === 'decider')) warnings.push('「決める人」がいません。決裁者のいない相談は決定できず、もう一度会議をやり直すことになります。');
+  const w = document.getElementById('design-warnings');
+  w.innerHTML = '';
+  warnings.forEach(t => {
+    const d = document.createElement('div');
+    d.className = 'alert warn';
+    d.textContent = t;
+    w.appendChild(d);
+  });
+
+  document.getElementById('btn-start').disabled = !(agendas.length > 0 && n > 0 && currentRate() > 0);
+}
+
+// ---------- ③ コックピット ----------
+let mtg = null; // {title, agendas:[{q,min,decision,spentSec}], members, recipients, rate, budget, startMs, agendaStartMs, current, timer}
+
+function startMeeting() {
+  saveRate(currentRate());
+  mtg = {
+    title: document.getElementById('mtg-title').value.trim() || '（無題の相談）',
+    agendas: agendas.map(a => ({ q: a.q, min: a.min, decision: null, spentSec: 0 })),
+    members: members.slice(),
+    recipients: recipients.slice(),
+    rate: currentRate(),
+    budget: plannedBudget(),
+    plannedMin: totalPlannedMin(),
+    startMs: Date.now(),
+    agendaStartMs: Date.now(),
+    current: 0,
+    endedEarly: false
+  };
+  unlockTab('cockpit', true);
+  unlockTab('design', false);
+  showScreen('cockpit');
+  document.getElementById('cockpit-title').textContent = mtg.title;
+  document.getElementById('stat-planned').textContent = mtg.plannedMin + '分';
+  document.getElementById('stat-people').textContent = mtg.members.length + '人';
+  renderCockpitAgendas();
+  mtg.timer = setInterval(tick, 250);
+  tick();
+}
+
+function fmtMMSS(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+}
+
+function tick() {
+  if (!mtg) return;
+  const elapsedSec = (Date.now() - mtg.startMs) / 1000;
+  const spentCost = mtg.members.length * mtg.rate * elapsedSec / 3600;
+  const remain = mtg.budget - spentCost;
+  const amountEl = document.getElementById('budget-amount');
+  amountEl.textContent = (remain < 0 ? '−¥' : '¥') + Math.abs(Math.round(remain)).toLocaleString();
+  amountEl.classList.toggle('over', remain < 0);
+
+  const ratio = mtg.budget > 0 ? Math.max(0, remain / mtg.budget) : 0;
+  const meter = document.getElementById('budget-meter');
+  meter.style.width = (ratio * 100) + '%';
+  meter.className = remain < 0 ? 'over' : (ratio < 0.25 ? 'warn' : '');
+
+  const overAlert = document.getElementById('budget-over-alert');
+  if (remain < 0) {
+    overAlert.textContent = `予算超過！ 超過額 ¥${Math.abs(Math.round(remain)).toLocaleString()} — いま決めるか、持ち帰るかを決めてください。`;
+    overAlert.classList.remove('hidden');
+  } else {
+    overAlert.classList.add('hidden');
+  }
+
+  document.getElementById('stat-elapsed').textContent = fmtMMSS(elapsedSec);
+  document.getElementById('stat-personmin').textContent =
+    Math.round(mtg.members.length * elapsedSec / 60) + '人分';
+
+  // 現在の議題タイマー
+  const t = document.getElementById('agenda-timer-current');
+  if (t && mtg.current < mtg.agendas.length) {
+    const a = mtg.agendas[mtg.current];
+    const agendaSec = (Date.now() - mtg.agendaStartMs) / 1000;
+    const left = a.min * 60 - agendaSec;
+    t.textContent = (left < 0 ? '−' : '') + fmtMMSS(Math.abs(left));
+    t.classList.toggle('over', left < 0);
+  }
+}
+
+function renderCockpitAgendas() {
+  const box = document.getElementById('cockpit-agendas');
+  box.innerHTML = '';
+  mtg.agendas.forEach((a, i) => {
+    const div = document.createElement('div');
+    div.className = 'agenda-item' + (i === mtg.current ? ' current' : (i < mtg.current ? ' done' : ''));
+    const q = document.createElement('div');
+    q.className = 'q';
+    q.textContent = `${i + 1}. ${a.q}（枠 ${a.min}分）`;
+    div.appendChild(q);
+
+    if (i < mtg.current) {
+      const d = document.createElement('div');
+      d.className = 'decision';
+      d.textContent = '✅ 決定: ' + a.decision;
+      div.appendChild(d);
+    } else if (i === mtg.current) {
+      const timer = document.createElement('div');
+      timer.className = 'agenda-timer';
+      timer.id = 'agenda-timer-current';
+      timer.textContent = fmtMMSS(a.min * 60);
+      div.appendChild(timer);
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'decision-input';
+      input.placeholder = '決定事項（例：6月1日に前倒しで発売する。担当:田中、期限:5/20）';
+      input.style.marginTop = '8px';
+      div.appendChild(input);
+
+      const btn = document.createElement('button');
+      btn.className = 'primary';
+      btn.style.marginTop = '8px';
+      btn.textContent = (i === mtg.agendas.length - 1) ? '決定を記録して会議を終了' : '決定を記録して次の議題へ';
+      btn.onclick = () => closeAgenda();
+      div.appendChild(btn);
+
+      const hint = document.createElement('p');
+      hint.className = 'note';
+      hint.textContent = '決められない場合は「誰が・いつまでに・何を確認して再判断するか」を決定として記録してください。それも立派な決定です。';
+      div.appendChild(hint);
+    }
+    box.appendChild(div);
+  });
+}
+
+function closeAgenda() {
+  const input = document.getElementById('decision-input');
+  const decision = input.value.trim();
+  if (!decision) {
+    input.style.borderColor = 'var(--bad)';
+    input.placeholder = '決定事項を記録しないと先へ進めません';
+    return;
+  }
+  const a = mtg.agendas[mtg.current];
+  a.decision = decision;
+  a.spentSec = (Date.now() - mtg.agendaStartMs) / 1000;
+  stats.decisions += 1;
+  mtg.current += 1;
+  mtg.agendaStartMs = Date.now();
+  if (mtg.current >= mtg.agendas.length) {
+    endMeeting(false);
+  } else {
+    renderCockpitAgendas();
+  }
+}
+
+function endMeeting(early) {
+  if (!mtg) return;
+  if (early && !confirm('未決の議題を残して終了しますか？未決の議題はレポートに「持ち越し」として記録されます。')) return;
+  clearInterval(mtg.timer);
+  mtg.endedEarly = early;
+  mtg.endMs = Date.now();
+
+  const elapsedSec = (mtg.endMs - mtg.startMs) / 1000;
+  const actualCost = Math.round(mtg.members.length * mtg.rate * elapsedSec / 3600);
+  const saved = mtg.budget - actualCost;
+
+  stats.heldCount += 1;
+  if (saved > 0) {
+    stats.shortenCost += saved;
+    stats.totalSaved += saved;
+    stats.savedMin += Math.max(0, Math.round(mtg.members.length * (mtg.plannedMin - elapsedSec / 60)));
+  }
+  stats.spared += mtg.recipients.length;
+  saveStats();
+
+  buildReport(elapsedSec, actualCost, saved);
+  unlockTab('report', true);
+  unlockTab('cockpit', false);
+  showScreen('report');
+}
+
+// ---------- ④ レポート ----------
+function buildReport(elapsedSec, actualCost, saved) {
+  const d = new Date();
+  const date = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  const decided = mtg.agendas.filter(a => a.decision);
+  const pending = mtg.agendas.filter(a => !a.decision);
+
+  const lines = [];
+  lines.push(`【報告】相談結果: ${mtg.title}`);
+  lines.push('');
+  lines.push(`日時: ${date} / 所要 ${fmtMMSS(elapsedSec)}（予定 ${mtg.plannedMin}分）`);
+  lines.push(`参加: ${mtg.members.map(m => `${m.name}(${ROLE_LABEL[m.role]})`).join('、') || 'なし'}`);
+  lines.push('');
+  lines.push('■ 決定事項');
+  if (decided.length) {
+    decided.forEach((a, i) => {
+      lines.push(`${i + 1}. ${a.q}`);
+      lines.push(`   → ${a.decision}`);
+    });
+  } else {
+    lines.push('（なし）');
+  }
+  if (pending.length) {
+    lines.push('');
+    lines.push('■ 持ち越し（未決）');
+    pending.forEach(a => lines.push(`・${a.q}`));
+  }
+  lines.push('');
+  lines.push('■ 会議コスト');
+  lines.push(`予算 ¥${mtg.budget.toLocaleString()} / 実績 ¥${actualCost.toLocaleString()}` +
+    (saved >= 0 ? ` / 短縮節約 ¥${saved.toLocaleString()}` : ` / 超過 ¥${Math.abs(saved).toLocaleString()}`));
+  lines.push('');
+  lines.push('※本件は会議関所を通過した「相談」です。質問はこのレポートへの返信でお願いします。');
+
+  document.getElementById('report-body').textContent = lines.join('\n');
+
+  const sum = document.getElementById('report-summary');
+  sum.innerHTML = '';
+  const cls = saved >= 0 ? 'alert ok' : 'alert bad';
+  const div = document.createElement('div');
+  div.className = cls;
+  div.textContent = saved >= 0
+    ? `予定より早く終わり、¥${saved.toLocaleString()} を取り返しました 🎉`
+    : `予算を ¥${Math.abs(saved).toLocaleString()} 超過しました。次回は議題の分割・人数削減を検討しましょう。`;
+  sum.appendChild(div);
+  if (mtg.recipients.length) {
+    const rec = document.createElement('div');
+    rec.className = 'alert warn';
+    rec.textContent = '送付先（会議に呼ばなかった人）: ' + mtg.recipients.map(r => r.name).join('、');
+    sum.appendChild(rec);
+  }
+}
+
+function copyReport(btn) {
+  navigator.clipboard.writeText(document.getElementById('report-body').textContent)
+    .then(() => flashCopied(btn));
+}
+function copyText(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).value)
+    .then(() => flashCopied(btn));
+}
+function flashCopied(btn) {
+  const orig = btn.textContent;
+  btn.textContent = 'コピーしました ✓';
+  setTimeout(() => { btn.textContent = orig; }, 1500);
+}
+
+function resetFlow() {
+  agendas = []; members = []; recipients = []; mtg = null; triageKind = null;
+  document.getElementById('mtg-title').value = '';
+  document.getElementById('triage-topic').value = '';
+  document.getElementById('triage-result').classList.add('hidden');
+  renderDesign();
+  unlockTab('design', false);
+  unlockTab('cockpit', false);
+  unlockTab('report', false);
+  showScreen('triage');
+}
+
+// ---------- ダッシュボード ----------
+function renderDash() {
+  document.getElementById('dash-total-saved').textContent = '¥' + stats.totalSaved.toLocaleString();
+  document.getElementById('dash-avoided-count').textContent = stats.avoidedCount + '件';
+  document.getElementById('dash-avoided-cost').textContent = '¥' + stats.avoidedCost.toLocaleString();
+  document.getElementById('dash-held-count').textContent = stats.heldCount + '件';
+  document.getElementById('dash-shorten-cost').textContent = '¥' + stats.shortenCost.toLocaleString();
+  document.getElementById('dash-saved-min').textContent = stats.savedMin.toLocaleString() + '分';
+  document.getElementById('dash-spared').textContent = stats.spared + '人';
+  document.getElementById('dash-decisions').textContent = stats.decisions + '件';
+}
+function resetStats() {
+  if (!confirm('累計統計をリセットしますか？')) return;
+  stats = { totalSaved:0, avoidedCount:0, avoidedCost:0, heldCount:0, shortenCost:0, savedMin:0, spared:0, decisions:0 };
+  saveStats();
+}
+
+// ---------- 初期化 ----------
+document.getElementById('avoid-rate').value = loadRate();
+document.getElementById('mtg-rate').value = loadRate();
+renderDesign();
+renderDash();
+</script>
+</body>
+</html>
