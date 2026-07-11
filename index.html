@@ -125,6 +125,12 @@
   .stat .v { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .stat .k { font-size: 12px; color: var(--sub); }
   .stat.gold { background: var(--gold-soft); border-color: #e8d98a; }
+  .stat .v.red { color: var(--bad); }
+  details.muda-poster { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; background: var(--bad-soft); }
+  details.muda-poster > summary { cursor: pointer; font-weight: 700; font-size: 14px; color: var(--bad); padding: 6px 0; }
+  ol.muda-list { margin: 8px 0 10px; padding-left: 22px; font-size: 13px; line-height: 1.7; color: var(--ink); }
+  ol.muda-list li { margin-bottom: 8px; }
+  ol.muda-list li b { color: var(--bad); }
   .hidden { display: none !important; }
   pre.report {
     background: #f7f8fa; border: 1px solid var(--line); border-radius: 8px;
@@ -511,6 +517,46 @@
       <button class="ghost small" onclick="resetStats()">統計をリセット</button>
     </div>
   </div>
+
+  <div class="card">
+    <h2>速さの指標</h2>
+    <p class="note">評価は「会議時間の削減%」ではなく、意思決定と実行がどれだけ速くなったか。データが無い指標は「—」で表示します。</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="v" id="dash-action-completion">—</div><div class="k">アクション完了率</div></div>
+      <div class="stat"><div class="v" id="dash-ontime-completion">—</div><div class="k">期限内完了率</div></div>
+      <div class="stat"><div class="v" id="dash-carried-rate">—</div><div class="k">議題の持ち越し率</div></div>
+      <div class="stat"><div class="v" id="dash-extension-rate">—</div><div class="k">会議の延長率</div></div>
+      <div class="stat"><div class="v" id="dash-within30-rate">—</div><div class="k">30分以内終了率</div></div>
+      <div class="stat"><div class="v" id="dash-closed-series">0件</div><div class="k">決着したA3案件数</div></div>
+      <div class="stat"><div class="v" id="dash-lead-time">—</div><div class="k">案件リードタイム（作成→決着）</div></div>
+      <div class="stat"><div class="v red" id="dash-overdue-actions">0件</div><div class="k">期限超過アクション件数</div></div>
+      <div class="stat"><div class="v" id="dash-top-carry-cause">—</div><div class="k">持ち越し原因トップ</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>ムダ検知</h2>
+    <p class="note">「事技系職場の7つのムダ」の兆候を数えます。数字が増えたら、続ける理由を問い直す合図です。</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="v red" id="dash-decision-zero">0件</div><div class="k">決定ゼロ会議数</div></div>
+      <div class="stat"><div class="v red" id="dash-over-report">0件</div><div class="k">A3・1枚超過レポート数</div></div>
+      <div class="stat"><div class="v red" id="dash-stagnant-actions">0件</div><div class="k">停滞アクション（エスカレ候補）</div></div>
+      <div class="stat"><div class="v red" id="dash-mannerism-series">0件</div><div class="k">マンネリ疑い案件数</div></div>
+      <div class="stat"><div class="v red" id="dash-dissent-zero-rate">—</div><div class="k">異論ゼロ会議率（シャンシャン）</div></div>
+    </div>
+    <details class="muda-poster">
+      <summary>事技系職場の7つのムダ（ポスター全文）</summary>
+      <ol class="muda-list">
+        <li><b>会議のムダ</b>「決まらない会議」「決めない人も出る会議」を開催していませんか？</li>
+        <li><b>根回しのムダ</b> 自分の安心のために、"全員"に事前回りをしていませんか？</li>
+        <li><b>資料のムダ</b> 報告のためだけに資料を作っていませんか？ A4／A3一枚以上の資料を準備していませんか？</li>
+        <li><b>調整のムダ</b> 実務で調整していても進まない案件を、「頑張って」調整しようとしていませんか？ そういった案件は、すぐに上位に相談しましょう。</li>
+        <li><b>上司のプライドのムダ</b> 自分に報告がなかったという理由だけで、「私は聞いていない」と言っていませんか？ 上司がこう言うと、②根回し③資料のムダが発生します。情報は上司自ら取りに行きましょう。</li>
+        <li><b>マンネリのムダ</b>「今までやっているから」という理由だけで、続けている業務はありませんか？</li>
+        <li><b>「ごっこ」のムダ</b> 事前に練ったシナリオどおりの"シャンシャン"会議をしていませんか？ 決めようとせず、その周辺ばかりをつつくことで議論した気になっていませんか？</li>
+      </ol>
+    </details>
+  </div>
 </section>
 
 </main>
@@ -734,6 +780,75 @@ function stagnantActions(seriesId, nowMs) {
     .filter(a => a.seriesId === seriesId)
     .map(a => { const r = actionStagnation(a, t); return r ? { action: a, reason: r } : null; })
     .filter(Boolean);
+}
+
+// ---------- ダッシュボード（#8）向け集約: 速さの指標／ムダ検知 ----------
+// 停滞アクション件数（全案件横断・seriesId無しも含む）
+function stagnantActionCount(nowMs) {
+  const t = nowMs != null ? nowMs : Date.now();
+  return loadActions().filter(a => actionStagnation(a, t) != null).length;
+}
+// マンネリ疑い案件数（activeな案件で決定ゼロ会議が直近2回連続）
+function mannerismSeriesCount(meetings) {
+  const ms = meetings || loadMeetings();
+  return loadSeries().filter(s => s.status === 'active' && seriesConsecutiveZeroDecision(s.id, ms)).length;
+}
+// A3・1枚超過レポート数（reportで埋めたStepのうち本文が目安上限超過）
+function overLengthReportCount() {
+  let n = 0;
+  loadSeries().forEach(s => {
+    if (!s.steps) return;
+    Object.keys(s.steps).forEach(k => {
+      const st = s.steps[k];
+      if (st && st.filledBy === 'report' && st.content && st.content.length > A3_CHAR_LIMIT) n++;
+    });
+  });
+  return n;
+}
+// 異論ゼロ会議率（議題ありの会議のうち、全議題が異論・懸念ゼロ）— 分母0なら null
+function dissentZeroMeetingRate(meetings) {
+  const held = (meetings || loadMeetings()).filter(m => (m.agendas || []).length > 0);
+  if (!held.length) return null;
+  const zero = held.filter(m => m.agendas.every(a => !a.dissent || !String(a.dissent).trim()));
+  return zero.length / held.length;
+}
+// 持ち越し原因トップ（会議議題の carryCauses 最頻値）— 無ければ null
+function topCarryCause(meetings) {
+  const freq = {};
+  (meetings || loadMeetings()).forEach(m => (m.agendas || []).forEach(a => {
+    if (a.carried && Array.isArray(a.carryCauses)) {
+      a.carryCauses.forEach(c => { if (c) freq[c] = (freq[c] || 0) + 1; });
+    }
+  }));
+  let top = null, max = 0;
+  Object.keys(freq).forEach(k => { if (freq[k] > max) { max = freq[k]; top = k; } });
+  return top ? { cause: top, count: max } : null;
+}
+// ダッシュボードが表示する全指標を集約（分母0の率は null → 「—」表示）
+function dashMetrics() {
+  const actions = loadActions();
+  const meetings = loadMeetings();
+  const dm = derivedMetrics();
+  const doneCount = actions.filter(a => a.status === 'done').length;
+  const allAgendas = meetings.reduce((s, m) => s + ((m.agendas && m.agendas.length) || 0), 0);
+  return {
+    // 速さの指標
+    actionCompletionRate: actions.length ? dm.actionCompletionRate : null,
+    onTimeCompletionRate: doneCount ? dm.onTimeCompletionRate : null,
+    carriedAgendaRate: allAgendas ? dm.carriedAgendaRate : null,
+    extensionRate: meetings.length ? dm.extensionRate : null,
+    within30MinRate: meetings.length ? dm.within30MinRate : null,
+    closedSeriesCount: dm.closedSeriesCount,
+    avgLeadTimeDays: dm.closedSeriesCount ? dm.avgLeadTimeDays : null,
+    overdueOpenCount: dm.overdueOpenCount,
+    topCarryCause: topCarryCause(meetings),
+    // ムダ検知
+    decisionZeroMeetingCount: dm.decisionZeroMeetingCount,
+    overLengthReportCount: overLengthReportCount(),
+    stagnantActionCount: stagnantActionCount(),
+    mannerismSeriesCount: mannerismSeriesCount(meetings),
+    dissentZeroMeetingRate: dissentZeroMeetingRate(meetings)
+  };
 }
 
 migrateSchema();
@@ -2490,6 +2605,31 @@ function renderDash() {
   document.getElementById('dash-saved-min').textContent = stats.savedMin.toLocaleString() + '分';
   document.getElementById('dash-spared').textContent = stats.spared + '人';
   document.getElementById('dash-decisions').textContent = stats.decisions + '件';
+  renderDashMetrics();
+}
+// 「—」表示に統一する整形ヘルパ（NaN・0除算を出さない）
+function fmtPct(r) { return r == null ? '—' : Math.round(r * 100) + '%'; }
+function fmtCount(n) { return (n || 0) + '件'; }
+function fmtLeadDays(d) { return d == null ? '—' : (Math.round(d * 10) / 10) + '日'; }
+function fmtTopCause(t) { return t ? (t.cause + '（' + t.count + '件）') : '—'; }
+function renderDashMetrics() {
+  const dm = dashMetrics();
+  // 速さの指標
+  document.getElementById('dash-action-completion').textContent = fmtPct(dm.actionCompletionRate);
+  document.getElementById('dash-ontime-completion').textContent = fmtPct(dm.onTimeCompletionRate);
+  document.getElementById('dash-carried-rate').textContent = fmtPct(dm.carriedAgendaRate);
+  document.getElementById('dash-extension-rate').textContent = fmtPct(dm.extensionRate);
+  document.getElementById('dash-within30-rate').textContent = fmtPct(dm.within30MinRate);
+  document.getElementById('dash-closed-series').textContent = fmtCount(dm.closedSeriesCount);
+  document.getElementById('dash-lead-time').textContent = fmtLeadDays(dm.avgLeadTimeDays);
+  document.getElementById('dash-overdue-actions').textContent = fmtCount(dm.overdueOpenCount);
+  document.getElementById('dash-top-carry-cause').textContent = fmtTopCause(dm.topCarryCause);
+  // ムダ検知
+  document.getElementById('dash-decision-zero').textContent = fmtCount(dm.decisionZeroMeetingCount);
+  document.getElementById('dash-over-report').textContent = fmtCount(dm.overLengthReportCount);
+  document.getElementById('dash-stagnant-actions').textContent = fmtCount(dm.stagnantActionCount);
+  document.getElementById('dash-mannerism-series').textContent = fmtCount(dm.mannerismSeriesCount);
+  document.getElementById('dash-dissent-zero-rate').textContent = fmtPct(dm.dissentZeroMeetingRate);
 }
 function resetStats() {
   if (!confirm('累計統計をリセットしますか？')) return;
