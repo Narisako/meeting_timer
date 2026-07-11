@@ -354,6 +354,148 @@ function saveRate(r) { localStorage.setItem(RATE_KEY, String(r)); }
 
 let stats = loadStats();
 
+// ---------- 永続化v2（データ層: series / meetings / actions） ----------
+// v2スキーマ。案件（series）を主役に、会議（meetings）とアクション（actions）を紐付ける。
+// UI・既存挙動には影響させず、後続Issueが使うデータ層とCRUD/導出ヘルパのみを提供する。
+const SCHEMA_KEY = 'sekisho.schema';
+const SERIES_KEY = 'sekisho.series';
+const MEETINGS_KEY = 'sekisho.meetings';
+const ACTIONS_KEY = 'sekisho.actions';
+const SCHEMA_VERSION = '2';
+const MEETINGS_LIMIT = 50; // 容量対策: meetings は直近50件でトリム
+
+// 衝突しにくい簡易ID
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// マイグレーション: schema が無ければ v1 とみなし、series/meetings/actions を空配列で初期化。
+// 既存 sekisho.stats / sekisho.rate は一切変換せず維持する。
+function migrateSchema() {
+  if (localStorage.getItem(SCHEMA_KEY) === SCHEMA_VERSION) return;
+  if (localStorage.getItem(SERIES_KEY) === null) localStorage.setItem(SERIES_KEY, '[]');
+  if (localStorage.getItem(MEETINGS_KEY) === null) localStorage.setItem(MEETINGS_KEY, '[]');
+  if (localStorage.getItem(ACTIONS_KEY) === null) localStorage.setItem(ACTIONS_KEY, '[]');
+  localStorage.setItem(SCHEMA_KEY, SCHEMA_VERSION);
+}
+
+function loadArray(key) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch (e) { return []; }
+}
+function loadSeries() { return loadArray(SERIES_KEY); }
+function saveSeries(list) { localStorage.setItem(SERIES_KEY, JSON.stringify(list)); }
+function loadMeetings() { return loadArray(MEETINGS_KEY); }
+function saveMeetings(list) {
+  const trimmed = list.slice(-MEETINGS_LIMIT); // 直近50件のみ保持
+  localStorage.setItem(MEETINGS_KEY, JSON.stringify(trimmed));
+}
+function loadActions() { return loadArray(ACTIONS_KEY); }
+function saveActions(list) { localStorage.setItem(ACTIONS_KEY, JSON.stringify(list)); }
+
+// --- series CRUD ---
+function createSeries(title, goal) {
+  const steps = {};
+  for (let i = 1; i <= 8; i++) {
+    steps[String(i)] = { status: 'todo', content: '', filledBy: null, meetingId: null, updatedAt: null };
+  }
+  const s = {
+    id: genId(),
+    title: title || '',
+    goal: goal || '',
+    status: 'active',
+    createdAt: Date.now(),
+    closedAt: null,
+    steps,
+    nextDraft: { stepNo: null, agendas: [], note: '' }
+  };
+  const list = loadSeries();
+  list.push(s);
+  saveSeries(list);
+  return s;
+}
+function getSeries(id) { return loadSeries().find(s => s.id === id) || null; }
+function closeSeries(id) {
+  const list = loadSeries();
+  const s = list.find(x => x.id === id);
+  if (!s) return null;
+  s.status = 'closed';
+  s.closedAt = Date.now();
+  saveSeries(list);
+  return s;
+}
+
+// --- actions CRUD ---
+function addAction(fields) {
+  const a = Object.assign({
+    id: genId(), seriesId: null, meetingId: null, what: '', owner: '',
+    due: null, status: 'open', createdAt: Date.now(), doneAt: null
+  }, fields || {});
+  const list = loadActions();
+  list.push(a);
+  saveActions(list);
+  return a;
+}
+function completeAction(id) {
+  const list = loadActions();
+  const a = list.find(x => x.id === id);
+  if (!a) return null;
+  a.status = 'done';
+  a.doneAt = Date.now();
+  saveActions(list);
+  return a;
+}
+function carryAction(id) {
+  const list = loadActions();
+  const a = list.find(x => x.id === id);
+  if (!a) return null;
+  a.status = 'carried';
+  saveActions(list);
+  return a;
+}
+
+// --- 導出指標ヘルパ（累積せず毎回計算） ---
+function toDateStr(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function derivedMetrics() {
+  const actions = loadActions();
+  const meetings = loadMeetings();
+  const series = loadSeries();
+
+  const doneActions = actions.filter(a => a.status === 'done');
+  const onTime = doneActions.filter(a => a.due && a.doneAt && toDateStr(a.doneAt) <= a.due);
+  const todayStr = toDateStr(Date.now());
+  const overdueOpen = actions.filter(a => a.status === 'open' && a.due && a.due < todayStr);
+
+  const allAgendas = meetings.reduce((s, m) => s + ((m.agendas && m.agendas.length) || 0), 0);
+  const carriedAgendas = meetings.reduce(
+    (s, m) => s + ((m.agendas || []).filter(g => g.carried).length), 0);
+  const extended = meetings.filter(m => (m.extensionMin || 0) > 0);
+  const within30 = meetings.filter(m =>
+    m.startMs != null && m.endMs != null && (m.endMs - m.startMs) <= 30 * 60 * 1000);
+
+  const closed = series.filter(s => s.status === 'closed' && s.createdAt != null && s.closedAt != null);
+  const leadDays = closed.map(s => (s.closedAt - s.createdAt) / 86400000);
+
+  const rate = (num, den) => (den > 0 ? num / den : 0);
+  return {
+    actionCompletionRate: rate(doneActions.length, actions.length),
+    onTimeCompletionRate: rate(onTime.length, doneActions.length),
+    overdueOpenCount: overdueOpen.length,
+    carriedAgendaRate: rate(carriedAgendas, allAgendas),
+    extensionRate: rate(extended.length, meetings.length),
+    within30MinRate: rate(within30.length, meetings.length),
+    closedSeriesCount: closed.length,
+    avgLeadTimeDays: leadDays.length ? leadDays.reduce((s, d) => s + d, 0) / leadDays.length : 0
+  };
+}
+
+migrateSchema();
+
 // ---------- 画面制御 ----------
 const SCREENS = ['triage', 'design', 'cockpit', 'report', 'dash'];
 function showScreen(name) {
