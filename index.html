@@ -131,6 +131,56 @@
     padding: 14px; font-size: 13px; white-space: pre-wrap; word-break: break-word;
     font-family: inherit;
   }
+  /* 30分フェーズバー */
+  .phasebar-wrap { margin: 6px 0 12px; }
+  .phasebar { position: relative; display: flex; gap: 3px; height: 34px; }
+  .phase-seg {
+    flex-basis: 0; border-radius: 6px; background: var(--line); color: var(--sub);
+    font-size: 11px; display: flex; align-items: center; justify-content: center;
+    text-align: center; overflow: hidden; padding: 0 2px; white-space: nowrap;
+    transition: background .3s, color .3s;
+  }
+  .phase-seg.done { background: var(--ok-soft); color: var(--ok); }
+  .phase-seg.current { background: var(--accent); color: #fff; font-weight: 700; }
+  .phase-marker {
+    position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink);
+    z-index: 3; transition: left .25s linear;
+  }
+  .phase-marker::after {
+    content: ''; position: absolute; top: -5px; left: -4px;
+    border: 5px solid transparent; border-top-color: var(--ink);
+  }
+  .phase-hint {
+    margin-top: 8px; font-size: 13px; background: var(--accent-soft); color: var(--ink);
+    border-radius: 8px; padding: 8px 12px;
+  }
+  .phase-hint b { color: var(--accent); }
+  /* 決定の構造化: アクション行 */
+  .action-list { list-style: none; padding: 0; margin: 8px 0 0; }
+  .action-list li {
+    display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+    border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px;
+    font-size: 13px; background: #fbfcfe;
+  }
+  .action-list li .grow { flex: 1; }
+  .action-list .due { color: var(--sub); font-variant-numeric: tabular-nums; }
+  /* カスタムモーダル */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(26,35,51,.55);
+    display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100;
+  }
+  .modal-box {
+    background: var(--card); border-radius: 14px; padding: 22px 24px;
+    max-width: 480px; width: 100%; box-shadow: 0 14px 44px rgba(0,0,0,.28);
+  }
+  .modal-box h3 { margin: 0 0 10px; font-size: 16px; color: var(--ink); }
+  .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .cause-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+  .cause-list label {
+    display: flex; align-items: center; gap: 8px; font-weight: 400; margin: 0;
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+  }
+  .cause-list input { width: auto; }
 </style>
 </head>
 <body>
@@ -311,6 +361,10 @@
 <section id="screen-cockpit" class="screen">
   <div class="card">
     <h2 id="cockpit-title"></h2>
+    <div class="phasebar-wrap">
+      <div class="phasebar" id="phasebar"></div>
+      <div class="phase-hint" id="phase-hint"></div>
+    </div>
     <div class="budget-display">
       <div class="label">コスト予算 残高</div>
       <div class="amount" id="budget-amount">¥0</div>
@@ -328,7 +382,7 @@
     <h3 style="margin-top:0">議題 — 決定を記録しないと次へ進めません</h3>
     <div id="cockpit-agendas"></div>
     <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
-      <button class="danger" onclick="endMeeting(true)">会議を途中終了する</button>
+      <button class="danger" onclick="requestEnd(true)">会議を途中終了する</button>
     </div>
   </div>
 </section>
@@ -369,6 +423,16 @@
 </section>
 
 </main>
+
+<datalist id="owner-datalist"></datalist>
+
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal-box">
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
 
 <script>
 'use strict';
@@ -943,22 +1007,61 @@ function buildInvite() {
 }
 
 // ---------- ③ コックピット ----------
-let mtg = null; // {title, agendas:[{q,min,decision,spentSec}], members, recipients, rate, budget, startMs, agendaStartMs, current, timer}
+// 30分フェーズ（幅比 3:5:12:5:5、plannedMin に比例スケール）
+const PHASES = [
+  { label: '目的確認',   end: 3,  hint: '今日決めることを全員で読み上げる' },
+  { label: '事実共有',   end: 8,  hint: '事実と意見を分ける。説明は事前共有済み、ここは差分だけ' },
+  { label: '論点討議',   end: 20, hint: '結論から話す。論点は1つずつ' },
+  { label: '決定',       end: 25, hint: '周辺をつつくだけで議論した気になっていないか。反対意見は出たか' },
+  { label: 'O/D/N確認',  end: 30, hint: 'Owner・期限・次回の問いを確定させる' }
+];
+const PHASE_TOTAL = 30;
+
+// 曖昧語パターン（アクション「何を」はハードブロック、決定テキストは警告のみ）
+const VAGUE_PATTERNS = [
+  /(検討|調整|協議|相談|議論|対応|確認)(する|します|を続ける|していく)?$/,
+  /引き続き/, /継続(検討|議論|協議)/, /善処/, /前向きに/,
+  /様子を(見る|みる)/, /持ち帰(る|り)/, /追って/, /後日/, /別途/,
+  /適宜/, /なるべく/, /できれば/, /すり合わせ(る|を行う)?$/, /詰める$/
+];
+function isVague(s) { return VAGUE_PATTERNS.some(re => re.test(s)); }
+const VAGUE_EXAMPLE = '例:「調整する」→「田中が5/20までにA部門と会議日程を確定する」';
+
+// 持ち越し原因（複数選択・必須）
+const CARRY_CAUSES = [
+  '議題が大きすぎた', '決裁者不在', '判断材料不足', '前提・認識の不揃い',
+  '複数の問題を同時に扱った', '事前準備不足', 'その他'
+];
+
+let mtg = null; // {id, title, agendas:[{q,min,goal,decision,dissent,actions,spentSec,carried,carryCauses}], members, recipients, rate, budget, plannedMin, extensionMin, extended, startMs, agendaStartMs, current, timer}
 
 function startMeeting() {
   saveRate(currentRate());
   mtg = {
+    id: genId(),
+    seriesId: document.getElementById('series-link').value || null,
     title: document.getElementById('mtg-title').value.trim() || '（無題の相談）',
-    agendas: agendas.map(a => ({ q: a.q, min: a.min, decision: null, spentSec: 0 })),
+    agendas: agendas.map(a => ({
+      q: a.q, min: a.min, goal: a.goal || '',
+      decision: null, dissent: '', actions: [], spentSec: 0,
+      carried: false, carryCauses: []
+    })),
     members: members.slice(),
     recipients: recipients.slice(),
     rate: currentRate(),
     budget: plannedBudget(),
     plannedMin: totalPlannedMin(),
+    extensionMin: 0,
+    extended: false,
     startMs: Date.now(),
     agendaStartMs: Date.now(),
     current: 0,
-    endedEarly: false
+    endedEarly: false,
+    ended: false,
+    modalOpen: false,
+    _phaseIdx: -1,
+    _promptedThreshold: null,
+    _warnedIdx: -1
   };
   unlockTab('cockpit', true);
   unlockTab('design', false);
@@ -966,9 +1069,53 @@ function startMeeting() {
   document.getElementById('cockpit-title').textContent = mtg.title;
   document.getElementById('stat-planned').textContent = mtg.plannedMin + '分';
   document.getElementById('stat-people').textContent = mtg.members.length + '人';
+  // Owner候補（参加者名）を datalist に反映
+  const dl = document.getElementById('owner-datalist');
+  dl.innerHTML = '';
+  mtg.members.forEach(m => { const o = document.createElement('option'); o.value = m.name; dl.appendChild(o); });
+  renderPhaseBar();
   renderCockpitAgendas();
   mtg.timer = setInterval(tick, 250);
   tick();
+}
+
+// --- 30分フェーズバー ---
+function renderPhaseBar() {
+  const bar = document.getElementById('phasebar');
+  bar.innerHTML = '';
+  PHASES.forEach((p, i) => {
+    const prev = i === 0 ? 0 : PHASES[i - 1].end;
+    const seg = document.createElement('div');
+    seg.className = 'phase-seg';
+    seg.id = 'phase-seg-' + i;
+    seg.style.flexGrow = String(p.end - prev);
+    seg.textContent = p.label;
+    bar.appendChild(seg);
+  });
+  const marker = document.createElement('div');
+  marker.className = 'phase-marker';
+  marker.id = 'phase-marker';
+  marker.style.left = '0%';
+  bar.appendChild(marker);
+}
+function updatePhase(elapsedMin) {
+  if (!mtg) return;
+  const r = mtg.plannedMin > 0 ? elapsedMin / mtg.plannedMin : 0;
+  let cur = PHASES.findIndex(p => r < p.end / PHASE_TOTAL);
+  if (cur === -1) cur = PHASES.length - 1;
+  PHASES.forEach((p, i) => {
+    const seg = document.getElementById('phase-seg-' + i);
+    if (!seg) return;
+    seg.classList.toggle('done', i < cur);
+    seg.classList.toggle('current', i === cur);
+  });
+  const marker = document.getElementById('phase-marker');
+  if (marker) marker.style.left = (Math.min(1, Math.max(0, r)) * 100) + '%';
+  if (mtg._phaseIdx !== cur) {
+    mtg._phaseIdx = cur;
+    const hintEl = document.getElementById('phase-hint');
+    if (hintEl) hintEl.innerHTML = '<b>' + PHASES[cur].label + '</b> — ' + PHASES[cur].hint;
+  }
 }
 
 function fmtMMSS(sec) {
@@ -979,6 +1126,7 @@ function fmtMMSS(sec) {
 function tick() {
   if (!mtg) return;
   const elapsedSec = (Date.now() - mtg.startMs) / 1000;
+  const elapsedMin = elapsedSec / 60;
   const spentCost = mtg.members.length * mtg.rate * elapsedSec / 3600;
   const remain = mtg.budget - spentCost;
   const amountEl = document.getElementById('budget-amount');
@@ -1011,6 +1159,51 @@ function tick() {
     t.textContent = (left < 0 ? '−' : '') + fmtMMSS(Math.abs(left));
     t.classList.toggle('over', left < 0);
   }
+
+  // 30分フェーズバー更新 + 予定時間到達チェック（延長1回制）
+  updatePhase(elapsedMin);
+  checkTimeThreshold(elapsedMin);
+}
+
+// --- 延長1回制: 予定時間（＋延長分）到達でカスタムモーダル ---
+function checkTimeThreshold(elapsedMin) {
+  if (!mtg || mtg.ended || mtg.modalOpen) return;
+  const threshold = mtg.plannedMin + mtg.extensionMin;
+  if (elapsedMin >= threshold && mtg._promptedThreshold !== threshold) {
+    mtg._promptedThreshold = threshold;
+    openTimeModal();
+  }
+}
+function openTimeModal() {
+  mtg.modalOpen = true;
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  body.innerHTML = '';
+  actions.innerHTML = '';
+  if (!mtg.extended) {
+    title.textContent = '予定時間に到達しました';
+    body.innerHTML = '<p class="note" style="margin:0">延長は<b>1回だけ</b>可能です。延長するか、残りを持ち越して終了してください。</p>';
+    [5, 10, 15, 30].forEach(n => {
+      const b = document.createElement('button');
+      b.className = 'ghost'; b.textContent = '+' + n + '分 延長';
+      b.onclick = () => extendMeeting(n);
+      actions.appendChild(b);
+    });
+  } else {
+    title.textContent = '延長分の時間にも到達しました';
+    body.innerHTML = '<p class="note" style="margin:0">延長は1回までです。ここで区切り、残議題は持ち越して終了しましょう。</p>';
+  }
+  const end = document.createElement('button');
+  end.className = 'danger'; end.textContent = '残議題を持ち越して終了';
+  end.onclick = () => { closeModal(); requestEnd(true); };
+  actions.appendChild(end);
+  showModal();
+}
+function extendMeeting(n) {
+  mtg.extended = true;
+  mtg.extensionMin += n;
+  closeModal();
 }
 
 function renderCockpitAgendas() {
@@ -1036,16 +1229,63 @@ function renderCockpitAgendas() {
       timer.textContent = fmtMMSS(a.min * 60);
       div.appendChild(timer);
 
+      if (a.goal) {
+        const goal = document.createElement('div');
+        goal.className = 'note';
+        goal.style.margin = '2px 0 8px';
+        goal.textContent = '今日決めること: ' + a.goal;
+        div.appendChild(goal);
+      }
+
+      // 決定テキスト（必須）
+      const dLabel = document.createElement('label');
+      dLabel.textContent = '決定（必須）';
+      div.appendChild(dLabel);
       const input = document.createElement('input');
       input.type = 'text';
       input.id = 'decision-input';
       input.placeholder = '決定事項（例：6月1日に前倒しで発売する。担当:田中、期限:5/20）';
-      input.style.marginTop = '8px';
       div.appendChild(input);
+      const dWarn = document.createElement('div');
+      dWarn.className = 'alert warn hidden';
+      dWarn.id = 'decision-warn';
+      div.appendChild(dWarn);
+
+      // 出た異論・懸念（任意）
+      const diLabel = document.createElement('label');
+      diLabel.textContent = '出た異論・懸念（任意）';
+      div.appendChild(diLabel);
+      const dissent = document.createElement('textarea');
+      dissent.id = 'dissent-input';
+      dissent.rows = 2;
+      dissent.placeholder = '反対意見・懸念・保留された論点があれば記録（なければ空欄可）';
+      dissent.value = a.dissent || '';
+      div.appendChild(dissent);
+
+      // アクション行（何を／誰が／いつまでに）
+      const aLabel = document.createElement('label');
+      aLabel.textContent = 'アクション（何を・誰が・いつまでに）';
+      div.appendChild(aLabel);
+      const arow = document.createElement('div');
+      arow.className = 'row';
+      arow.innerHTML =
+        '<div style="flex:3"><input type="text" id="act-what" placeholder="何を（例：A部門と発売日程を確定する）"></div>' +
+        '<div style="flex:2"><input type="text" id="act-owner" list="owner-datalist" placeholder="誰が（担当者）"></div>' +
+        '<div style="flex:2"><input type="date" id="act-due" min="' + toDateStr(Date.now()) + '"></div>' +
+        '<div style="flex:0"><button class="ghost" onclick="addCockpitAction()">追加</button></div>';
+      div.appendChild(arow);
+      const aErr = document.createElement('div');
+      aErr.className = 'alert bad hidden';
+      aErr.id = 'action-error';
+      div.appendChild(aErr);
+      const aList = document.createElement('ul');
+      aList.className = 'action-list';
+      aList.id = 'action-list';
+      div.appendChild(aList);
 
       const btn = document.createElement('button');
       btn.className = 'primary';
-      btn.style.marginTop = '8px';
+      btn.style.marginTop = '12px';
       btn.textContent = (i === mtg.agendas.length - 1) ? '決定を記録して会議を終了' : '決定を記録して次の議題へ';
       btn.onclick = () => closeAgenda();
       div.appendChild(btn);
@@ -1057,6 +1297,58 @@ function renderCockpitAgendas() {
     }
     box.appendChild(div);
   });
+  if (mtg.current < mtg.agendas.length) renderAgendaActions(mtg.agendas[mtg.current]);
+}
+
+// --- アクション行の追加（「何を」曖昧語はハードブロック / Owner・Due 必須） ---
+function showActErr(msg) {
+  const err = document.getElementById('action-error');
+  err.textContent = msg;
+  err.classList.remove('hidden');
+}
+function addCockpitAction() {
+  const a = mtg.agendas[mtg.current];
+  const whatEl = document.getElementById('act-what');
+  const ownerEl = document.getElementById('act-owner');
+  const dueEl = document.getElementById('act-due');
+  const what = whatEl.value.trim();
+  const owner = ownerEl.value.trim();
+  const due = dueEl.value;
+  const today = toDateStr(Date.now());
+  if (!what) { showActErr('「何を（アクション）」を入力してください。'); return; }
+  if (isVague(what)) {
+    showActErr('「' + what + '」は曖昧で、これでは誰も動けません。誰が・いつまでに・何を、を具体的に。' + VAGUE_EXAMPLE);
+    return;
+  }
+  if (!owner) { showActErr('「誰が（Owner）」は必須です。担当者名を入れてください。'); return; }
+  if (!due) { showActErr('「いつまでに（期限）」は必須です。'); return; }
+  if (due < today) { showActErr('期限は今日（' + today + '）以降にしてください。'); return; }
+  document.getElementById('action-error').classList.add('hidden');
+  a.actions.push({ what, owner, due });
+  whatEl.value = ''; ownerEl.value = ''; dueEl.value = '';
+  renderAgendaActions(a);
+  whatEl.focus();
+}
+function removeCockpitAction(idx) {
+  mtg.agendas[mtg.current].actions.splice(idx, 1);
+  renderAgendaActions(mtg.agendas[mtg.current]);
+}
+function renderAgendaActions(a) {
+  const list = document.getElementById('action-list');
+  if (!list) return;
+  list.innerHTML = '';
+  a.actions.forEach((act, idx) => {
+    const li = document.createElement('li');
+    const span = document.createElement('span');
+    span.className = 'grow';
+    span.innerHTML = '<b>' + act.owner + '</b> が <span class="due">' + act.due + '</span> までに: ' + act.what;
+    const del = document.createElement('button');
+    del.className = 'ghost small';
+    del.textContent = '削除';
+    del.onclick = () => removeCockpitAction(idx);
+    li.append(span, del);
+    list.appendChild(li);
+  });
 }
 
 function closeAgenda() {
@@ -1067,25 +1359,113 @@ function closeAgenda() {
     input.placeholder = '決定事項を記録しないと先へ進めません';
     return;
   }
+  // 曖昧語: 決定テキストは警告のみ（1度警告 → 再度押下で記録できる）
+  const warnEl = document.getElementById('decision-warn');
+  if (isVague(decision) && mtg._warnedIdx !== mtg.current) {
+    mtg._warnedIdx = mtg.current;
+    warnEl.textContent = '⚠ 「' + decision + '」は曖昧かもしれません。具体化を推奨します。' + VAGUE_EXAMPLE + ' — このまま記録するには、もう一度ボタンを押してください。';
+    warnEl.classList.remove('hidden');
+    return;
+  }
   const a = mtg.agendas[mtg.current];
   a.decision = decision;
+  a.dissent = (document.getElementById('dissent-input').value || '').trim();
   a.spentSec = (Date.now() - mtg.agendaStartMs) / 1000;
+  // アクションを sekisho.actions に owner/due つきで保存
+  a.actions.forEach(act => addAction({
+    seriesId: mtg.seriesId, meetingId: mtg.id, what: act.what, owner: act.owner, due: act.due
+  }));
   stats.decisions += 1;
   mtg.current += 1;
   mtg.agendaStartMs = Date.now();
   if (mtg.current >= mtg.agendas.length) {
-    endMeeting(false);
+    finalizeEnd(false);
   } else {
     renderCockpitAgendas();
   }
 }
 
-function endMeeting(early) {
-  if (!mtg) return;
-  if (early && !confirm('未決の議題を残して終了しますか？未決の議題はレポートに「持ち越し」として記録されます。')) return;
+// --- モーダル共通 ---
+function showModal() { document.getElementById('modal-overlay').classList.remove('hidden'); }
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+  if (mtg) mtg.modalOpen = false;
+}
+
+// --- 終了フロー: 未決議題があれば持ち越し原因診断（複数選択・必須） ---
+function requestEnd(early) {
+  if (!mtg || mtg.ended) return;
+  const pending = mtg.agendas.filter(a => !a.decision);
+  if (early && pending.length > 0) { openCarryModal(pending); return; }
+  finalizeEnd(early);
+}
+function openCarryModal(pending) {
+  mtg.modalOpen = true;
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  title.textContent = '持ち越しの原因を診断（複数選択可・必須）';
+  body.innerHTML =
+    '<p class="note" style="margin:0 0 6px">未決の議題 ' + pending.length +
+    '件 を持ち越します。次回同じ轍を踏まないため、なぜ決まらなかったかを選んでください。</p>' +
+    '<div class="cause-list" id="cause-list"></div>' +
+    '<div class="alert bad hidden" id="cause-error">1つ以上、原因を選んでください。</div>';
+  const cl = body.querySelector('#cause-list');
+  CARRY_CAUSES.forEach(c => {
+    const lb = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.value = c; cb.className = 'cause-cb';
+    lb.appendChild(cb);
+    lb.appendChild(document.createTextNode(c));
+    cl.appendChild(lb);
+  });
+  actions.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'ghost'; cancel.textContent = '会議に戻る';
+  cancel.onclick = () => closeModal();
+  actions.appendChild(cancel);
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'danger'; confirmBtn.textContent = '原因を記録して終了';
+  confirmBtn.onclick = () => {
+    const checked = Array.from(document.querySelectorAll('.cause-cb')).filter(c => c.checked).map(c => c.value);
+    if (checked.length === 0) { document.getElementById('cause-error').classList.remove('hidden'); return; }
+    pending.forEach(a => { a.carried = true; a.carryCauses = checked.slice(); });
+    closeModal();
+    finalizeEnd(true);
+  };
+  actions.appendChild(confirmBtn);
+  showModal();
+}
+
+function persistMeeting() {
+  const meeting = {
+    id: mtg.id,
+    seriesId: mtg.seriesId,
+    title: mtg.title,
+    startMs: mtg.startMs,
+    endMs: mtg.endMs,
+    plannedMin: mtg.plannedMin,
+    extensionMin: mtg.extensionMin,
+    endedEarly: mtg.endedEarly,
+    agendas: mtg.agendas.map(a => ({
+      q: a.q, min: a.min, goal: a.goal,
+      decision: a.decision, dissent: a.dissent,
+      carried: a.carried, carryCauses: a.carryCauses
+    }))
+  };
+  const list = loadMeetings();
+  list.push(meeting);
+  saveMeetings(list);
+}
+
+function finalizeEnd(early) {
+  if (!mtg || mtg.ended) return;
+  mtg.ended = true;
   clearInterval(mtg.timer);
   mtg.endedEarly = early;
   mtg.endMs = Date.now();
+  // 未決議題は持ち越し扱い（原因未診断でも安全側で carried を立てる）
+  mtg.agendas.forEach(a => { if (!a.decision) a.carried = true; });
 
   const elapsedSec = (mtg.endMs - mtg.startMs) / 1000;
   const actualCost = Math.round(mtg.members.length * mtg.rate * elapsedSec / 3600);
@@ -1100,6 +1480,7 @@ function endMeeting(early) {
   stats.spared += mtg.recipients.length;
   saveStats();
 
+  persistMeeting();
   buildReport(elapsedSec, actualCost, saved);
   unlockTab('report', true);
   unlockTab('cockpit', false);
@@ -1116,7 +1497,8 @@ function buildReport(elapsedSec, actualCost, saved) {
   const lines = [];
   lines.push(`【報告】相談結果: ${mtg.title}`);
   lines.push('');
-  lines.push(`日時: ${date} / 所要 ${fmtMMSS(elapsedSec)}（予定 ${mtg.plannedMin}分）`);
+  const extNote = mtg.extensionMin > 0 ? `＋延長 ${mtg.extensionMin}分` : '';
+  lines.push(`日時: ${date} / 所要 ${fmtMMSS(elapsedSec)}（予定 ${mtg.plannedMin}分${extNote}）`);
   lines.push(`参加: ${mtg.members.map(m => `${m.name}(${ROLE_LABEL[m.role]})`).join('、') || 'なし'}`);
   lines.push('');
   lines.push('■ 決定事項');
@@ -1124,6 +1506,10 @@ function buildReport(elapsedSec, actualCost, saved) {
     decided.forEach((a, i) => {
       lines.push(`${i + 1}. ${a.q}`);
       lines.push(`   → ${a.decision}`);
+      if (a.dissent) lines.push(`   ⚠ 異論・懸念: ${a.dissent}`);
+      (a.actions || []).forEach(act => {
+        lines.push(`   □ ${act.what}（担当: ${act.owner} / 期限: ${act.due}）`);
+      });
     });
   } else {
     lines.push('（なし）');
@@ -1131,7 +1517,12 @@ function buildReport(elapsedSec, actualCost, saved) {
   if (pending.length) {
     lines.push('');
     lines.push('■ 持ち越し（未決）');
-    pending.forEach(a => lines.push(`・${a.q}`));
+    pending.forEach(a => {
+      lines.push(`・${a.q}`);
+      if (a.carryCauses && a.carryCauses.length) {
+        lines.push(`   原因: ${a.carryCauses.join('、')}`);
+      }
+    });
   }
   lines.push('');
   lines.push('■ 会議コスト');
@@ -1174,6 +1565,7 @@ function flashCopied(btn) {
 }
 
 function resetFlow() {
+  document.getElementById('modal-overlay').classList.add('hidden');
   agendas = []; members = []; recipients = []; mtg = null; triageKind = null;
   document.getElementById('mtg-title').value = '';
   document.getElementById('mtg-bg').value = '';
