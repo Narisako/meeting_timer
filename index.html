@@ -624,7 +624,7 @@ function closeSeries(id) {
 function addAction(fields) {
   const a = Object.assign({
     id: genId(), seriesId: null, meetingId: null, what: '', owner: '',
-    due: null, status: 'open', createdAt: Date.now(), doneAt: null
+    due: null, status: 'open', carriedCount: 0, createdAt: Date.now(), doneAt: null
   }, fields || {});
   const list = loadActions();
   list.push(a);
@@ -645,6 +645,7 @@ function carryAction(id, reason) {
   const a = list.find(x => x.id === id);
   if (!a) return null;
   a.status = 'carried';
+  a.carriedCount = (a.carriedCount || 0) + 1;
   if (reason != null) a.carryReason = reason;
   saveActions(list);
   return a;
@@ -684,8 +685,55 @@ function derivedMetrics() {
     extensionRate: rate(extended.length, meetings.length),
     within30MinRate: rate(within30.length, meetings.length),
     closedSeriesCount: closed.length,
-    avgLeadTimeDays: leadDays.length ? leadDays.reduce((s, d) => s + d, 0) / leadDays.length : 0
+    avgLeadTimeDays: leadDays.length ? leadDays.reduce((s, d) => s + d, 0) / leadDays.length : 0,
+    decisionZeroMeetingCount: decisionZeroMeetingCount(meetings)
   };
+}
+
+// ---------- 7つのムダ検知（#7）: 停滞／マンネリ／決定ゼロ ----------
+const STAGNATION_OVERDUE_DAYS = 7; // 期限超過がこの日数を超えたら停滞とみなす
+const STAGNATION_CARRY_LIMIT = 2;  // このcarried回数以上で停滞とみなす
+
+// --- 決定ゼロ検知 ---
+// 決定ゼロ会議＝議題が1つ以上あり、決定が1件も無い会議
+function meetingDecisionCount(m) { return (m.agendas || []).filter(a => a.decision).length; }
+function isDecisionZeroMeeting(m) { return (m.agendas || []).length > 0 && meetingDecisionCount(m) === 0; }
+// ダッシュボード（#8）へ供給する導出関数
+function decisionZeroMeetingCount(meetings) {
+  return (meetings || loadMeetings()).filter(isDecisionZeroMeeting).length;
+}
+
+// --- マンネリ検知 ---
+// 同一案件で「決定ゼロの会議」が直近2回連続しているか
+function seriesConsecutiveZeroDecision(seriesId, meetings) {
+  const ms = (meetings || loadMeetings()).filter(m => m.seriesId === seriesId);
+  if (ms.length < STAGNATION_CARRY_LIMIT) return false;
+  return ms.slice(-2).every(isDecisionZeroMeeting);
+}
+
+// --- 停滞検知 ---
+// 未完了アクションが「2回持ち越し」または「期限超過7日超」なら停滞
+function daysOverdue(dueStr, nowMs) {
+  if (!dueStr) return null;
+  const due = new Date(dueStr + 'T00:00:00');
+  if (isNaN(due.getTime())) return null;
+  const today = new Date(toDateStr(nowMs) + 'T00:00:00');
+  return Math.floor((today - due) / 86400000);
+}
+function actionStagnation(a, nowMs) {
+  if (a.status === 'done') return null;
+  if ((a.carriedCount || 0) >= STAGNATION_CARRY_LIMIT) return 'carried';
+  const od = daysOverdue(a.due, nowMs);
+  if (od != null && od > STAGNATION_OVERDUE_DAYS) return 'overdue';
+  return null;
+}
+// 案件の停滞アクション一覧 [{action, reason:'carried'|'overdue'}]
+function stagnantActions(seriesId, nowMs) {
+  const t = nowMs != null ? nowMs : Date.now();
+  return loadActions()
+    .filter(a => a.seriesId === seriesId)
+    .map(a => { const r = actionStagnation(a, t); return r ? { action: a, reason: r } : null; })
+    .filter(Boolean);
 }
 
 migrateSchema();
@@ -2110,6 +2158,41 @@ function goToStepDesign(seriesId, stepNo) {
   renderDesign();
 }
 
+// 停滞検知 → エスカレーション用の会議設計へ（議題・今日決めることをプリフィル）
+function goToEscalationDesign(seriesId) {
+  if (mtg && mtg.timer) clearInterval(mtg.timer);
+  mtg = null;
+  agendas = []; members = []; recipients = []; mtgSeq = 1;
+  document.getElementById('mtg-bg').value =
+    '本件は実務調整で停滞しています（2回持ち越し／期限超過7日超）。担当レベルで頑張り続けるのではなく、上位判断を仰ぐためのエスカレーション会議です。';
+  document.getElementById('agenda-input').value = '';
+  document.getElementById('agenda-goal').value = '';
+  document.getElementById('member-prep').value = '';
+  document.getElementById('agenda-error').classList.add('hidden');
+  document.getElementById('mtg-rate').value = loadRate();
+  unlockTab('design', true);
+  unlockTab('cockpit', false);
+  unlockTab('report', false);
+  showScreen('design');
+  renderSeriesOptions();
+  document.getElementById('series-link').value = seriesId;
+  document.getElementById('series-step').value = ''; // エスカレーションは特定Stepに縛らない
+  onSeriesLinkChange();
+  const s = getSeries(seriesId);
+  document.getElementById('mtg-title').value = (s && s.title ? s.title + ' — ' : '') + 'エスカレーション（上位判断）';
+  // 議題＋今日決めることをプリフィル
+  agendas = [{ q: '本件の判断を上位に仰ぐか？', min: 15, goal: 'エスカレーション先と依頼内容の確定' }];
+  renderDesign();
+}
+
+// マンネリ検知 → 会議を開かずに回避コストを記録する導線（関所の記録セクションへ）
+function goToAvoidRecord() {
+  showScreen('triage');
+  triage('past'); // 報告レーンを開くと回避コスト記録セクションが表示される
+  const box = document.getElementById('avoid-preview');
+  if (box) box.scrollIntoView({ behavior: 'smooth' });
+}
+
 // ---------- A3案件ビュー ----------
 let a3Editing = null; // {seriesId, stepNo, mode}
 
@@ -2161,6 +2244,51 @@ function buildCaseCard(s, meetings, actions, todayStr) {
     g.className = 'a3-goal';
     g.textContent = 'ゴール: ' + s.goal;
     card.appendChild(g);
+  }
+
+  // ムダ検知の警告（進行中の案件のみ）
+  if (s.status !== 'closed') {
+    const nowMs = Date.now();
+    // 停滞検知＆エスカレーション（調整のムダ）
+    const stuck = stagnantActions(s.id, nowMs);
+    if (stuck.length > 0) {
+      const alert = document.createElement('div');
+      alert.className = 'alert bad a3-stagnation';
+      alert.id = 'a3-stagnation-' + s.id;
+      const carriedN = stuck.filter(x => x.reason === 'carried').length;
+      const overdueN = stuck.filter(x => x.reason === 'overdue').length;
+      const reasons = [];
+      if (carriedN) reasons.push(carriedN + '件が2回以上の持ち越し');
+      if (overdueN) reasons.push(overdueN + '件が期限超過7日超');
+      const p = document.createElement('p');
+      p.style.margin = '0 0 8px';
+      p.innerHTML = '⚠️ <b>実務調整で進んでいません</b>（' + reasons.join('・') +
+        '）。頑張って調整を続けるのではなく、上位に相談しましょう。';
+      alert.appendChild(p);
+      const btn = document.createElement('button');
+      btn.className = 'danger small a3-escalate-btn';
+      btn.textContent = '上位へエスカレーションする会議を設計';
+      btn.onclick = () => goToEscalationDesign(s.id);
+      alert.appendChild(btn);
+      card.appendChild(alert);
+    }
+    // マンネリ検知（マンネリのムダ）
+    if (seriesConsecutiveZeroDecision(s.id, meetings)) {
+      const alert = document.createElement('div');
+      alert.className = 'alert warn a3-mannerism';
+      alert.id = 'a3-mannerism-' + s.id;
+      const p = document.createElement('p');
+      p.style.margin = '0 0 8px';
+      p.innerHTML = '🔁 <b>この会議、続ける理由はありますか？</b> 決定ゼロの会議が2回連続しています。' +
+        '議題がなければ中止して、回避コストを記録しましょう。';
+      alert.appendChild(p);
+      const btn = document.createElement('button');
+      btn.className = 'ghost small a3-avoid-btn';
+      btn.textContent = '会議を中止して回避コストを記録';
+      btn.onclick = () => goToAvoidRecord();
+      alert.appendChild(btn);
+      card.appendChild(alert);
+    }
   }
 
   // 8ブロック俯瞰グリッド
