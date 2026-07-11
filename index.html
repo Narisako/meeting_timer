@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>会議関所 — Meeting Gatekeeper</title>
+<title>会議ルーター — Meeting Router</title>
 <style>
   :root {
     --ink: #1a2333;
@@ -187,6 +187,15 @@
     padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
   }
   .cause-list input { width: auto; }
+  /* AIアシスト設定 */
+  .llm-toggle { display: flex; align-items: center; gap: 8px; font-weight: 700; margin: 12px 0 0; }
+  .llm-toggle input { width: auto; margin: 0; }
+  .llm-preview {
+    background: var(--paper, #f7f7f4); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-size: 12px; white-space: pre-wrap; word-break: break-word;
+    max-height: 220px; overflow: auto; margin: 8px 0 0;
+  }
+  .llm-dest { font-size: 13px; margin: 6px 0 0; word-break: break-all; }
   /* A3案件ビュー */
   .a3-case { border-left: 4px solid var(--accent); }
   .a3-case.closed { border-left-color: var(--ok); opacity: .85; }
@@ -215,11 +224,11 @@
 <body>
 
 <header>
-  <h1>会議関所</h1>
-  <span class="tagline">会議は1分でも短く、1人でも少なく。相談だけが関所を通れる。</span>
+  <h1>会議ルーター</h1>
+  <span class="tagline">伝えたいことを最適な宛先へ——レポート・チャット・会議。会議は1分でも短く、1人でも少なく。</span>
 </header>
 <nav>
-  <button id="tab-triage" class="active" onclick="showScreen('triage')">① 関所（報連相仕分け）</button>
+  <button id="tab-triage" class="active" onclick="showScreen('triage')">① ルーター（報連相仕分け）</button>
   <button id="tab-design" onclick="showScreen('design')" disabled>② 会議設計</button>
   <button id="tab-cockpit" onclick="showScreen('cockpit')" disabled>③ コックピット</button>
   <button id="tab-report" onclick="showScreen('report')" disabled>④ 申し送り</button>
@@ -229,7 +238,7 @@
 
 <main>
 
-<!-- ===================== ① 関所（トリアージ） ===================== -->
+<!-- ===================== ① ルーター（トリアージ） ===================== -->
 <section id="screen-triage" class="screen active">
   <div class="card">
     <h2>伝えたいことは、いつの話ですか？</h2>
@@ -306,7 +315,7 @@
 <!-- ===================== ② 会議設計 ===================== -->
 <section id="screen-design" class="screen">
   <div class="card">
-    <h2>相談の設計 <span class="badge meet">関所通過</span> <span id="design-seq" class="badge" style="background:var(--gold-soft);color:var(--gold);display:none"></span></h2>
+    <h2>相談の設計 <span class="badge meet">ルーター通過</span> <span id="design-seq" class="badge" style="background:var(--gold-soft);color:var(--gold);display:none"></span></h2>
     <p class="note">議題は「未来の問い（〜するか？〜すべきか？）」だけ。参加者は役割がある人だけ。値札を見てから開きます。</p>
     <label for="mtg-title">会議名</label>
     <input type="text" id="mtg-title" placeholder="例）新製品の価格をどう設定するか" oninput="renderInvite()">
@@ -470,7 +479,7 @@
   </div>
 
   <div class="card">
-    <div><button class="primary" onclick="resetFlow()">次の案件を関所にかける</button></div>
+    <div><button class="primary" onclick="resetFlow()">次の案件をルーターにかける</button></div>
   </div>
 </section>
 
@@ -478,7 +487,7 @@
 <section id="screen-a3" class="screen">
   <div class="card" id="a3-empty">
     <h2>A3案件</h2>
-    <p class="note">継続的な問題解決（トヨタ8ステップ）を1枚で俯瞰する、誰でも見に行ける一次情報源です。案件はまだありません。① 関所で「相談」を選び「A3案件として始める」から作成してください。</p>
+    <p class="note">継続的な問題解決（トヨタ8ステップ）を1枚で俯瞰する、誰でも見に行ける一次情報源です。案件はまだありません。① ルーターで「相談」を選び「A3案件として始める」から作成してください。</p>
   </div>
   <div id="a3-case-list"></div>
 
@@ -557,6 +566,18 @@
       </ol>
     </details>
   </div>
+
+  <div class="card">
+    <h2>AIアシスト設定</h2>
+    <p class="note">アシストは任意です。OFFのままでも全機能がそのまま使えます（オフラインファースト）。送信は必ずボタン操作＋送信前プレビューへの同意でのみ行われ、データはこの端末のlocalStorageにだけ残ります（ゼロリテンション）。</p>
+    <label for="llm-endpoint">エンドポイントURL</label>
+    <input type="text" id="llm-endpoint" placeholder="http://localhost:8787">
+    <label class="llm-toggle"><input type="checkbox" id="llm-enabled"><span>AIアシストを有効にする（既定: OFF）</span></label>
+    <div style="margin-top:14px">
+      <button class="primary small" onclick="saveLlmFromUI()">設定を保存</button>
+      <span id="llm-save-status" class="note" style="margin-left:8px"></span>
+    </div>
+  </div>
 </section>
 
 </main>
@@ -633,6 +654,133 @@ function saveMeetings(list) {
 }
 function loadActions() { return loadArray(ACTIONS_KEY); }
 function saveActions(list) { localStorage.setItem(ACTIONS_KEY, JSON.stringify(list)); }
+
+// ---------- AIアシスト（v3土台: 設定・共通クライアント・フォールバック） ----------
+// 設計原則: ①オフラインファースト（OFFでもv2全機能が完全動作）
+//           ②ゼロリテンション（設定はlocalStorageのみ）
+//           ③明示的送信（ボタン操作＋送信前プレビュー同意でのみ発火。自動送信はしない）
+const LLM_KEY = 'sekisho.llm';
+const LLM_DEFAULT_ENDPOINT = 'http://localhost:8787';
+const LLM_TIMEOUT_MS = 10000;
+const LLM_UNAVAILABLE_MSG = 'AIアシストは利用できません。手動で続行してください。';
+
+function loadLlm() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LLM_KEY) || '{}');
+    return {
+      endpoint: (typeof v.endpoint === 'string' && v.endpoint.trim()) ? v.endpoint.trim() : LLM_DEFAULT_ENDPOINT,
+      enabled: v.enabled === true
+    };
+  } catch (e) {
+    return { endpoint: LLM_DEFAULT_ENDPOINT, enabled: false };
+  }
+}
+function saveLlm(cfg) {
+  const endpoint = (cfg && typeof cfg.endpoint === 'string' && cfg.endpoint.trim()) ? cfg.endpoint.trim() : LLM_DEFAULT_ENDPOINT;
+  const enabled = !!(cfg && cfg.enabled);
+  localStorage.setItem(LLM_KEY, JSON.stringify({ endpoint, enabled }));
+  return { endpoint, enabled };
+}
+
+// 設定カードの表示・保存
+function renderLlmSettings() {
+  const cfg = loadLlm();
+  const ep = document.getElementById('llm-endpoint');
+  const en = document.getElementById('llm-enabled');
+  if (ep) ep.value = cfg.endpoint;
+  if (en) en.checked = cfg.enabled;
+}
+function saveLlmFromUI() {
+  const ep = document.getElementById('llm-endpoint');
+  const en = document.getElementById('llm-enabled');
+  const saved = saveLlm({ endpoint: ep ? ep.value : '', enabled: en ? en.checked : false });
+  if (ep) ep.value = saved.endpoint; // 空入力は既定値に正規化して反映
+  const st = document.getElementById('llm-save-status');
+  if (st) st.textContent = '保存しました（' + (saved.enabled ? 'ON' : 'OFF') + '）';
+}
+
+function llmUrl(endpoint, kind) {
+  return String(endpoint).replace(/\/+$/, '') + '/api/v1/' + kind;
+}
+
+// 送信前プレビュー同意モーダル: 送信内容全文と送信先を表示し「送信する／やめる」
+function openLlmConsent(kind, payload, endpoint, onSend, onCancel) {
+  if (typeof mtg !== 'undefined' && mtg) mtg.modalOpen = true;
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  title.textContent = 'AIアシストに送信しますか？';
+  body.innerHTML = '';
+  const lead = document.createElement('p');
+  lead.className = 'note';
+  lead.style.margin = '0';
+  lead.textContent = '以下の内容だけを送信先へ送ります。確認して同意する場合のみ「送信する」を押してください。同意しない限り送信は行われません。';
+  const dest = document.createElement('p');
+  dest.className = 'llm-dest';
+  const destLabel = document.createElement('b');
+  destLabel.textContent = '送信先: ';
+  dest.appendChild(destLabel);
+  dest.appendChild(document.createTextNode(llmUrl(endpoint, kind)));
+  const pre = document.createElement('pre');
+  pre.className = 'llm-preview';
+  pre.textContent = JSON.stringify(payload, null, 2);
+  body.appendChild(lead);
+  body.appendChild(dest);
+  body.appendChild(pre);
+  actions.innerHTML = '';
+  const send = document.createElement('button');
+  send.className = 'primary';
+  send.id = 'llm-consent-send';
+  send.textContent = '送信する';
+  send.onclick = () => { closeModal(); onSend(); };
+  const cancel = document.createElement('button');
+  cancel.className = 'ghost';
+  cancel.id = 'llm-consent-cancel';
+  cancel.textContent = 'やめる';
+  cancel.onclick = () => { closeModal(); onCancel(); };
+  actions.appendChild(send);
+  actions.appendChild(cancel);
+  showModal();
+}
+
+// タイムアウト・HTTPエラー・ネットワーク断はすべて捕捉し null を返す
+function llmFetch(endpoint, kind, payload) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LLM_TIMEOUT_MS);
+  return fetch(llmUrl(endpoint, kind), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: ctrl.signal
+  }).then((res) => {
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return res.json().catch(() => null);
+  }).catch(() => {
+    clearTimeout(timer);
+    return null;
+  });
+}
+
+// 共通クライアント。OFF時は fetch せず null。ON時は同意モーダルを経てのみ fetch。
+// 失敗（タイムアウト/HTTPエラー/ネットワーク断/同意拒否）はすべて null で返す。
+function llmAssist(kind, payload) {
+  const cfg = loadLlm();
+  if (!cfg.enabled) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    openLlmConsent(
+      kind, payload, cfg.endpoint,
+      () => { resolve(llmFetch(cfg.endpoint, kind, payload)); },
+      () => { resolve(null); }
+    );
+  });
+}
+
+// テスト用に公開（本Issueでは各画面への呼び出しボタンは設けない）
+window.llmAssist = llmAssist;
+window.loadLlm = loadLlm;
+window.saveLlm = saveLlm;
+window.LLM_UNAVAILABLE_MSG = LLM_UNAVAILABLE_MSG;
 
 // --- series CRUD ---
 function createSeries(title, goal) {
@@ -866,7 +1014,7 @@ function showScreen(name) {
 }
 function unlockTab(name, on) { document.getElementById('tab-' + name).disabled = !on; }
 
-// ---------- ① 関所（トリアージ） ----------
+// ---------- ① ルーター（トリアージ） ----------
 let triageKind = null; // 'past' | 'present' | 'future'
 
 function triage(kind) {
@@ -991,7 +1139,7 @@ function addAgenda() {
     return;
   }
   if (!isQuestionForm(q)) {
-    err.textContent = '議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。「〜の報告」「〜の共有」なら、この会議は不要です——関所に戻ってレポート／チャットで済ませましょう。';
+    err.textContent = '議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。「〜の報告」「〜の共有」なら、この会議は不要です——ルーターに戻ってレポート／チャットで済ませましょう。';
     err.classList.remove('hidden');
     return;
   }
@@ -2220,7 +2368,7 @@ function resetFlow() {
   showScreen('triage');
 }
 
-// ---------- ① 関所の分岐: 単発 or A3案件 ----------
+// ---------- ① ルーターの分岐: 単発 or A3案件 ----------
 function startSingleConsult() {
   document.getElementById('triage-future-branch').classList.add('hidden');
   unlockTab('design', true);
@@ -2300,7 +2448,7 @@ function goToEscalationDesign(seriesId) {
   renderDesign();
 }
 
-// マンネリ検知 → 会議を開かずに回避コストを記録する導線（関所の記録セクションへ）
+// マンネリ検知 → 会議を開かずに回避コストを記録する導線（ルーターの記録セクションへ）
 function goToAvoidRecord() {
   showScreen('triage');
   triage('past'); // 報告レーンを開くと回避コスト記録セクションが表示される
@@ -2644,6 +2792,7 @@ renderSeriesOptions();
 renderDesign();
 renderDash();
 renderA3();
+renderLlmSettings();
 </script>
 </body>
 </html>
