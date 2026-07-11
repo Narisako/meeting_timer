@@ -125,12 +125,91 @@
   .stat .v { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
   .stat .k { font-size: 12px; color: var(--sub); }
   .stat.gold { background: var(--gold-soft); border-color: #e8d98a; }
+  .stat .v.red { color: var(--bad); }
+  details.muda-poster { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; background: var(--bad-soft); }
+  details.muda-poster > summary { cursor: pointer; font-weight: 700; font-size: 14px; color: var(--bad); padding: 6px 0; }
+  ol.muda-list { margin: 8px 0 10px; padding-left: 22px; font-size: 13px; line-height: 1.7; color: var(--ink); }
+  ol.muda-list li { margin-bottom: 8px; }
+  ol.muda-list li b { color: var(--bad); }
   .hidden { display: none !important; }
   pre.report {
     background: #f7f8fa; border: 1px solid var(--line); border-radius: 8px;
     padding: 14px; font-size: 13px; white-space: pre-wrap; word-break: break-word;
     font-family: inherit;
   }
+  /* 30分フェーズバー */
+  .phasebar-wrap { margin: 6px 0 12px; }
+  .phasebar { position: relative; display: flex; gap: 3px; height: 34px; }
+  .phase-seg {
+    flex-basis: 0; border-radius: 6px; background: var(--line); color: var(--sub);
+    font-size: 11px; display: flex; align-items: center; justify-content: center;
+    text-align: center; overflow: hidden; padding: 0 2px; white-space: nowrap;
+    transition: background .3s, color .3s;
+  }
+  .phase-seg.done { background: var(--ok-soft); color: var(--ok); }
+  .phase-seg.current { background: var(--accent); color: #fff; font-weight: 700; }
+  .phase-marker {
+    position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink);
+    z-index: 3; transition: left .25s linear;
+  }
+  .phase-marker::after {
+    content: ''; position: absolute; top: -5px; left: -4px;
+    border: 5px solid transparent; border-top-color: var(--ink);
+  }
+  .phase-hint {
+    margin-top: 8px; font-size: 13px; background: var(--accent-soft); color: var(--ink);
+    border-radius: 8px; padding: 8px 12px;
+  }
+  .phase-hint b { color: var(--accent); }
+  /* 決定の構造化: アクション行 */
+  .action-list { list-style: none; padding: 0; margin: 8px 0 0; }
+  .action-list li {
+    display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+    border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px;
+    font-size: 13px; background: #fbfcfe;
+  }
+  .action-list li .grow { flex: 1; }
+  .action-list .due { color: var(--sub); font-variant-numeric: tabular-nums; }
+  /* カスタムモーダル */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(26,35,51,.55);
+    display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100;
+  }
+  .modal-box {
+    background: var(--card); border-radius: 14px; padding: 22px 24px;
+    max-width: 480px; width: 100%; box-shadow: 0 14px 44px rgba(0,0,0,.28);
+  }
+  .modal-box h3 { margin: 0 0 10px; font-size: 16px; color: var(--ink); }
+  .modal-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .cause-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+  .cause-list label {
+    display: flex; align-items: center; gap: 8px; font-weight: 400; margin: 0;
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+  }
+  .cause-list input { width: auto; }
+  /* A3案件ビュー */
+  .a3-case { border-left: 4px solid var(--accent); }
+  .a3-case.closed { border-left-color: var(--ok); opacity: .85; }
+  .a3-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .a3-goal { font-size: 13px; color: var(--sub); margin: 2px 0 10px; }
+  .a3-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0 4px; }
+  .a3-block {
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 9px; background: #fff;
+    min-height: 66px; display: flex; flex-direction: column; gap: 2px;
+  }
+  .a3-block .sn { font-size: 11px; font-weight: 700; color: var(--sub); }
+  .a3-block .nm { font-size: 12px; line-height: 1.35; }
+  .a3-block .st { font-size: 11px; margin-top: auto; }
+  .a3-block.done { background: var(--ok-soft); border-color: #b6e2cd; }
+  .a3-block.done .st { color: var(--ok); font-weight: 700; }
+  .a3-block.doing { background: var(--gold-soft); border-color: #e8d98a; }
+  .a3-block.doing .st { color: var(--gold); font-weight: 700; }
+  .a3-nav { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; margin: 8px 0; font-size: 13px; }
+  .a3-nav .lead { margin: 0 0 6px; }
+  .a3-hist li { justify-content: flex-start; gap: 8px; }
+  .a3-hist .seq { font-weight: 700; }
+  .a3-overdue { color: var(--bad); font-weight: 700; }
+  @media (max-width: 560px) { .a3-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
 <body>
@@ -143,7 +222,8 @@
   <button id="tab-triage" class="active" onclick="showScreen('triage')">① 関所（報連相仕分け）</button>
   <button id="tab-design" onclick="showScreen('design')" disabled>② 会議設計</button>
   <button id="tab-cockpit" onclick="showScreen('cockpit')" disabled>③ コックピット</button>
-  <button id="tab-report" onclick="showScreen('report')" disabled>④ レポート</button>
+  <button id="tab-report" onclick="showScreen('report')" disabled>④ 申し送り</button>
+  <button id="tab-a3" onclick="showScreen('a3')">A3案件</button>
   <button id="tab-dash" onclick="showScreen('dash')">節約ダッシュボード</button>
 </nav>
 
@@ -203,19 +283,40 @@
     <button class="primary" onclick="recordAvoided()">会議を開かずに済ませた！（節約を記録）</button>
     <span id="avoid-done" class="hidden" style="margin-left:10px; color:var(--ok); font-weight:700">記録しました 🎉</span>
   </div>
+
+  <div id="triage-future-branch" class="card hidden">
+    <h2>相談 → <span class="badge meet">会議へ進めます</span></h2>
+    <p class="note">この相談は単発ですか、それとも継続的な問題解決（A3・8ステップ）の一歩ですか？案件として始めると、8ブロックの俯瞰・報連相ナビ・事実ゲートが使えます。</p>
+    <div style="margin-bottom:14px">
+      <button class="ghost" onclick="startSingleConsult()">単発の相談として設計する（従来フロー）</button>
+    </div>
+    <h3 style="margin-top:0">A3案件として始める</h3>
+    <p class="note">案件名とゴールを決め、8ステップで問題解決を進めます。まず Step1（背景・問題の明確化）の会議設計へ進みます。</p>
+    <label for="new-series-title">案件名</label>
+    <input type="text" id="new-series-title" placeholder="例）新製品ラインの不良率を下げる">
+    <label for="new-series-goal">ゴール（あるべき姿・目標値）</label>
+    <input type="text" id="new-series-goal" placeholder="例）不良率を 3% → 1.5% に半減する">
+    <div id="new-series-error" class="alert bad hidden"></div>
+    <div style="margin-top:10px">
+      <button class="primary" onclick="startAsA3Case()">A3案件として始める（Step1 会議設計へ）</button>
+    </div>
+  </div>
 </section>
 
 <!-- ===================== ② 会議設計 ===================== -->
 <section id="screen-design" class="screen">
   <div class="card">
-    <h2>相談の設計 <span class="badge meet">関所通過</span></h2>
+    <h2>相談の設計 <span class="badge meet">関所通過</span> <span id="design-seq" class="badge" style="background:var(--gold-soft);color:var(--gold);display:none"></span></h2>
     <p class="note">議題は「未来の問い（〜するか？〜すべきか？）」だけ。参加者は役割がある人だけ。値札を見てから開きます。</p>
     <label for="mtg-title">会議名</label>
-    <input type="text" id="mtg-title" placeholder="例）新製品の価格をどう設定するか">
-    <h3>議題（疑問形で入力 → Enter か追加ボタン）</h3>
+    <input type="text" id="mtg-title" placeholder="例）新製品の価格をどう設定するか" oninput="renderInvite()">
+    <label for="mtg-bg">背景（なぜ今この判断が必要か）</label>
+    <textarea id="mtg-bg" rows="2" placeholder="例）競合が値下げを発表。次期見積提出まで残り2週間で価格方針を固める必要がある。" oninput="renderInvite()"></textarea>
+    <h3>議題（未来の問い）と「今日決めること」</h3>
+    <p class="note">議題はテーマ（〜について／〜の件）ではなく「会議終了時に決まっているべき問い」で。各議題に、終了時に決まっているべき状態＝「今日決めること」を必ず添えてください。</p>
     <div class="row">
       <div style="flex:3">
-        <input type="text" id="agenda-input" placeholder="例）発売日を6月に前倒しすべきか？" onkeydown="if(event.key==='Enter')addAgenda()">
+        <input type="text" id="agenda-input" placeholder="議題（疑問形）例）発売日を6月に前倒しすべきか？" onkeydown="if(event.key==='Enter')document.getElementById('agenda-goal').focus()">
       </div>
       <div style="flex:1">
         <select id="agenda-min">
@@ -224,14 +325,24 @@
           <option value="15">15分</option>
         </select>
       </div>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <div style="flex:3">
+        <input type="text" id="agenda-goal" placeholder="今日決めること 例）発売日を確定し、担当と期限まで決める" onkeydown="if(event.key==='Enter')addAgenda()">
+      </div>
       <div style="flex:0"><button class="ghost" onclick="addAgenda()">追加</button></div>
     </div>
     <div id="agenda-error" class="alert bad hidden"></div>
     <ul class="plain" id="agenda-list"></ul>
+    <div id="overflow-box" class="hidden">
+      <div class="alert bad" id="overflow-alert"></div>
+      <button class="ghost" id="btn-split" onclick="splitOverflow()">議題を分割して次回に回す</button>
+    </div>
     <h3>参加者（役割は必須。「聞くだけ」は招集できません）</h3>
+    <p class="note">主催者が全資料を用意するのではなく、参加者それぞれが判断材料を持ち寄る当事者です。「期待する準備」に、その人に持ち寄ってほしいものを書いてください。</p>
     <div class="row">
       <div style="flex:2">
-        <input type="text" id="member-name" placeholder="名前" onkeydown="if(event.key==='Enter')addMember()">
+        <input type="text" id="member-name" placeholder="名前" onkeydown="if(event.key==='Enter')document.getElementById('member-prep').focus()">
       </div>
       <div style="flex:2">
         <select id="member-role">
@@ -241,6 +352,11 @@
           <option value="listener">聞くだけ</option>
         </select>
       </div>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <div style="flex:3">
+        <input type="text" id="member-prep" placeholder="期待する準備（例：費用実績データを持参）" onkeydown="if(event.key==='Enter')addMember()">
+      </div>
       <div style="flex:0"><button class="ghost" onclick="addMember()">追加</button></div>
     </div>
     <div id="listener-notice" class="alert warn hidden"></div>
@@ -248,6 +364,21 @@
     <h3>会議に呼ばず、レポートを送る人</h3>
     <p class="note">「聞くだけ」の人は自動でこちらに回ります。会議終了後のレポートの送付先になります。</p>
     <ul class="plain" id="recipient-list"></ul>
+    <h3>案件（A3）との紐づけ（任意）</h3>
+    <p class="note">この会議がどの案件のどのステップを前進させるのかを紐づけると、会議案内に節目として明記されます。</p>
+    <div class="row">
+      <div style="flex:2">
+        <select id="series-link" onchange="onSeriesLinkChange()">
+          <option value="">（案件に紐づけない）</option>
+        </select>
+      </div>
+      <div style="flex:2">
+        <select id="series-step" onchange="renderInvite()" disabled>
+          <option value="">Stepを選択</option>
+        </select>
+      </div>
+    </div>
+    <div id="fact-gate"></div>
     <div class="row">
       <div>
         <label for="mtg-rate">人時単価（円/時）</label>
@@ -263,6 +394,12 @@
       </div>
       <div class="sub" id="price-hint"></div>
     </div>
+    <h3>会議案内（自動生成 — コピーして送付）</h3>
+    <p class="note">説明は本案内と事前資料で完了させ、会議は判断と合意だけに使います。</p>
+    <textarea id="invite-body" rows="16" readonly></textarea>
+    <div class="row" style="margin-top:8px">
+      <div><button class="ghost" onclick="copyText('invite-body', this)">会議案内をコピー</button></div>
+    </div>
     <div style="margin-top:14px">
       <button class="primary" id="btn-start" onclick="startMeeting()" disabled>この予算で会議を開始する</button>
     </div>
@@ -273,6 +410,10 @@
 <section id="screen-cockpit" class="screen">
   <div class="card">
     <h2 id="cockpit-title"></h2>
+    <div class="phasebar-wrap">
+      <div class="phasebar" id="phasebar"></div>
+      <div class="phase-hint" id="phase-hint"></div>
+    </div>
     <div class="budget-display">
       <div class="label">コスト予算 残高</div>
       <div class="amount" id="budget-amount">¥0</div>
@@ -290,21 +431,69 @@
     <h3 style="margin-top:0">議題 — 決定を記録しないと次へ進めません</h3>
     <div id="cockpit-agendas"></div>
     <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
-      <button class="danger" onclick="endMeeting(true)">会議を途中終了する</button>
+      <button class="danger" onclick="requestEnd(true)">会議を途中終了する</button>
     </div>
   </div>
 </section>
 
-<!-- ===================== ④ レポート ===================== -->
+<!-- ===================== ④ 申し送り ===================== -->
 <section id="screen-report" class="screen">
   <div class="card">
-    <h2>会議レポート（自動生成）</h2>
-    <p class="note">相談（会議）の結果は、そのまま報告（レポート）になります。呼ばなかった人へコピーして送付してください。</p>
+    <h2>申し送り（次の状態）</h2>
+    <p class="note">議事録より必要なのは「次の状態」= Decision / Action / Owner / Due / Next の5点。呼ばなかった人へコピーして送付してください。</p>
     <div id="report-summary"></div>
     <pre class="report" id="report-body"></pre>
     <div class="row">
-      <div><button class="ghost" onclick="copyReport(this)">レポートをコピー</button></div>
-      <div><button class="primary" onclick="resetFlow()">次の案件を関所にかける</button></div>
+      <div><button class="ghost" onclick="copyReport(this)">申し送りをコピー</button></div>
+    </div>
+  </div>
+
+  <div class="card" id="next-connect-card">
+    <h2>次回への接続</h2>
+    <p class="note">会議を単発で終わらせず、次回議題を決めて会議間に実行し、次回は「持ち寄り」から始める連続PDCAへつなぎます。</p>
+    <h3 style="margin-top:0">次回議題（疑問形＋今日決めること）</h3>
+    <input type="text" id="next-agenda-q" placeholder="次回の問い（疑問形）例）試作の不良要因はどれに絞るか？" oninput="refreshReport()">
+    <input type="text" id="next-agenda-goal" placeholder="今日決めること 例）主要因を1つに特定し検証担当を決める" style="margin-top:6px" oninput="refreshReport()">
+    <div id="next-error" class="alert bad hidden"></div>
+    <div class="row" style="margin-top:10px">
+      <div style="flex:0"><button class="primary" onclick="reserveNextMeeting()">次回会議を予約</button></div>
+      <div style="flex:0"><button class="danger" id="btn-close-series" onclick="closeThisSeries()">この案件は決着</button></div>
+    </div>
+    <div id="next-status" class="alert ok hidden"></div>
+  </div>
+
+  <div class="card hidden" id="a3-onepager-card">
+    <h2>A3・1枚レポート（Step8 決着）</h2>
+    <p class="note">8ブロックすべてを1枚に整形しました。標準化（横展開）の共有にお使いください。</p>
+    <pre class="report" id="a3-onepager-body"></pre>
+    <div class="row"><div><button class="ghost" onclick="copyTextContent('a3-onepager-body', this)">A3レポートをコピー</button></div></div>
+  </div>
+
+  <div class="card">
+    <div><button class="primary" onclick="resetFlow()">次の案件を関所にかける</button></div>
+  </div>
+</section>
+
+<!-- ===================== A3案件ビュー ===================== -->
+<section id="screen-a3" class="screen">
+  <div class="card" id="a3-empty">
+    <h2>A3案件</h2>
+    <p class="note">継続的な問題解決（トヨタ8ステップ）を1枚で俯瞰する、誰でも見に行ける一次情報源です。案件はまだありません。① 関所で「相談」を選び「A3案件として始める」から作成してください。</p>
+  </div>
+  <div id="a3-case-list"></div>
+
+  <div class="card hidden" id="a3-editor">
+    <h2 id="a3-editor-title">Stepを埋める</h2>
+    <p class="note" id="a3-editor-note"></p>
+    <textarea id="a3-editor-body" rows="14" oninput="updateA3CharMeter()"></textarea>
+    <div class="meter" style="margin-top:8px"><div id="a3-char-meter" style="width:0%"></div></div>
+    <div class="cockpit-stats" style="justify-content:flex-start; margin-top:4px">
+      <span id="a3-char-count"></span>
+    </div>
+    <div id="a3-char-warn" class="alert warn hidden">A3・1枚を超えています。判断に必要な情報だけに絞ってください</div>
+    <div class="row" style="margin-top:10px">
+      <div style="flex:0"><button class="primary" id="a3-editor-save" onclick="saveStepEditor()">このStepを埋めて保存</button></div>
+      <div style="flex:0"><button class="ghost" onclick="closeStepEditor()">閉じる</button></div>
     </div>
   </div>
 </section>
@@ -328,9 +517,59 @@
       <button class="ghost small" onclick="resetStats()">統計をリセット</button>
     </div>
   </div>
+
+  <div class="card">
+    <h2>速さの指標</h2>
+    <p class="note">評価は「会議時間の削減%」ではなく、意思決定と実行がどれだけ速くなったか。データが無い指標は「—」で表示します。</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="v" id="dash-action-completion">—</div><div class="k">アクション完了率</div></div>
+      <div class="stat"><div class="v" id="dash-ontime-completion">—</div><div class="k">期限内完了率</div></div>
+      <div class="stat"><div class="v" id="dash-carried-rate">—</div><div class="k">議題の持ち越し率</div></div>
+      <div class="stat"><div class="v" id="dash-extension-rate">—</div><div class="k">会議の延長率</div></div>
+      <div class="stat"><div class="v" id="dash-within30-rate">—</div><div class="k">30分以内終了率</div></div>
+      <div class="stat"><div class="v" id="dash-closed-series">0件</div><div class="k">決着したA3案件数</div></div>
+      <div class="stat"><div class="v" id="dash-lead-time">—</div><div class="k">案件リードタイム（作成→決着）</div></div>
+      <div class="stat"><div class="v red" id="dash-overdue-actions">0件</div><div class="k">期限超過アクション件数</div></div>
+      <div class="stat"><div class="v" id="dash-top-carry-cause">—</div><div class="k">持ち越し原因トップ</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>ムダ検知</h2>
+    <p class="note">「事技系職場の7つのムダ」の兆候を数えます。数字が増えたら、続ける理由を問い直す合図です。</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="v red" id="dash-decision-zero">0件</div><div class="k">決定ゼロ会議数</div></div>
+      <div class="stat"><div class="v red" id="dash-over-report">0件</div><div class="k">A3・1枚超過レポート数</div></div>
+      <div class="stat"><div class="v red" id="dash-stagnant-actions">0件</div><div class="k">停滞アクション（エスカレ候補）</div></div>
+      <div class="stat"><div class="v red" id="dash-mannerism-series">0件</div><div class="k">マンネリ疑い案件数</div></div>
+      <div class="stat"><div class="v red" id="dash-dissent-zero-rate">—</div><div class="k">異論ゼロ会議率（シャンシャン）</div></div>
+    </div>
+    <details class="muda-poster">
+      <summary>事技系職場の7つのムダ（ポスター全文）</summary>
+      <ol class="muda-list">
+        <li><b>会議のムダ</b>「決まらない会議」「決めない人も出る会議」を開催していませんか？</li>
+        <li><b>根回しのムダ</b> 自分の安心のために、"全員"に事前回りをしていませんか？</li>
+        <li><b>資料のムダ</b> 報告のためだけに資料を作っていませんか？ A4／A3一枚以上の資料を準備していませんか？</li>
+        <li><b>調整のムダ</b> 実務で調整していても進まない案件を、「頑張って」調整しようとしていませんか？ そういった案件は、すぐに上位に相談しましょう。</li>
+        <li><b>上司のプライドのムダ</b> 自分に報告がなかったという理由だけで、「私は聞いていない」と言っていませんか？ 上司がこう言うと、②根回し③資料のムダが発生します。情報は上司自ら取りに行きましょう。</li>
+        <li><b>マンネリのムダ</b>「今までやっているから」という理由だけで、続けている業務はありませんか？</li>
+        <li><b>「ごっこ」のムダ</b> 事前に練ったシナリオどおりの"シャンシャン"会議をしていませんか？ 決めようとせず、その周辺ばかりをつつくことで議論した気になっていませんか？</li>
+      </ol>
+    </details>
+  </div>
 </section>
 
 </main>
+
+<datalist id="owner-datalist"></datalist>
+
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal-box">
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
 
 <script>
 'use strict';
@@ -431,7 +670,7 @@ function closeSeries(id) {
 function addAction(fields) {
   const a = Object.assign({
     id: genId(), seriesId: null, meetingId: null, what: '', owner: '',
-    due: null, status: 'open', createdAt: Date.now(), doneAt: null
+    due: null, status: 'open', carriedCount: 0, createdAt: Date.now(), doneAt: null
   }, fields || {});
   const list = loadActions();
   list.push(a);
@@ -447,11 +686,13 @@ function completeAction(id) {
   saveActions(list);
   return a;
 }
-function carryAction(id) {
+function carryAction(id, reason) {
   const list = loadActions();
   const a = list.find(x => x.id === id);
   if (!a) return null;
   a.status = 'carried';
+  a.carriedCount = (a.carriedCount || 0) + 1;
+  if (reason != null) a.carryReason = reason;
   saveActions(list);
   return a;
 }
@@ -490,21 +731,138 @@ function derivedMetrics() {
     extensionRate: rate(extended.length, meetings.length),
     within30MinRate: rate(within30.length, meetings.length),
     closedSeriesCount: closed.length,
-    avgLeadTimeDays: leadDays.length ? leadDays.reduce((s, d) => s + d, 0) / leadDays.length : 0
+    avgLeadTimeDays: leadDays.length ? leadDays.reduce((s, d) => s + d, 0) / leadDays.length : 0,
+    decisionZeroMeetingCount: decisionZeroMeetingCount(meetings)
+  };
+}
+
+// ---------- 7つのムダ検知（#7）: 停滞／マンネリ／決定ゼロ ----------
+const STAGNATION_OVERDUE_DAYS = 7; // 期限超過がこの日数を超えたら停滞とみなす
+const STAGNATION_CARRY_LIMIT = 2;  // このcarried回数以上で停滞とみなす
+
+// --- 決定ゼロ検知 ---
+// 決定ゼロ会議＝議題が1つ以上あり、決定が1件も無い会議
+function meetingDecisionCount(m) { return (m.agendas || []).filter(a => a.decision).length; }
+function isDecisionZeroMeeting(m) { return (m.agendas || []).length > 0 && meetingDecisionCount(m) === 0; }
+// ダッシュボード（#8）へ供給する導出関数
+function decisionZeroMeetingCount(meetings) {
+  return (meetings || loadMeetings()).filter(isDecisionZeroMeeting).length;
+}
+
+// --- マンネリ検知 ---
+// 同一案件で「決定ゼロの会議」が直近2回連続しているか
+function seriesConsecutiveZeroDecision(seriesId, meetings) {
+  const ms = (meetings || loadMeetings()).filter(m => m.seriesId === seriesId);
+  if (ms.length < STAGNATION_CARRY_LIMIT) return false;
+  return ms.slice(-2).every(isDecisionZeroMeeting);
+}
+
+// --- 停滞検知 ---
+// 未完了アクションが「2回持ち越し」または「期限超過7日超」なら停滞
+function daysOverdue(dueStr, nowMs) {
+  if (!dueStr) return null;
+  const due = new Date(dueStr + 'T00:00:00');
+  if (isNaN(due.getTime())) return null;
+  const today = new Date(toDateStr(nowMs) + 'T00:00:00');
+  return Math.floor((today - due) / 86400000);
+}
+function actionStagnation(a, nowMs) {
+  if (a.status === 'done') return null;
+  if ((a.carriedCount || 0) >= STAGNATION_CARRY_LIMIT) return 'carried';
+  const od = daysOverdue(a.due, nowMs);
+  if (od != null && od > STAGNATION_OVERDUE_DAYS) return 'overdue';
+  return null;
+}
+// 案件の停滞アクション一覧 [{action, reason:'carried'|'overdue'}]
+function stagnantActions(seriesId, nowMs) {
+  const t = nowMs != null ? nowMs : Date.now();
+  return loadActions()
+    .filter(a => a.seriesId === seriesId)
+    .map(a => { const r = actionStagnation(a, t); return r ? { action: a, reason: r } : null; })
+    .filter(Boolean);
+}
+
+// ---------- ダッシュボード（#8）向け集約: 速さの指標／ムダ検知 ----------
+// 停滞アクション件数（全案件横断・seriesId無しも含む）
+function stagnantActionCount(nowMs) {
+  const t = nowMs != null ? nowMs : Date.now();
+  return loadActions().filter(a => actionStagnation(a, t) != null).length;
+}
+// マンネリ疑い案件数（activeな案件で決定ゼロ会議が直近2回連続）
+function mannerismSeriesCount(meetings) {
+  const ms = meetings || loadMeetings();
+  return loadSeries().filter(s => s.status === 'active' && seriesConsecutiveZeroDecision(s.id, ms)).length;
+}
+// A3・1枚超過レポート数（reportで埋めたStepのうち本文が目安上限超過）
+function overLengthReportCount() {
+  let n = 0;
+  loadSeries().forEach(s => {
+    if (!s.steps) return;
+    Object.keys(s.steps).forEach(k => {
+      const st = s.steps[k];
+      if (st && st.filledBy === 'report' && st.content && st.content.length > A3_CHAR_LIMIT) n++;
+    });
+  });
+  return n;
+}
+// 異論ゼロ会議率（議題ありの会議のうち、全議題が異論・懸念ゼロ）— 分母0なら null
+function dissentZeroMeetingRate(meetings) {
+  const held = (meetings || loadMeetings()).filter(m => (m.agendas || []).length > 0);
+  if (!held.length) return null;
+  const zero = held.filter(m => m.agendas.every(a => !a.dissent || !String(a.dissent).trim()));
+  return zero.length / held.length;
+}
+// 持ち越し原因トップ（会議議題の carryCauses 最頻値）— 無ければ null
+function topCarryCause(meetings) {
+  const freq = {};
+  (meetings || loadMeetings()).forEach(m => (m.agendas || []).forEach(a => {
+    if (a.carried && Array.isArray(a.carryCauses)) {
+      a.carryCauses.forEach(c => { if (c) freq[c] = (freq[c] || 0) + 1; });
+    }
+  }));
+  let top = null, max = 0;
+  Object.keys(freq).forEach(k => { if (freq[k] > max) { max = freq[k]; top = k; } });
+  return top ? { cause: top, count: max } : null;
+}
+// ダッシュボードが表示する全指標を集約（分母0の率は null → 「—」表示）
+function dashMetrics() {
+  const actions = loadActions();
+  const meetings = loadMeetings();
+  const dm = derivedMetrics();
+  const doneCount = actions.filter(a => a.status === 'done').length;
+  const allAgendas = meetings.reduce((s, m) => s + ((m.agendas && m.agendas.length) || 0), 0);
+  return {
+    // 速さの指標
+    actionCompletionRate: actions.length ? dm.actionCompletionRate : null,
+    onTimeCompletionRate: doneCount ? dm.onTimeCompletionRate : null,
+    carriedAgendaRate: allAgendas ? dm.carriedAgendaRate : null,
+    extensionRate: meetings.length ? dm.extensionRate : null,
+    within30MinRate: meetings.length ? dm.within30MinRate : null,
+    closedSeriesCount: dm.closedSeriesCount,
+    avgLeadTimeDays: dm.closedSeriesCount ? dm.avgLeadTimeDays : null,
+    overdueOpenCount: dm.overdueOpenCount,
+    topCarryCause: topCarryCause(meetings),
+    // ムダ検知
+    decisionZeroMeetingCount: dm.decisionZeroMeetingCount,
+    overLengthReportCount: overLengthReportCount(),
+    stagnantActionCount: stagnantActionCount(),
+    mannerismSeriesCount: mannerismSeriesCount(meetings),
+    dissentZeroMeetingRate: dissentZeroMeetingRate(meetings)
   };
 }
 
 migrateSchema();
 
 // ---------- 画面制御 ----------
-const SCREENS = ['triage', 'design', 'cockpit', 'report', 'dash'];
+const SCREENS = ['triage', 'design', 'cockpit', 'report', 'a3', 'dash'];
 function showScreen(name) {
-  const tab = document.getElementById('tab-' + (name === 'dash' ? 'dash' : name));
+  const tab = document.getElementById('tab-' + name);
   if (tab.disabled) return;
   SCREENS.forEach(s => {
     document.getElementById('screen-' + s).classList.toggle('active', s === name);
     document.getElementById('tab-' + s).classList.toggle('active', s === name);
   });
+  if (name === 'a3') renderA3();
 }
 function unlockTab(name, on) { document.getElementById('tab-' + name).disabled = !on; }
 
@@ -518,13 +876,14 @@ function triage(kind) {
   const note = document.getElementById('triage-result-note');
   document.getElementById('avoid-done').classList.add('hidden');
   document.getElementById('avoid-rate').value = loadRate();
+  document.getElementById('triage-future-branch').classList.add('hidden');
 
   if (kind === 'future') {
     result.classList.add('hidden');
-    unlockTab('design', true);
-    showScreen('design');
-    document.getElementById('mtg-rate').value = loadRate();
-    renderPricetag();
+    const branch = document.getElementById('triage-future-branch');
+    branch.classList.remove('hidden');
+    document.getElementById('new-series-error').classList.add('hidden');
+    branch.scrollIntoView({ behavior: 'smooth' });
     return;
   }
   result.classList.remove('hidden');
@@ -574,36 +933,86 @@ function recordAvoided() {
 }
 
 // ---------- ② 会議設計 ----------
-let agendas = [];   // {q, min}
-let members = [];   // {name, role}
+let agendas = [];   // {q, min, goal}
+let members = [];   // {name, role, prep}
 let recipients = []; // {name}
+let mtgSeq = 1;     // この案件（series）における会議の連番。プリフィル/表示用。
+function computeSeq(seriesId) {
+  if (!seriesId) return 1;
+  return loadMeetings().filter(m => m.seriesId === seriesId).length + 1;
+}
+function renderSeq() {
+  const el = document.getElementById('design-seq');
+  if (!el) return;
+  el.textContent = mtgSeq > 1 ? ('第' + mtgSeq + '回') : '';
+  el.style.display = mtgSeq > 1 ? '' : 'none';
+}
 const ROLE_LABEL = { decider: '決める人', opinion: '意見', info: '情報提供' };
+const HARD_LIMIT_MIN = 30; // トヨタ式30分ハードブロック
+// A3（8ステップ）のステップ名
+const A3_STEPS = {
+  1: '背景', 2: '現状把握', 3: '目標設定', 4: '要因解析',
+  5: '対策立案', 6: '実行計画', 7: '効果確認', 8: '標準化'
+};
+// 各Stepを埋める手段（報連相ルーター）: meeting=🤝会議 / report=📄レポート / chat=💬チャット
+const STEP_MEANS = { 1: 'meeting', 2: 'report', 3: 'meeting', 4: 'report', 5: 'meeting', 6: 'chat', 7: 'report', 8: 'meeting' };
+const MEANS_BADGE = { report: '📄', chat: '💬', meeting: '🤝' };
+const MEANS_LABEL = { report: 'レポート', chat: 'チャット', meeting: '会議' };
+const STATUS_LABEL = { todo: '未着手', doing: '作成中', done: '完了' };
+// Step特化レポートの表題
+const STEP_REPORT_TITLE = { 2: '現状把握レポート', 4: 'なぜなぜ分析レポート', 7: '効果確認レポート' };
+// 事実ゲート: 判断Step ← 直前の事実Step
+const FACT_GATE = { 3: 2, 5: 4, 8: 7 };
+const A3_CHAR_LIMIT = 1500; // A3・1枚メーターの目安上限
 
 function isQuestionForm(s) {
   // 「未来の問い」= 疑問形で終わること（〜か／〜か？／〜?）
   return /(か|かどうか)[？?]?$|[？?]$/.test(s);
 }
+function isThemeForm(s) {
+  // テーマ型（〜について／〜の件）は議題として拒否する
+  return /について[？?]?$|の件[？?]?$/.test(s);
+}
 
 function addAgenda() {
   const input = document.getElementById('agenda-input');
+  const goalEl = document.getElementById('agenda-goal');
   const err = document.getElementById('agenda-error');
   const q = input.value.trim();
-  if (!q) return;
+  const goal = goalEl.value.trim();
+  if (!q) {
+    err.textContent = '議題（未来の問い）を入力してください。';
+    err.classList.remove('hidden');
+    return;
+  }
+  if (isThemeForm(q)) {
+    err.textContent = 'テーマではなく、終了時に決まっているべき問いを書いてください。「〜について」「〜の件」は議題になりません（例：「発売日を6月に前倒しすべきか？」）。';
+    err.classList.remove('hidden');
+    return;
+  }
   if (!isQuestionForm(q)) {
     err.textContent = '議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。「〜の報告」「〜の共有」なら、この会議は不要です——関所に戻ってレポート／チャットで済ませましょう。';
     err.classList.remove('hidden');
     return;
   }
+  if (!goal) {
+    err.textContent = '「今日決めること」（この議題終了時に決まっているべき状態）を入力してください。ここが空の議題は、終わっても何も決まりません。';
+    err.classList.remove('hidden');
+    return;
+  }
   err.classList.add('hidden');
-  agendas.push({ q, min: Number(document.getElementById('agenda-min').value) });
+  agendas.push({ q, min: Number(document.getElementById('agenda-min').value), goal });
   input.value = '';
+  goalEl.value = '';
   renderDesign();
 }
 function removeAgenda(i) { agendas.splice(i, 1); renderDesign(); }
 
 function addMember() {
   const nameEl = document.getElementById('member-name');
+  const prepEl = document.getElementById('member-prep');
   const name = nameEl.value.trim();
+  const prep = prepEl.value.trim();
   const role = document.getElementById('member-role').value;
   const notice = document.getElementById('listener-notice');
   if (!name) return;
@@ -612,10 +1021,11 @@ function addMember() {
     notice.textContent = `${name} さんは「聞くだけ」なので招集しません。会議後レポートの送付先に登録しました。1人分の時間がまるごと節約されます。`;
     notice.classList.remove('hidden');
   } else {
-    members.push({ name, role });
+    members.push({ name, role, prep });
     notice.classList.add('hidden');
   }
   nameEl.value = '';
+  prepEl.value = '';
   renderDesign();
 }
 function removeMember(i) { members.splice(i, 1); renderDesign(); }
@@ -637,7 +1047,13 @@ function renderDesign() {
     const li = document.createElement('li');
     const span = document.createElement('span');
     span.className = 'grow';
-    span.textContent = `${i + 1}. ${a.q}（${a.min}分）`;
+    const q = document.createElement('div');
+    q.textContent = `${i + 1}. ${a.q}（${a.min}分）`;
+    const goal = document.createElement('div');
+    goal.style.fontSize = '12px';
+    goal.style.color = 'var(--sub)';
+    goal.textContent = '今日決めること: ' + a.goal;
+    span.append(q, goal);
     const del = document.createElement('button');
     del.className = 'ghost small';
     del.textContent = '削除';
@@ -652,7 +1068,14 @@ function renderDesign() {
     const li = document.createElement('li');
     const span = document.createElement('span');
     span.className = 'grow';
-    span.textContent = `${m.name}（${ROLE_LABEL[m.role]}）`;
+    const nm = document.createElement('div');
+    nm.textContent = `${m.name}（${ROLE_LABEL[m.role]}）`;
+    span.appendChild(nm);
+    const prep = document.createElement('div');
+    prep.style.fontSize = '12px';
+    prep.style.color = m.prep ? 'var(--sub)' : 'var(--warn)';
+    prep.textContent = m.prep ? ('期待する準備: ' + m.prep) : '期待する準備: （未設定）';
+    span.appendChild(prep);
     const demote = document.createElement('button');
     demote.className = 'ghost small';
     demote.textContent = 'レポート送付に回す';
@@ -703,10 +1126,21 @@ function renderPricetag() {
   }
   document.getElementById('price-hint').textContent = hints.join(' ');
 
+  // 30分ハードブロック: 超過時は開始不可 + 分割ボタンを表示
+  const over = min > HARD_LIMIT_MIN;
+  const overflowBox = document.getElementById('overflow-box');
+  if (over) {
+    document.getElementById('overflow-alert').textContent =
+      `議題タイムボックス合計 ${min}分 は30分を超えています。30分は「行動を変える制約条件」です。開始するには、超過分の議題を次回に回してください。`;
+    overflowBox.classList.remove('hidden');
+  } else {
+    overflowBox.classList.add('hidden');
+  }
+
   const warnings = [];
-  if (min > 30) warnings.push(`合計 ${min}分 は長すぎます。30分を超える相談は、議題を分割して別の相談にすることを検討してください。`);
   if (n > 5) warnings.push(`参加者 ${n}人 は多すぎます。意思決定に6人以上は不要なことがほとんどです。「情報提供」の人は事前レポートで代替できませんか？`);
   if (agendas.length > 0 && n > 0 && !members.some(m => m.role === 'decider')) warnings.push('「決める人」がいません。決裁者のいない相談は決定できず、もう一度会議をやり直すことになります。');
+  if (n > 0 && members.every(m => !m.prep)) warnings.push('主催者が全資料を用意する会議になっています。参加者は判断材料を持ち寄る当事者です。各参加者に「期待する準備」を割り当ててください。');
   const w = document.getElementById('design-warnings');
   w.innerHTML = '';
   warnings.forEach(t => {
@@ -716,26 +1150,226 @@ function renderPricetag() {
     w.appendChild(d);
   });
 
-  document.getElementById('btn-start').disabled = !(agendas.length > 0 && n > 0 && currentRate() > 0);
+  document.getElementById('btn-start').disabled = !(agendas.length > 0 && n > 0 && currentRate() > 0 && !over);
+  renderInvite();
+}
+
+// --- 案件（A3）紐づけ ---
+function renderSeriesOptions() {
+  const sel = document.getElementById('series-link');
+  if (!sel) return;
+  const prev = sel.value;
+  const active = loadSeries().filter(s => s.status === 'active');
+  sel.innerHTML = '<option value="">（案件に紐づけない）</option>';
+  active.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.title || '（無題の案件）';
+    sel.appendChild(opt);
+  });
+  if (active.some(s => s.id === prev)) sel.value = prev;
+  const stepSel = document.getElementById('series-step');
+  stepSel.innerHTML = '<option value="">Stepを選択</option>';
+  for (let i = 1; i <= 8; i++) {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = `Step ${i}（${A3_STEPS[i]}）`;
+    stepSel.appendChild(opt);
+  }
+  onSeriesLinkChange();
+}
+function onSeriesLinkChange() {
+  const sid = document.getElementById('series-link').value;
+  document.getElementById('series-step').disabled = !sid;
+  mtgSeq = computeSeq(sid);
+  renderSeq();
+  renderInvite();
+}
+
+// --- 30分超過分を series.nextDraft へ分割 ---
+function splitOverflow() {
+  let acc = 0;
+  const keep = [], move = [];
+  agendas.forEach(a => {
+    if (acc + a.min <= HARD_LIMIT_MIN) { keep.push(a); acc += a.min; }
+    else { move.push(a); }
+  });
+  if (!move.length) return;
+
+  let sid = document.getElementById('series-link').value;
+  if (!sid) {
+    const title = (document.getElementById('mtg-title').value.trim() || '（未分類の相談）') + ' の持ち越し';
+    const s = createSeries(title, '');
+    sid = s.id;
+    renderSeriesOptions();
+    document.getElementById('series-link').value = sid;
+    onSeriesLinkChange();
+  }
+  const list = loadSeries();
+  const s = list.find(x => x.id === sid);
+  if (s) {
+    if (!s.nextDraft) s.nextDraft = { stepNo: null, agendas: [], note: '' };
+    const stepVal = document.getElementById('series-step').value;
+    if (stepVal) s.nextDraft.stepNo = Number(stepVal);
+    move.forEach(a => s.nextDraft.agendas.push({ q: a.q, min: a.min, goal: a.goal }));
+    s.nextDraft.note = '30分制約により本会議から分割';
+    saveSeries(list);
+  }
+  agendas = keep;
+  renderDesign();
+}
+
+// --- 会議案内の自動生成 ---
+function renderInvite() {
+  const ta = document.getElementById('invite-body');
+  if (!ta) return;
+  ta.value = buildInvite();
+  renderFactGate();
+}
+
+// --- 事実ゲート（警告のみ・開始はブロックしない） ---
+function renderFactGate() {
+  const box = document.getElementById('fact-gate');
+  if (!box) return;
+  box.innerHTML = '';
+  const sid = document.getElementById('series-link').value;
+  const stepVal = Number(document.getElementById('series-step').value || 0);
+  if (!sid || !FACT_GATE[stepVal]) return;
+  const factStep = FACT_GATE[stepVal];
+  const s = getSeries(sid);
+  const st = s && s.steps && s.steps[String(factStep)];
+  if (st && st.status === 'done') return; // 事実Stepが埋まっていれば警告不要
+  const div = document.createElement('div');
+  div.className = 'alert warn';
+  div.id = 'fact-gate-warn';
+  div.textContent = `Step${stepVal}（${A3_STEPS[stepVal]}）の判断会議を設計しています。事実の Step${factStep}（${A3_STEPS[factStep]}）のレポートが未完了です。事実の説明に会議時間を使うことになります。先にレポートで共有しませんか？`;
+  const btn = document.createElement('button');
+  btn.className = 'ghost small';
+  btn.style.marginTop = '8px';
+  btn.textContent = `Step${factStep}（${A3_STEPS[factStep]}）を${STEP_REPORT_TITLE[factStep] || 'レポート'}で埋める`;
+  btn.onclick = () => openStepEditor(sid, factStep, 'report');
+  div.appendChild(document.createElement('br'));
+  div.appendChild(btn);
+  box.appendChild(div);
+}
+function buildInvite() {
+  const title = document.getElementById('mtg-title').value.trim() || '（無題の相談）';
+  const bg = document.getElementById('mtg-bg').value.trim();
+  const min = totalPlannedMin();
+  const n = members.length;
+  const rate = currentRate();
+  const budget = plannedBudget();
+  const L = [];
+  L.push(`【会議案内】${title}`);
+  L.push('');
+  L.push('■ 背景');
+  L.push(bg || '（背景を記入してください）');
+  L.push('');
+  L.push(`■ 議題と「今日決めること」（合計 ${min}分）`);
+  if (agendas.length) {
+    agendas.forEach((a, i) => {
+      L.push(`${i + 1}. ${a.q}（${a.min}分）`);
+      L.push(`   今日決めること: ${a.goal}`);
+    });
+  } else {
+    L.push('（議題が未入力です）');
+  }
+
+  const sid = document.getElementById('series-link').value;
+  const stepVal = document.getElementById('series-step').value;
+  if (sid && stepVal) {
+    const s = getSeries(sid);
+    if (s) {
+      L.push('');
+      L.push('■ 位置づけ');
+      L.push(`本会議はA3のStep ${stepVal}（${A3_STEPS[Number(stepVal)]}）を前進させる節目です。`);
+    }
+  }
+
+  L.push('');
+  L.push('■ 参加者と期待する準備');
+  if (members.length) {
+    members.forEach(m => {
+      L.push(`・${m.name}（${ROLE_LABEL[m.role]}）: ${m.prep || '（判断材料を持ち寄ってください）'}`);
+    });
+  } else {
+    L.push('（参加者が未入力です）');
+  }
+  if (recipients.length) {
+    L.push(`※レポート送付（会議には呼びません）: ${recipients.map(r => r.name).join('、')}`);
+  }
+
+  L.push('');
+  L.push('■ この会議の値札');
+  L.push(`¥${budget.toLocaleString()}（${n}人 × ${min}分 × 人時単価 ¥${rate.toLocaleString()}）`);
+
+  L.push('');
+  L.push('■ 運用ルール');
+  L.push('・事前の個別回り（根回し）は不要です。判断材料は会議に持ち寄ってください');
+  L.push('・説明は本案内と事前資料で完了。会議は判断と合意に使います');
+  L.push('・前後30分はバッファを空けてください');
+  L.push('・結論から話す。事実と意見を分ける');
+  return L.join('\n');
 }
 
 // ---------- ③ コックピット ----------
-let mtg = null; // {title, agendas:[{q,min,decision,spentSec}], members, recipients, rate, budget, startMs, agendaStartMs, current, timer}
+// 30分フェーズ（幅比 3:5:12:5:5、plannedMin に比例スケール）
+const PHASES = [
+  { label: '目的確認',   end: 3,  hint: '今日決めることを全員で読み上げる' },
+  { label: '事実共有',   end: 8,  hint: '事実と意見を分ける。説明は事前共有済み、ここは差分だけ' },
+  { label: '論点討議',   end: 20, hint: '結論から話す。論点は1つずつ' },
+  { label: '決定',       end: 25, hint: '周辺をつつくだけで議論した気になっていないか。反対意見は出たか' },
+  { label: 'O/D/N確認',  end: 30, hint: 'Owner・期限・次回の問いを確定させる' }
+];
+const PHASE_TOTAL = 30;
+
+// 曖昧語パターン（アクション「何を」はハードブロック、決定テキストは警告のみ）
+const VAGUE_PATTERNS = [
+  /(検討|調整|協議|相談|議論|対応|確認)(する|します|を続ける|していく)?$/,
+  /引き続き/, /継続(検討|議論|協議)/, /善処/, /前向きに/,
+  /様子を(見る|みる)/, /持ち帰(る|り)/, /追って/, /後日/, /別途/,
+  /適宜/, /なるべく/, /できれば/, /すり合わせ(る|を行う)?$/, /詰める$/
+];
+function isVague(s) { return VAGUE_PATTERNS.some(re => re.test(s)); }
+const VAGUE_EXAMPLE = '例:「調整する」→「田中が5/20までにA部門と会議日程を確定する」';
+
+// 持ち越し原因（複数選択・必須）
+const CARRY_CAUSES = [
+  '議題が大きすぎた', '決裁者不在', '判断材料不足', '前提・認識の不揃い',
+  '複数の問題を同時に扱った', '事前準備不足', 'その他'
+];
+
+let mtg = null; // {id, title, agendas:[{q,min,goal,decision,dissent,actions,spentSec,carried,carryCauses}], members, recipients, rate, budget, plannedMin, extensionMin, extended, startMs, agendaStartMs, current, timer}
 
 function startMeeting() {
   saveRate(currentRate());
   mtg = {
+    id: genId(),
+    seriesId: document.getElementById('series-link').value || null,
+    stepNo: document.getElementById('series-step').value ? Number(document.getElementById('series-step').value) : null,
+    seq: mtgSeq,
     title: document.getElementById('mtg-title').value.trim() || '（無題の相談）',
-    agendas: agendas.map(a => ({ q: a.q, min: a.min, decision: null, spentSec: 0 })),
+    agendas: agendas.map(a => ({
+      q: a.q, min: a.min, goal: a.goal || '',
+      decision: null, dissent: '', actions: [], spentSec: 0,
+      carried: false, carryCauses: []
+    })),
     members: members.slice(),
     recipients: recipients.slice(),
     rate: currentRate(),
     budget: plannedBudget(),
     plannedMin: totalPlannedMin(),
+    extensionMin: 0,
+    extended: false,
     startMs: Date.now(),
     agendaStartMs: Date.now(),
     current: 0,
-    endedEarly: false
+    endedEarly: false,
+    ended: false,
+    modalOpen: false,
+    _phaseIdx: -1,
+    _promptedThreshold: null,
+    _warnedIdx: -1
   };
   unlockTab('cockpit', true);
   unlockTab('design', false);
@@ -743,9 +1377,178 @@ function startMeeting() {
   document.getElementById('cockpit-title').textContent = mtg.title;
   document.getElementById('stat-planned').textContent = mtg.plannedMin + '分';
   document.getElementById('stat-people').textContent = mtg.members.length + '人';
+  // Owner候補（参加者名）を datalist に反映
+  const dl = document.getElementById('owner-datalist');
+  dl.innerHTML = '';
+  mtg.members.forEach(m => { const o = document.createElement('option'); o.value = m.name; dl.appendChild(o); });
+  renderPhaseBar();
+  // フェーズ0: 第2回以降、前回までの open アクションを持ち寄り確認（全行回答まで議題タイマー開始不可）
+  const priorOpen = mtg.seriesId
+    ? loadActions().filter(a => a.seriesId === mtg.seriesId && a.status === 'open')
+    : [];
+  if (priorOpen.length > 0) {
+    mtg.phase0Active = true;
+    mtg.phase0 = priorOpen.map(a => ({
+      id: a.id, what: a.what, owner: a.owner, due: a.due, state: null, reason: ''
+    }));
+    renderPhase0();
+    renderBudgetFrozen();
+  } else {
+    beginAgendas();
+  }
+}
+
+// フェーズ0完了後（または不要時）に議題タイマー・予算クロックを開始する
+function beginAgendas() {
+  mtg.phase0Active = false;
+  mtg.startMs = Date.now();
+  mtg.agendaStartMs = Date.now();
   renderCockpitAgendas();
   mtg.timer = setInterval(tick, 250);
   tick();
+}
+
+// フェーズ0中は予算クロックを止めたまま、値札（予算満額）だけ表示する
+function renderBudgetFrozen() {
+  document.getElementById('budget-amount').textContent = '¥' + mtg.budget.toLocaleString();
+  const meter = document.getElementById('budget-meter');
+  meter.style.width = '100%';
+  meter.className = '';
+  document.getElementById('stat-elapsed').textContent = '0:00';
+  document.getElementById('stat-personmin').textContent = '0人分';
+}
+
+// --- フェーズ0: 前回アクションの持ち寄り確認 ---
+function renderPhase0() {
+  const box = document.getElementById('cockpit-agendas');
+  box.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'agenda-item current';
+  const h = document.createElement('div');
+  h.className = 'q';
+  h.textContent = 'フェーズ0: 前回アクションの持ち寄り確認';
+  wrap.appendChild(h);
+  const note = document.createElement('p');
+  note.className = 'note';
+  note.style.margin = '4px 0 8px';
+  note.textContent = '会議は「実行結果の持ち寄り」から始まります。全ての行に回答するまで議題1のタイマーは始まりません。';
+  wrap.appendChild(note);
+  const ul = document.createElement('ul');
+  ul.className = 'action-list';
+  ul.id = 'phase0-list';
+  mtg.phase0.forEach((p, i) => {
+    const li = document.createElement('li');
+    li.style.flexWrap = 'wrap';
+    const span = document.createElement('span');
+    span.className = 'grow';
+    span.innerHTML = '<b>' + p.owner + '</b> が <span class="due">' + p.due + '</span> までに: ' + p.what;
+    const doneBtn = document.createElement('button');
+    doneBtn.className = p.state === 'done' ? 'primary small' : 'ghost small';
+    doneBtn.textContent = '完了';
+    doneBtn.id = 'phase0-done-' + i;
+    doneBtn.onclick = () => setPhase0(i, 'done');
+    const carryBtn = document.createElement('button');
+    carryBtn.className = p.state === 'carried' ? 'primary small' : 'ghost small';
+    carryBtn.textContent = '未完了';
+    carryBtn.id = 'phase0-carry-' + i;
+    carryBtn.onclick = () => setPhase0(i, 'carried');
+    li.append(span, doneBtn, carryBtn);
+    const reason = document.createElement('input');
+    reason.type = 'text';
+    reason.id = 'phase0-reason-' + i;
+    reason.placeholder = '未完了の理由（1行・必須）';
+    reason.style.flexBasis = '100%';
+    reason.style.marginTop = '6px';
+    reason.className = p.state === 'carried' ? '' : 'hidden';
+    reason.value = p.reason;
+    reason.oninput = () => setPhase0Reason(i, reason.value);
+    li.appendChild(reason);
+    ul.appendChild(li);
+  });
+  wrap.appendChild(ul);
+  const err = document.createElement('div');
+  err.className = 'alert bad hidden';
+  err.id = 'phase0-error';
+  wrap.appendChild(err);
+  const btn = document.createElement('button');
+  btn.className = 'primary';
+  btn.id = 'phase0-done-btn';
+  btn.style.marginTop = '12px';
+  btn.textContent = '持ち寄り確認を完了して議題へ';
+  btn.disabled = true;
+  btn.onclick = () => completePhase0();
+  wrap.appendChild(btn);
+  box.appendChild(wrap);
+  updatePhase0Btn();
+}
+function setPhase0(i, state) {
+  mtg.phase0[i].state = state;
+  if (state === 'done') mtg.phase0[i].reason = '';
+  renderPhase0();
+}
+function setPhase0Reason(i, val) {
+  mtg.phase0[i].reason = val;
+  updatePhase0Btn();
+}
+function answeredPhase0() {
+  return mtg.phase0.every(p =>
+    p.state === 'done' || (p.state === 'carried' && p.reason.trim().length > 0));
+}
+function updatePhase0Btn() {
+  const btn = document.getElementById('phase0-done-btn');
+  if (btn) btn.disabled = !answeredPhase0();
+}
+function completePhase0() {
+  if (!answeredPhase0()) {
+    const e = document.getElementById('phase0-error');
+    e.textContent = 'すべての行に「完了」または「未完了（理由必須）」で回答してください。';
+    e.classList.remove('hidden');
+    return;
+  }
+  mtg.phase0.forEach(p => {
+    if (p.state === 'done') completeAction(p.id);
+    else if (p.state === 'carried') carryAction(p.id, p.reason.trim());
+  });
+  beginAgendas();
+}
+
+// --- 30分フェーズバー ---
+function renderPhaseBar() {
+  const bar = document.getElementById('phasebar');
+  bar.innerHTML = '';
+  PHASES.forEach((p, i) => {
+    const prev = i === 0 ? 0 : PHASES[i - 1].end;
+    const seg = document.createElement('div');
+    seg.className = 'phase-seg';
+    seg.id = 'phase-seg-' + i;
+    seg.style.flexGrow = String(p.end - prev);
+    seg.textContent = p.label;
+    bar.appendChild(seg);
+  });
+  const marker = document.createElement('div');
+  marker.className = 'phase-marker';
+  marker.id = 'phase-marker';
+  marker.style.left = '0%';
+  bar.appendChild(marker);
+}
+function updatePhase(elapsedMin) {
+  if (!mtg) return;
+  const r = mtg.plannedMin > 0 ? elapsedMin / mtg.plannedMin : 0;
+  let cur = PHASES.findIndex(p => r < p.end / PHASE_TOTAL);
+  if (cur === -1) cur = PHASES.length - 1;
+  PHASES.forEach((p, i) => {
+    const seg = document.getElementById('phase-seg-' + i);
+    if (!seg) return;
+    seg.classList.toggle('done', i < cur);
+    seg.classList.toggle('current', i === cur);
+  });
+  const marker = document.getElementById('phase-marker');
+  if (marker) marker.style.left = (Math.min(1, Math.max(0, r)) * 100) + '%';
+  if (mtg._phaseIdx !== cur) {
+    mtg._phaseIdx = cur;
+    const hintEl = document.getElementById('phase-hint');
+    if (hintEl) hintEl.innerHTML = '<b>' + PHASES[cur].label + '</b> — ' + PHASES[cur].hint;
+  }
 }
 
 function fmtMMSS(sec) {
@@ -756,6 +1559,7 @@ function fmtMMSS(sec) {
 function tick() {
   if (!mtg) return;
   const elapsedSec = (Date.now() - mtg.startMs) / 1000;
+  const elapsedMin = elapsedSec / 60;
   const spentCost = mtg.members.length * mtg.rate * elapsedSec / 3600;
   const remain = mtg.budget - spentCost;
   const amountEl = document.getElementById('budget-amount');
@@ -788,6 +1592,51 @@ function tick() {
     t.textContent = (left < 0 ? '−' : '') + fmtMMSS(Math.abs(left));
     t.classList.toggle('over', left < 0);
   }
+
+  // 30分フェーズバー更新 + 予定時間到達チェック（延長1回制）
+  updatePhase(elapsedMin);
+  checkTimeThreshold(elapsedMin);
+}
+
+// --- 延長1回制: 予定時間（＋延長分）到達でカスタムモーダル ---
+function checkTimeThreshold(elapsedMin) {
+  if (!mtg || mtg.ended || mtg.modalOpen) return;
+  const threshold = mtg.plannedMin + mtg.extensionMin;
+  if (elapsedMin >= threshold && mtg._promptedThreshold !== threshold) {
+    mtg._promptedThreshold = threshold;
+    openTimeModal();
+  }
+}
+function openTimeModal() {
+  mtg.modalOpen = true;
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  body.innerHTML = '';
+  actions.innerHTML = '';
+  if (!mtg.extended) {
+    title.textContent = '予定時間に到達しました';
+    body.innerHTML = '<p class="note" style="margin:0">延長は<b>1回だけ</b>可能です。延長するか、残りを持ち越して終了してください。</p>';
+    [5, 10, 15, 30].forEach(n => {
+      const b = document.createElement('button');
+      b.className = 'ghost'; b.textContent = '+' + n + '分 延長';
+      b.onclick = () => extendMeeting(n);
+      actions.appendChild(b);
+    });
+  } else {
+    title.textContent = '延長分の時間にも到達しました';
+    body.innerHTML = '<p class="note" style="margin:0">延長は1回までです。ここで区切り、残議題は持ち越して終了しましょう。</p>';
+  }
+  const end = document.createElement('button');
+  end.className = 'danger'; end.textContent = '残議題を持ち越して終了';
+  end.onclick = () => { closeModal(); requestEnd(true); };
+  actions.appendChild(end);
+  showModal();
+}
+function extendMeeting(n) {
+  mtg.extended = true;
+  mtg.extensionMin += n;
+  closeModal();
 }
 
 function renderCockpitAgendas() {
@@ -813,16 +1662,63 @@ function renderCockpitAgendas() {
       timer.textContent = fmtMMSS(a.min * 60);
       div.appendChild(timer);
 
+      if (a.goal) {
+        const goal = document.createElement('div');
+        goal.className = 'note';
+        goal.style.margin = '2px 0 8px';
+        goal.textContent = '今日決めること: ' + a.goal;
+        div.appendChild(goal);
+      }
+
+      // 決定テキスト（必須）
+      const dLabel = document.createElement('label');
+      dLabel.textContent = '決定（必須）';
+      div.appendChild(dLabel);
       const input = document.createElement('input');
       input.type = 'text';
       input.id = 'decision-input';
       input.placeholder = '決定事項（例：6月1日に前倒しで発売する。担当:田中、期限:5/20）';
-      input.style.marginTop = '8px';
       div.appendChild(input);
+      const dWarn = document.createElement('div');
+      dWarn.className = 'alert warn hidden';
+      dWarn.id = 'decision-warn';
+      div.appendChild(dWarn);
+
+      // 出た異論・懸念（任意）
+      const diLabel = document.createElement('label');
+      diLabel.textContent = '出た異論・懸念（任意）';
+      div.appendChild(diLabel);
+      const dissent = document.createElement('textarea');
+      dissent.id = 'dissent-input';
+      dissent.rows = 2;
+      dissent.placeholder = '反対意見・懸念・保留された論点があれば記録（なければ空欄可）';
+      dissent.value = a.dissent || '';
+      div.appendChild(dissent);
+
+      // アクション行（何を／誰が／いつまでに）
+      const aLabel = document.createElement('label');
+      aLabel.textContent = 'アクション（何を・誰が・いつまでに）';
+      div.appendChild(aLabel);
+      const arow = document.createElement('div');
+      arow.className = 'row';
+      arow.innerHTML =
+        '<div style="flex:3"><input type="text" id="act-what" placeholder="何を（例：A部門と発売日程を確定する）"></div>' +
+        '<div style="flex:2"><input type="text" id="act-owner" list="owner-datalist" placeholder="誰が（担当者）"></div>' +
+        '<div style="flex:2"><input type="date" id="act-due" min="' + toDateStr(Date.now()) + '"></div>' +
+        '<div style="flex:0"><button class="ghost" onclick="addCockpitAction()">追加</button></div>';
+      div.appendChild(arow);
+      const aErr = document.createElement('div');
+      aErr.className = 'alert bad hidden';
+      aErr.id = 'action-error';
+      div.appendChild(aErr);
+      const aList = document.createElement('ul');
+      aList.className = 'action-list';
+      aList.id = 'action-list';
+      div.appendChild(aList);
 
       const btn = document.createElement('button');
       btn.className = 'primary';
-      btn.style.marginTop = '8px';
+      btn.style.marginTop = '12px';
       btn.textContent = (i === mtg.agendas.length - 1) ? '決定を記録して会議を終了' : '決定を記録して次の議題へ';
       btn.onclick = () => closeAgenda();
       div.appendChild(btn);
@@ -834,6 +1730,58 @@ function renderCockpitAgendas() {
     }
     box.appendChild(div);
   });
+  if (mtg.current < mtg.agendas.length) renderAgendaActions(mtg.agendas[mtg.current]);
+}
+
+// --- アクション行の追加（「何を」曖昧語はハードブロック / Owner・Due 必須） ---
+function showActErr(msg) {
+  const err = document.getElementById('action-error');
+  err.textContent = msg;
+  err.classList.remove('hidden');
+}
+function addCockpitAction() {
+  const a = mtg.agendas[mtg.current];
+  const whatEl = document.getElementById('act-what');
+  const ownerEl = document.getElementById('act-owner');
+  const dueEl = document.getElementById('act-due');
+  const what = whatEl.value.trim();
+  const owner = ownerEl.value.trim();
+  const due = dueEl.value;
+  const today = toDateStr(Date.now());
+  if (!what) { showActErr('「何を（アクション）」を入力してください。'); return; }
+  if (isVague(what)) {
+    showActErr('「' + what + '」は曖昧で、これでは誰も動けません。誰が・いつまでに・何を、を具体的に。' + VAGUE_EXAMPLE);
+    return;
+  }
+  if (!owner) { showActErr('「誰が（Owner）」は必須です。担当者名を入れてください。'); return; }
+  if (!due) { showActErr('「いつまでに（期限）」は必須です。'); return; }
+  if (due < today) { showActErr('期限は今日（' + today + '）以降にしてください。'); return; }
+  document.getElementById('action-error').classList.add('hidden');
+  a.actions.push({ what, owner, due });
+  whatEl.value = ''; ownerEl.value = ''; dueEl.value = '';
+  renderAgendaActions(a);
+  whatEl.focus();
+}
+function removeCockpitAction(idx) {
+  mtg.agendas[mtg.current].actions.splice(idx, 1);
+  renderAgendaActions(mtg.agendas[mtg.current]);
+}
+function renderAgendaActions(a) {
+  const list = document.getElementById('action-list');
+  if (!list) return;
+  list.innerHTML = '';
+  a.actions.forEach((act, idx) => {
+    const li = document.createElement('li');
+    const span = document.createElement('span');
+    span.className = 'grow';
+    span.innerHTML = '<b>' + act.owner + '</b> が <span class="due">' + act.due + '</span> までに: ' + act.what;
+    const del = document.createElement('button');
+    del.className = 'ghost small';
+    del.textContent = '削除';
+    del.onclick = () => removeCockpitAction(idx);
+    li.append(span, del);
+    list.appendChild(li);
+  });
 }
 
 function closeAgenda() {
@@ -844,25 +1792,131 @@ function closeAgenda() {
     input.placeholder = '決定事項を記録しないと先へ進めません';
     return;
   }
+  // 曖昧語: 決定テキストは警告のみ（1度警告 → 再度押下で記録できる）
+  const warnEl = document.getElementById('decision-warn');
+  if (isVague(decision) && mtg._warnedIdx !== mtg.current) {
+    mtg._warnedIdx = mtg.current;
+    warnEl.textContent = '⚠ 「' + decision + '」は曖昧かもしれません。具体化を推奨します。' + VAGUE_EXAMPLE + ' — このまま記録するには、もう一度ボタンを押してください。';
+    warnEl.classList.remove('hidden');
+    return;
+  }
   const a = mtg.agendas[mtg.current];
   a.decision = decision;
+  a.dissent = (document.getElementById('dissent-input').value || '').trim();
   a.spentSec = (Date.now() - mtg.agendaStartMs) / 1000;
+  // アクションを sekisho.actions に owner/due つきで保存
+  a.actions.forEach(act => addAction({
+    seriesId: mtg.seriesId, meetingId: mtg.id, what: act.what, owner: act.owner, due: act.due
+  }));
   stats.decisions += 1;
   mtg.current += 1;
   mtg.agendaStartMs = Date.now();
   if (mtg.current >= mtg.agendas.length) {
-    endMeeting(false);
+    finalizeEnd(false);
   } else {
     renderCockpitAgendas();
   }
 }
 
-function endMeeting(early) {
-  if (!mtg) return;
-  if (early && !confirm('未決の議題を残して終了しますか？未決の議題はレポートに「持ち越し」として記録されます。')) return;
+// --- モーダル共通 ---
+function showModal() { document.getElementById('modal-overlay').classList.remove('hidden'); }
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+  if (mtg) mtg.modalOpen = false;
+}
+
+// --- 終了フロー: 未決議題があれば持ち越し原因診断（複数選択・必須） ---
+function requestEnd(early) {
+  if (!mtg || mtg.ended) return;
+  const pending = mtg.agendas.filter(a => !a.decision);
+  if (early && pending.length > 0) { openCarryModal(pending); return; }
+  finalizeEnd(early);
+}
+function openCarryModal(pending) {
+  mtg.modalOpen = true;
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  title.textContent = '持ち越しの原因を診断（複数選択可・必須）';
+  body.innerHTML =
+    '<p class="note" style="margin:0 0 6px">未決の議題 ' + pending.length +
+    '件 を持ち越します。次回同じ轍を踏まないため、なぜ決まらなかったかを選んでください。</p>' +
+    '<div class="cause-list" id="cause-list"></div>' +
+    '<div class="alert bad hidden" id="cause-error">1つ以上、原因を選んでください。</div>';
+  const cl = body.querySelector('#cause-list');
+  CARRY_CAUSES.forEach(c => {
+    const lb = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.value = c; cb.className = 'cause-cb';
+    lb.appendChild(cb);
+    lb.appendChild(document.createTextNode(c));
+    cl.appendChild(lb);
+  });
+  actions.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'ghost'; cancel.textContent = '会議に戻る';
+  cancel.onclick = () => closeModal();
+  actions.appendChild(cancel);
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'danger'; confirmBtn.textContent = '原因を記録して終了';
+  confirmBtn.onclick = () => {
+    const checked = Array.from(document.querySelectorAll('.cause-cb')).filter(c => c.checked).map(c => c.value);
+    if (checked.length === 0) { document.getElementById('cause-error').classList.remove('hidden'); return; }
+    pending.forEach(a => { a.carried = true; a.carryCauses = checked.slice(); });
+    closeModal();
+    finalizeEnd(true);
+  };
+  actions.appendChild(confirmBtn);
+  showModal();
+}
+
+function persistMeeting() {
+  const meeting = {
+    id: mtg.id,
+    seriesId: mtg.seriesId,
+    stepNo: mtg.stepNo,
+    seq: mtg.seq,
+    title: mtg.title,
+    startMs: mtg.startMs,
+    endMs: mtg.endMs,
+    plannedMin: mtg.plannedMin,
+    extensionMin: mtg.extensionMin,
+    endedEarly: mtg.endedEarly,
+    agendas: mtg.agendas.map(a => ({
+      q: a.q, min: a.min, goal: a.goal,
+      decision: a.decision, dissent: a.dissent,
+      carried: a.carried, carryCauses: a.carryCauses
+    }))
+  };
+  const list = loadMeetings();
+  list.push(meeting);
+  saveMeetings(list);
+}
+
+// A3案件に紐づく会議なら、決定内容を該当Stepブロックへ自動保存（status=done, filledBy=meeting）
+function saveStepFromMeeting() {
+  if (!mtg.seriesId || !mtg.stepNo) return;
+  const decided = mtg.agendas.filter(a => a.decision);
+  if (!decided.length) return;
+  const content = decided.map(a => a.q + ' → ' + a.decision).join('\n');
+  const list = loadSeries();
+  const s = list.find(x => x.id === mtg.seriesId);
+  if (!s || !s.steps) return;
+  s.steps[String(mtg.stepNo)] = {
+    status: 'done', content, filledBy: 'meeting',
+    meetingId: mtg.id, updatedAt: Date.now()
+  };
+  saveSeries(list);
+}
+
+function finalizeEnd(early) {
+  if (!mtg || mtg.ended) return;
+  mtg.ended = true;
   clearInterval(mtg.timer);
   mtg.endedEarly = early;
   mtg.endMs = Date.now();
+  // 未決議題は持ち越し扱い（原因未診断でも安全側で carried を立てる）
+  mtg.agendas.forEach(a => { if (!a.decision) a.carried = true; });
 
   const elapsedSec = (mtg.endMs - mtg.startMs) / 1000;
   const actualCost = Math.round(mtg.members.length * mtg.rate * elapsedSec / 3600);
@@ -877,7 +1931,11 @@ function endMeeting(early) {
   stats.spared += mtg.recipients.length;
   saveStats();
 
+  persistMeeting();
+  saveStepFromMeeting();
+  mtg._reportCtx = { elapsedSec, actualCost, saved };
   buildReport(elapsedSec, actualCost, saved);
+  updateNextConnectUI();
   unlockTab('report', true);
   unlockTab('cockpit', false);
   showScreen('report');
@@ -890,32 +1948,86 @@ function buildReport(elapsedSec, actualCost, saved) {
   const decided = mtg.agendas.filter(a => a.decision);
   const pending = mtg.agendas.filter(a => !a.decision);
 
+  const allActions = [];
+  mtg.agendas.forEach(a => (a.actions || []).forEach(act => allActions.push(act)));
+  const nextQEl = document.getElementById('next-agenda-q');
+  const nextGoalEl = document.getElementById('next-agenda-goal');
+  const nextQ = (nextQEl ? nextQEl.value : '').trim();
+  const nextGoal = (nextGoalEl ? nextGoalEl.value : '').trim();
+
   const lines = [];
-  lines.push(`【報告】相談結果: ${mtg.title}`);
+  lines.push(`【申し送り】${mtg.title}`);
   lines.push('');
-  lines.push(`日時: ${date} / 所要 ${fmtMMSS(elapsedSec)}（予定 ${mtg.plannedMin}分）`);
+  const extNote = mtg.extensionMin > 0 ? `＋延長 ${mtg.extensionMin}分` : '';
+  lines.push(`日時: ${date} / 所要 ${fmtMMSS(elapsedSec)}（予定 ${mtg.plannedMin}分${extNote}）`);
   lines.push(`参加: ${mtg.members.map(m => `${m.name}(${ROLE_LABEL[m.role]})`).join('、') || 'なし'}`);
   lines.push('');
-  lines.push('■ 決定事項');
+
+  // (1) Decision
+  lines.push('■ Decision（決定事項）');
   if (decided.length) {
     decided.forEach((a, i) => {
       lines.push(`${i + 1}. ${a.q}`);
       lines.push(`   → ${a.decision}`);
+      if (a.dissent) lines.push(`   ⚠ 出た異論・懸念: ${a.dissent}`);
     });
   } else {
     lines.push('（なし）');
   }
-  if (pending.length) {
-    lines.push('');
-    lines.push('■ 持ち越し（未決）');
-    pending.forEach(a => lines.push(`・${a.q}`));
+  lines.push('');
+
+  // (2) Action 表（何を / 誰が[Owner] / いつまでに[Due]）
+  lines.push('■ Action（何を / 誰が[Owner] / いつまでに[Due]）');
+  if (allActions.length) {
+    lines.push('何を | 誰が | いつまでに');
+    lines.push('--- | --- | ---');
+    allActions.forEach(act => { lines.push(`${act.what} | ${act.owner} | ${act.due}`); });
+  } else {
+    lines.push('（アクションなし）');
   }
   lines.push('');
+
+  // (3) 持ち越し議題 + 原因診断結果
+  if (pending.length) {
+    lines.push('■ 持ち越し議題（未決）と原因診断');
+    pending.forEach(a => {
+      lines.push(`・${a.q}`);
+      if (a.carryCauses && a.carryCauses.length) {
+        lines.push(`   原因: ${a.carryCauses.join('、')}`);
+      }
+    });
+    lines.push('');
+  }
+
+  // (4) Next（次回議題）
+  lines.push('■ Next（次回議題）');
+  if (nextQ) {
+    lines.push(`・${nextQ}`);
+    if (nextGoal) lines.push(`   今日決めること: ${nextGoal}`);
+  } else {
+    lines.push('（「次回への接続」で次回議題を入力してください）');
+  }
+  lines.push('');
+
+  // (5) コスト実績
   lines.push('■ 会議コスト');
   lines.push(`予算 ¥${mtg.budget.toLocaleString()} / 実績 ¥${actualCost.toLocaleString()}` +
     (saved >= 0 ? ` / 短縮節約 ¥${saved.toLocaleString()}` : ` / 超過 ¥${Math.abs(saved).toLocaleString()}`));
   lines.push('');
-  lines.push('※本件は会議関所を通過した「相談」です。質問はこのレポートへの返信でお願いします。');
+
+  // (6) 送付先（会議に呼ばなかった人）＋ ルール文
+  lines.push('■ 送付先（会議に呼ばなかった人）');
+  lines.push(mtg.recipients.length ? mtg.recipients.map(r => r.name).join('、') : '（なし）');
+  lines.push('情報は自ら取りに行く。「聞いていない」は禁句。');
+
+  // (7) シャンシャン注記: 全議題が異論・懸念ゼロで即決だった場合のみ
+  const zeroDissent = mtg.agendas.length > 0 &&
+    mtg.agendas.every(a => a.decision) &&
+    mtg.agendas.every(a => !a.dissent || !a.dissent.trim());
+  if (zeroDissent) {
+    lines.push('');
+    lines.push('※ 異論ゼロ——シャンシャン会議になっていないか要確認。');
+  }
 
   document.getElementById('report-body').textContent = lines.join('\n');
 
@@ -936,6 +2048,134 @@ function buildReport(elapsedSec, actualCost, saved) {
   }
 }
 
+// --- 次回への接続UI ---
+function refreshReport() {
+  if (!mtg || !mtg._reportCtx) return;
+  buildReport(mtg._reportCtx.elapsedSec, mtg._reportCtx.actualCost, mtg._reportCtx.saved);
+}
+function updateNextConnectUI() {
+  const status = document.getElementById('next-status');
+  status.classList.add('hidden');
+  const closeBtn = document.getElementById('btn-close-series');
+  closeBtn.disabled = false;
+  document.getElementById('next-error').classList.add('hidden');
+  // Step8の会議で決着済み（既にステップが埋まっている）ならA3・1枚レポートを用意
+  const a3card = document.getElementById('a3-onepager-card');
+  a3card.classList.add('hidden');
+}
+
+function reserveNextMeeting() {
+  const q = document.getElementById('next-agenda-q').value.trim();
+  const goal = document.getElementById('next-agenda-goal').value.trim();
+  const err = document.getElementById('next-error');
+  if (!q) { err.textContent = '次回議題を入力してください。'; err.classList.remove('hidden'); return; }
+  if (isThemeForm(q) || !isQuestionForm(q)) {
+    err.textContent = '次回議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。';
+    err.classList.remove('hidden'); return;
+  }
+  if (!goal) { err.textContent = '「今日決めること」を入力してください。'; err.classList.remove('hidden'); return; }
+  err.classList.add('hidden');
+
+  let sid = mtg && mtg.seriesId;
+  if (!sid) {
+    const s = createSeries((mtg && mtg.title) || '（相談の継続）', '');
+    sid = s.id;
+    if (mtg) mtg.seriesId = sid;
+  }
+  const list = loadSeries();
+  const s = list.find(x => x.id === sid);
+  if (s) {
+    if (!s.nextDraft) s.nextDraft = { stepNo: null, agendas: [], note: '' };
+    s.nextDraft.agendas = [{ q, min: 10, goal }];
+    s.nextDraft.note = '前回会議の申し送りで予約';
+    saveSeries(list);
+  }
+  goToNextDesign(sid);
+}
+
+function closeThisSeries() {
+  const status = document.getElementById('next-status');
+  const sid = mtg && mtg.seriesId;
+  if (!sid) {
+    status.className = 'alert warn';
+    status.textContent = 'この会議は案件（A3）に紐づいていないため、決着にできる案件がありません。';
+    status.classList.remove('hidden');
+    return;
+  }
+  closeSeries(sid);
+  status.className = 'alert ok';
+  status.textContent = 'この案件を決着（クローズ）しました。リードタイムは節約ダッシュボードに反映されます。';
+  status.classList.remove('hidden');
+  document.getElementById('btn-close-series').disabled = true;
+
+  const s = getSeries(sid);
+  const step8done = s && s.steps && s.steps['8'] && s.steps['8'].status === 'done';
+  if (step8done || (mtg && mtg.stepNo === 8)) buildA3OnePager(sid);
+}
+
+// A3・1枚レポート: 8ブロックすべてを1枚のテキストに整形
+function buildA3OnePager(sid) {
+  const s = getSeries(sid);
+  if (!s) return;
+  const L = [];
+  L.push('【A3・1枚レポート】' + (s.title || '（無題の案件）'));
+  if (s.goal) L.push('目標: ' + s.goal);
+  L.push('');
+  for (let i = 1; i <= 8; i++) {
+    const st = (s.steps && s.steps[String(i)]) || {};
+    L.push(`■ Step ${i}（${A3_STEPS[i]}）`);
+    L.push(st.content ? st.content : '（未記入）');
+    L.push('');
+  }
+  document.getElementById('a3-onepager-body').textContent = L.join('\n').trim();
+  document.getElementById('a3-onepager-card').classList.remove('hidden');
+}
+
+// 次回会議設計へ遷移し、series.nextDraft から議題をプリフィル（seqは+1）
+function goToNextDesign(seriesId) {
+  if (mtg && mtg.timer) clearInterval(mtg.timer);
+  mtg = null;
+  agendas = []; members = []; recipients = [];
+  document.getElementById('mtg-bg').value = '';
+  document.getElementById('agenda-goal').value = '';
+  document.getElementById('member-prep').value = '';
+  document.getElementById('agenda-error').classList.add('hidden');
+  document.getElementById('next-agenda-q').value = '';
+  document.getElementById('next-agenda-goal').value = '';
+  document.getElementById('next-status').classList.add('hidden');
+  document.getElementById('a3-onepager-card').classList.add('hidden');
+  document.getElementById('mtg-rate').value = loadRate();
+
+  unlockTab('design', true);
+  unlockTab('cockpit', false);
+  unlockTab('report', false);
+
+  renderSeriesOptions();
+  const sel = document.getElementById('series-link');
+  sel.value = seriesId;
+  onSeriesLinkChange(); // step有効化 + seq再計算
+
+  const s = getSeries(seriesId);
+  if (s) {
+    document.getElementById('mtg-title').value = s.title || '';
+    if (s.nextDraft) {
+      if (s.nextDraft.stepNo) document.getElementById('series-step').value = String(s.nextDraft.stepNo);
+      (s.nextDraft.agendas || []).forEach(a => agendas.push({ q: a.q, min: a.min || 10, goal: a.goal || '' }));
+      // 消費: 二重プリフィルを防ぐため nextDraft をクリア
+      const list = loadSeries();
+      const idx = list.findIndex(x => x.id === seriesId);
+      if (idx >= 0) { list[idx].nextDraft = { stepNo: null, agendas: [], note: '' }; saveSeries(list); }
+    }
+  }
+  onSeriesLinkChange();
+  renderDesign();
+  showScreen('design');
+}
+
+function copyTextContent(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).textContent).then(() => flashCopied(btn));
+}
+
 function copyReport(btn) {
   navigator.clipboard.writeText(document.getElementById('report-body').textContent)
     .then(() => flashCopied(btn));
@@ -951,15 +2191,408 @@ function flashCopied(btn) {
 }
 
 function resetFlow() {
+  document.getElementById('modal-overlay').classList.add('hidden');
   agendas = []; members = []; recipients = []; mtg = null; triageKind = null;
   document.getElementById('mtg-title').value = '';
+  document.getElementById('mtg-bg').value = '';
+  document.getElementById('agenda-goal').value = '';
+  document.getElementById('member-prep').value = '';
+  document.getElementById('agenda-error').classList.add('hidden');
   document.getElementById('triage-topic').value = '';
   document.getElementById('triage-result').classList.add('hidden');
+  document.getElementById('triage-future-branch').classList.add('hidden');
+  closeStepEditor();
+  document.getElementById('next-agenda-q').value = '';
+  document.getElementById('next-agenda-goal').value = '';
+  document.getElementById('next-error').classList.add('hidden');
+  document.getElementById('next-status').classList.add('hidden');
+  document.getElementById('a3-onepager-card').classList.add('hidden');
+  document.getElementById('btn-close-series').disabled = false;
+  mtgSeq = 1;
+  renderSeriesOptions();
+  document.getElementById('series-link').value = '';
+  onSeriesLinkChange();
+  renderSeq();
   renderDesign();
   unlockTab('design', false);
   unlockTab('cockpit', false);
   unlockTab('report', false);
   showScreen('triage');
+}
+
+// ---------- ① 関所の分岐: 単発 or A3案件 ----------
+function startSingleConsult() {
+  document.getElementById('triage-future-branch').classList.add('hidden');
+  unlockTab('design', true);
+  showScreen('design');
+  document.getElementById('mtg-rate').value = loadRate();
+  mtgSeq = 1;
+  renderSeriesOptions();
+  document.getElementById('series-link').value = '';
+  onSeriesLinkChange();
+  renderSeq();
+  renderPricetag();
+}
+function startAsA3Case() {
+  const titleEl = document.getElementById('new-series-title');
+  const goalEl = document.getElementById('new-series-goal');
+  const err = document.getElementById('new-series-error');
+  const title = titleEl.value.trim();
+  const goal = goalEl.value.trim();
+  if (!title) { err.textContent = '案件名を入力してください。'; err.classList.remove('hidden'); return; }
+  if (!goal) { err.textContent = 'ゴール（あるべき姿・目標値）を入力してください。'; err.classList.remove('hidden'); return; }
+  err.classList.add('hidden');
+  const s = createSeries(title, goal);
+  document.getElementById('triage-future-branch').classList.add('hidden');
+  titleEl.value = '';
+  goalEl.value = '';
+  goToStepDesign(s.id, 1);
+}
+
+// 案件の特定Stepの会議設計へ（単発会議を、案件＋Stepに紐づけてプリフィル）
+function goToStepDesign(seriesId, stepNo) {
+  if (mtg && mtg.timer) clearInterval(mtg.timer);
+  mtg = null;
+  agendas = []; members = []; recipients = []; mtgSeq = 1;
+  document.getElementById('mtg-bg').value = '';
+  document.getElementById('agenda-goal').value = '';
+  document.getElementById('member-prep').value = '';
+  document.getElementById('agenda-error').classList.add('hidden');
+  document.getElementById('mtg-rate').value = loadRate();
+  unlockTab('design', true);
+  unlockTab('cockpit', false);
+  unlockTab('report', false);
+  showScreen('design');
+  renderSeriesOptions();
+  document.getElementById('series-link').value = seriesId;
+  onSeriesLinkChange();
+  document.getElementById('series-step').value = String(stepNo);
+  onSeriesLinkChange();
+  const s = getSeries(seriesId);
+  if (s) document.getElementById('mtg-title').value = s.title || '';
+  renderDesign();
+}
+
+// 停滞検知 → エスカレーション用の会議設計へ（議題・今日決めることをプリフィル）
+function goToEscalationDesign(seriesId) {
+  if (mtg && mtg.timer) clearInterval(mtg.timer);
+  mtg = null;
+  agendas = []; members = []; recipients = []; mtgSeq = 1;
+  document.getElementById('mtg-bg').value =
+    '本件は実務調整で停滞しています（2回持ち越し／期限超過7日超）。担当レベルで頑張り続けるのではなく、上位判断を仰ぐためのエスカレーション会議です。';
+  document.getElementById('agenda-input').value = '';
+  document.getElementById('agenda-goal').value = '';
+  document.getElementById('member-prep').value = '';
+  document.getElementById('agenda-error').classList.add('hidden');
+  document.getElementById('mtg-rate').value = loadRate();
+  unlockTab('design', true);
+  unlockTab('cockpit', false);
+  unlockTab('report', false);
+  showScreen('design');
+  renderSeriesOptions();
+  document.getElementById('series-link').value = seriesId;
+  document.getElementById('series-step').value = ''; // エスカレーションは特定Stepに縛らない
+  onSeriesLinkChange();
+  const s = getSeries(seriesId);
+  document.getElementById('mtg-title').value = (s && s.title ? s.title + ' — ' : '') + 'エスカレーション（上位判断）';
+  // 議題＋今日決めることをプリフィル
+  agendas = [{ q: '本件の判断を上位に仰ぐか？', min: 15, goal: 'エスカレーション先と依頼内容の確定' }];
+  renderDesign();
+}
+
+// マンネリ検知 → 会議を開かずに回避コストを記録する導線（関所の記録セクションへ）
+function goToAvoidRecord() {
+  showScreen('triage');
+  triage('past'); // 報告レーンを開くと回避コスト記録セクションが表示される
+  const box = document.getElementById('avoid-preview');
+  if (box) box.scrollIntoView({ behavior: 'smooth' });
+}
+
+// ---------- A3案件ビュー ----------
+let a3Editing = null; // {seriesId, stepNo, mode}
+
+function renderA3() {
+  const list = loadSeries();
+  const empty = document.getElementById('a3-empty');
+  const box = document.getElementById('a3-case-list');
+  box.innerHTML = '';
+  if (list.length === 0) {
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  const meetings = loadMeetings();
+  const actions = loadActions();
+  const todayStr = toDateStr(Date.now());
+  // 新しい案件を上に
+  list.slice().reverse().forEach(s => {
+    box.appendChild(buildCaseCard(s, meetings, actions, todayStr));
+  });
+}
+
+function firstUnfilledStep(s) {
+  for (let i = 1; i <= 8; i++) {
+    const st = s.steps && s.steps[String(i)];
+    if (!st || st.status !== 'done') return i;
+  }
+  return null;
+}
+
+function buildCaseCard(s, meetings, actions, todayStr) {
+  const card = document.createElement('div');
+  card.className = 'card a3-case' + (s.status === 'closed' ? ' closed' : '');
+  card.dataset.seriesId = s.id;
+
+  const head = document.createElement('div');
+  head.className = 'a3-head';
+  const h = document.createElement('h2');
+  h.style.margin = '0';
+  h.textContent = s.title || '（無題の案件）';
+  head.appendChild(h);
+  const stat = document.createElement('span');
+  stat.className = 'badge ' + (s.status === 'closed' ? 'report' : 'meet');
+  stat.textContent = s.status === 'closed' ? '決着済み' : '進行中';
+  head.appendChild(stat);
+  card.appendChild(head);
+  if (s.goal) {
+    const g = document.createElement('div');
+    g.className = 'a3-goal';
+    g.textContent = 'ゴール: ' + s.goal;
+    card.appendChild(g);
+  }
+
+  // ムダ検知の警告（進行中の案件のみ）
+  if (s.status !== 'closed') {
+    const nowMs = Date.now();
+    // 停滞検知＆エスカレーション（調整のムダ）
+    const stuck = stagnantActions(s.id, nowMs);
+    if (stuck.length > 0) {
+      const alert = document.createElement('div');
+      alert.className = 'alert bad a3-stagnation';
+      alert.id = 'a3-stagnation-' + s.id;
+      const carriedN = stuck.filter(x => x.reason === 'carried').length;
+      const overdueN = stuck.filter(x => x.reason === 'overdue').length;
+      const reasons = [];
+      if (carriedN) reasons.push(carriedN + '件が2回以上の持ち越し');
+      if (overdueN) reasons.push(overdueN + '件が期限超過7日超');
+      const p = document.createElement('p');
+      p.style.margin = '0 0 8px';
+      p.innerHTML = '⚠️ <b>実務調整で進んでいません</b>（' + reasons.join('・') +
+        '）。頑張って調整を続けるのではなく、上位に相談しましょう。';
+      alert.appendChild(p);
+      const btn = document.createElement('button');
+      btn.className = 'danger small a3-escalate-btn';
+      btn.textContent = '上位へエスカレーションする会議を設計';
+      btn.onclick = () => goToEscalationDesign(s.id);
+      alert.appendChild(btn);
+      card.appendChild(alert);
+    }
+    // マンネリ検知（マンネリのムダ）
+    if (seriesConsecutiveZeroDecision(s.id, meetings)) {
+      const alert = document.createElement('div');
+      alert.className = 'alert warn a3-mannerism';
+      alert.id = 'a3-mannerism-' + s.id;
+      const p = document.createElement('p');
+      p.style.margin = '0 0 8px';
+      p.innerHTML = '🔁 <b>この会議、続ける理由はありますか？</b> 決定ゼロの会議が2回連続しています。' +
+        '議題がなければ中止して、回避コストを記録しましょう。';
+      alert.appendChild(p);
+      const btn = document.createElement('button');
+      btn.className = 'ghost small a3-avoid-btn';
+      btn.textContent = '会議を中止して回避コストを記録';
+      btn.onclick = () => goToAvoidRecord();
+      alert.appendChild(btn);
+      card.appendChild(alert);
+    }
+  }
+
+  // 8ブロック俯瞰グリッド
+  const grid = document.createElement('div');
+  grid.className = 'a3-grid';
+  grid.id = 'a3-grid-' + s.id;
+  for (let i = 1; i <= 8; i++) {
+    const st = (s.steps && s.steps[String(i)]) || { status: 'todo', filledBy: null };
+    const b = document.createElement('div');
+    b.className = 'a3-block ' + st.status;
+    b.dataset.step = String(i);
+    const sn = document.createElement('div');
+    sn.className = 'sn';
+    sn.textContent = 'Step ' + i;
+    const nm = document.createElement('div');
+    nm.className = 'nm';
+    nm.textContent = A3_STEPS[i];
+    const stt = document.createElement('div');
+    stt.className = 'st';
+    const badge = st.filledBy ? (MEANS_BADGE[st.filledBy] + ' ') : '';
+    stt.textContent = badge + STATUS_LABEL[st.status || 'todo'];
+    b.append(sn, nm, stt);
+    grid.appendChild(b);
+  }
+  card.appendChild(grid);
+
+  // ナビゲーター
+  const nav = document.createElement('div');
+  nav.className = 'a3-nav';
+  const next = s.status === 'closed' ? null : firstUnfilledStep(s);
+  if (next == null) {
+    const p = document.createElement('p');
+    p.className = 'lead';
+    p.style.margin = '0';
+    p.textContent = s.status === 'closed'
+      ? '✅ この案件は決着済みです。'
+      : '✅ 8ステップすべて完了しています。申し送りで「この案件は決着」に進めます。';
+    nav.appendChild(p);
+  } else {
+    const means = STEP_MEANS[next];
+    const lead = document.createElement('p');
+    lead.className = 'lead';
+    lead.innerHTML = '次に埋めるべき: <b>Step' + next + '（' + A3_STEPS[next] + '）</b> — ' +
+      MEANS_BADGE[means] + ' ' + MEANS_LABEL[means] + 'で埋めます';
+    nav.appendChild(lead);
+    const btn = document.createElement('button');
+    btn.className = 'primary small';
+    btn.dataset.navStep = String(next);
+    if (means === 'meeting') {
+      btn.textContent = 'Step' + next + ' → 会議を設計する';
+      btn.onclick = () => goToStepDesign(s.id, next);
+    } else if (means === 'report') {
+      btn.textContent = 'Step' + next + ' → ' + (STEP_REPORT_TITLE[next] || 'レポート') + 'で埋める';
+      btn.onclick = () => openStepEditor(s.id, next, 'report');
+    } else {
+      btn.textContent = 'Step' + next + ' → 進捗チャットを書く';
+      btn.onclick = () => openStepEditor(s.id, next, 'chat');
+    }
+    nav.appendChild(btn);
+  }
+  card.appendChild(nav);
+
+  // 会議履歴
+  const hist = meetings.filter(m => m.seriesId === s.id);
+  const h3h = document.createElement('h3');
+  h3h.textContent = '会議履歴（' + hist.length + '件）';
+  card.appendChild(h3h);
+  const hul = document.createElement('ul');
+  hul.className = 'plain a3-hist';
+  if (hist.length === 0) {
+    const li = document.createElement('li');
+    li.style.color = 'var(--sub)';
+    li.textContent = '（まだ会議はありません）';
+    hul.appendChild(li);
+  } else {
+    hist.forEach(m => {
+      const li = document.createElement('li');
+      const decided = (m.agendas || []).filter(a => a.decision).length;
+      const durMin = (m.startMs != null && m.endMs != null)
+        ? Math.max(0, Math.round((m.endMs - m.startMs) / 60000)) : null;
+      const seqTxt = m.seq ? ('第' + m.seq + '回') : '会議';
+      const stepTxt = m.stepNo ? ('・Step' + m.stepNo) : '';
+      li.innerHTML = '<span class="seq">' + seqTxt + '</span>' + stepTxt +
+        ' — 決定 ' + decided + '件' + (durMin != null ? '・所要 ' + durMin + '分' : '');
+      hul.appendChild(li);
+    });
+  }
+  card.appendChild(hul);
+
+  // 未完了アクション（期限超過は赤・ここで消し込み可）
+  const open = actions.filter(a => a.seriesId === s.id && a.status === 'open');
+  const h3a = document.createElement('h3');
+  h3a.textContent = '未完了アクション（' + open.length + '件）';
+  card.appendChild(h3a);
+  const aul = document.createElement('ul');
+  aul.className = 'action-list';
+  aul.id = 'a3-actions-' + s.id;
+  if (open.length === 0) {
+    const li = document.createElement('li');
+    li.style.color = 'var(--sub)';
+    li.textContent = '（未完了アクションはありません）';
+    aul.appendChild(li);
+  } else {
+    open.forEach(a => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.className = 'grow';
+      const overdue = a.due && a.due < todayStr;
+      const dueCls = overdue ? 'due a3-overdue' : 'due';
+      span.innerHTML = '<b>' + a.owner + '</b> が <span class="' + dueCls + '">' + (a.due || '期限未設定') +
+        (overdue ? '（期限超過）' : '') + '</span> までに: ' + a.what;
+      const done = document.createElement('button');
+      done.className = 'primary small';
+      done.textContent = '完了にする';
+      done.dataset.actionId = a.id;
+      done.onclick = () => { completeAction(a.id); renderA3(); };
+      li.append(span, done);
+      aul.appendChild(li);
+    });
+  }
+  card.appendChild(aul);
+  return card;
+}
+
+// --- Step特化レポート／チャットテンプレの編集 ---
+function stepTemplate(stepNo, mode) {
+  if (mode === 'chat') {
+    return '【進捗連絡】（Step6 実行）\n\n・対策 No / 内容:\n・進捗（%・完了/未完了）:\n・障害・遅延の有無:\n・支援してほしいこと:\n\n※確認したら 👍 リアクションをお願いします（会議は不要です）';
+  }
+  if (stepNo === 2) {
+    return '【現状把握レポート】（Step2）\n\n■ 何が・どこで・いつ起きているか（事実の層別）\n・\n\n■ 数字（実績・件数・率・金額）\n・\n\n■ あるべき姿とのギャップ\n・\n\n■ 一次情報の出所\n・\n\n※事実のみ。原因・対策・意見は書かない。';
+  }
+  if (stepNo === 4) {
+    return '【なぜなぜ分析レポート】（Step4）\n\n問題（現象）:\n\nなぜ1:\n └ なぜ2:\n   └ なぜ3:\n     └ なぜ4:\n       └ なぜ5（真因）:\n\n■ 検証（この真因で現象が説明できるか）\n・\n\n※「人が悪い」で止めない。仕組み・条件で止める。';
+  }
+  if (stepNo === 7) {
+    return '【効果確認レポート】（Step7）\n\n■ 目標（Step3で設定した値）\n・\n\n■ 実績（対策後の測定値）\n・\n\n■ 目標対実績（達成/未達・差分）\n・\n\n■ 副作用・新たな問題\n・\n\n※数字で語る。未達なら次アクションへつなぐ。';
+  }
+  return '【レポート】（Step' + stepNo + ' ' + A3_STEPS[stepNo] + '）\n\n・\n';
+}
+function openStepEditor(seriesId, stepNo, mode) {
+  a3Editing = { seriesId, stepNo, mode };
+  showScreen('a3');
+  const s = getSeries(seriesId);
+  const editor = document.getElementById('a3-editor');
+  const title = mode === 'chat'
+    ? ('Step' + stepNo + '（' + A3_STEPS[stepNo] + '）— 進捗チャット')
+    : ('Step' + stepNo + '（' + A3_STEPS[stepNo] + '）— ' + (STEP_REPORT_TITLE[stepNo] || 'レポート'));
+  document.getElementById('a3-editor-title').textContent = title;
+  document.getElementById('a3-editor-note').textContent = mode === 'chat'
+    ? '現在の対策実行状況を連絡します。保存するとこのStepが完了（💬）になります。'
+    : '過去の事実を非同期レポートで共有します。保存するとこのStepが完了（📄）になります。A3・1枚（約' + A3_CHAR_LIMIT + '字）に収めてください。';
+  const existing = s && s.steps && s.steps[String(stepNo)] && s.steps[String(stepNo)].content;
+  document.getElementById('a3-editor-body').value = existing || stepTemplate(stepNo, mode);
+  editor.classList.remove('hidden');
+  updateA3CharMeter();
+  editor.scrollIntoView({ behavior: 'smooth' });
+}
+function closeStepEditor() {
+  a3Editing = null;
+  document.getElementById('a3-editor').classList.add('hidden');
+}
+function updateA3CharMeter() {
+  const n = document.getElementById('a3-editor-body').value.length;
+  const ratio = Math.min(1, n / A3_CHAR_LIMIT);
+  const meter = document.getElementById('a3-char-meter');
+  const over = n > A3_CHAR_LIMIT;
+  meter.style.width = (ratio * 100) + '%';
+  meter.className = over ? 'over' : (ratio > 0.8 ? 'warn' : '');
+  document.getElementById('a3-char-count').innerHTML = '文字数 <b>' + n + '</b> / 目安 ' + A3_CHAR_LIMIT + '字';
+  document.getElementById('a3-char-warn').classList.toggle('hidden', !over);
+}
+function saveStepEditor() {
+  if (!a3Editing) return;
+  const { seriesId, stepNo, mode } = a3Editing;
+  const content = document.getElementById('a3-editor-body').value.trim();
+  const list = loadSeries();
+  const s = list.find(x => x.id === seriesId);
+  if (!s || !s.steps) return;
+  s.steps[String(stepNo)] = {
+    status: 'done',
+    content,
+    filledBy: mode === 'chat' ? 'chat' : 'report',
+    meetingId: null,
+    updatedAt: Date.now()
+  };
+  saveSeries(list);
+  closeStepEditor();
+  renderA3();
 }
 
 // ---------- ダッシュボード ----------
@@ -972,6 +2605,31 @@ function renderDash() {
   document.getElementById('dash-saved-min').textContent = stats.savedMin.toLocaleString() + '分';
   document.getElementById('dash-spared').textContent = stats.spared + '人';
   document.getElementById('dash-decisions').textContent = stats.decisions + '件';
+  renderDashMetrics();
+}
+// 「—」表示に統一する整形ヘルパ（NaN・0除算を出さない）
+function fmtPct(r) { return r == null ? '—' : Math.round(r * 100) + '%'; }
+function fmtCount(n) { return (n || 0) + '件'; }
+function fmtLeadDays(d) { return d == null ? '—' : (Math.round(d * 10) / 10) + '日'; }
+function fmtTopCause(t) { return t ? (t.cause + '（' + t.count + '件）') : '—'; }
+function renderDashMetrics() {
+  const dm = dashMetrics();
+  // 速さの指標
+  document.getElementById('dash-action-completion').textContent = fmtPct(dm.actionCompletionRate);
+  document.getElementById('dash-ontime-completion').textContent = fmtPct(dm.onTimeCompletionRate);
+  document.getElementById('dash-carried-rate').textContent = fmtPct(dm.carriedAgendaRate);
+  document.getElementById('dash-extension-rate').textContent = fmtPct(dm.extensionRate);
+  document.getElementById('dash-within30-rate').textContent = fmtPct(dm.within30MinRate);
+  document.getElementById('dash-closed-series').textContent = fmtCount(dm.closedSeriesCount);
+  document.getElementById('dash-lead-time').textContent = fmtLeadDays(dm.avgLeadTimeDays);
+  document.getElementById('dash-overdue-actions').textContent = fmtCount(dm.overdueOpenCount);
+  document.getElementById('dash-top-carry-cause').textContent = fmtTopCause(dm.topCarryCause);
+  // ムダ検知
+  document.getElementById('dash-decision-zero').textContent = fmtCount(dm.decisionZeroMeetingCount);
+  document.getElementById('dash-over-report').textContent = fmtCount(dm.overLengthReportCount);
+  document.getElementById('dash-stagnant-actions').textContent = fmtCount(dm.stagnantActionCount);
+  document.getElementById('dash-mannerism-series').textContent = fmtCount(dm.mannerismSeriesCount);
+  document.getElementById('dash-dissent-zero-rate').textContent = fmtPct(dm.dissentZeroMeetingRate);
 }
 function resetStats() {
   if (!confirm('累計統計をリセットしますか？')) return;
@@ -982,8 +2640,10 @@ function resetStats() {
 // ---------- 初期化 ----------
 document.getElementById('avoid-rate').value = loadRate();
 document.getElementById('mtg-rate').value = loadRate();
+renderSeriesOptions();
 renderDesign();
 renderDash();
+renderA3();
 </script>
 </body>
 </html>
