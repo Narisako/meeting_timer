@@ -344,6 +344,8 @@
       </div>
       <div style="flex:0"><button class="ghost" onclick="addAgenda()">追加</button></div>
     </div>
+    <!-- R2 議題解像度チェッカー: LLM ON時のみ JS で中身を注入（OFF時はDOMに残さない） -->
+    <div id="agenda-assist" class="hidden" style="margin-top:6px"></div>
     <div id="agenda-error" class="alert bad hidden"></div>
     <ul class="plain" id="agenda-list"></ul>
     <div id="overflow-box" class="hidden">
@@ -701,6 +703,7 @@ function saveLlmFromUI() {
   const st = document.getElementById('llm-save-status');
   if (st) st.textContent = '保存しました（' + (saved.enabled ? 'ON' : 'OFF') + '）';
   renderAiRouterCard(); // 保存で即座にAI仕分けカードの表示/非表示を反映
+  renderAgendaAssist(); // R2 議題添削ボタンの表示/非表示も即反映
 }
 
 function llmUrl(endpoint, kind) {
@@ -1016,6 +1019,7 @@ function showScreen(name) {
   });
   if (name === 'a3') renderA3();
   if (name === 'triage') renderAiRouterCard();
+  if (name === 'design') renderAgendaAssist();
 }
 function unlockTab(name, on) { document.getElementById('tab-' + name).disabled = !on; }
 
@@ -1223,6 +1227,7 @@ function addAgenda() {
   if (isThemeForm(q)) {
     err.textContent = 'テーマではなく、終了時に決まっているべき問いを書いてください。「〜について」「〜の件」は議題になりません（例：「発売日を6月に前倒しすべきか？」）。';
     err.classList.remove('hidden');
+    appendAgendaAssistLink(err);
     return;
   }
   if (!isQuestionForm(q)) {
@@ -1242,6 +1247,99 @@ function addAgenda() {
   renderDesign();
 }
 function removeAgenda(i) { agendas.splice(i, 1); renderDesign(); }
+
+// ---------- R2 議題解像度チェッカー（AI添削） ----------
+// 正規表現バリデーション（疑問形・テーマ型拒否）は強制のまま維持し、AIは「直し方の提案」だけを担う。
+const AGENDA_ASSIST_HTML =
+  '<button class="ghost small" id="agenda-assist-btn" onclick="aiRefineAgenda()">AIに添削してもらう</button>' +
+  '<span id="agenda-assist-status" class="note" style="margin-left:8px"></span>' +
+  '<div id="agenda-assist-result" class="alert ok hidden" style="margin-top:8px"></div>';
+
+// #15踏襲: OFF時はDOMに残さない（ボタンごと消す）。
+function renderAgendaAssist() {
+  const box = document.getElementById('agenda-assist');
+  if (!box) return;
+  if (loadLlm().enabled) {
+    if (!document.getElementById('agenda-assist-btn')) box.innerHTML = AGENDA_ASSIST_HTML;
+    box.classList.remove('hidden');
+  } else {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+}
+
+// テーマ型拒否エラー等に「AIに直してもらう」導線を足す（LLM ON時のみ）。
+function appendAgendaAssistLink(err) {
+  if (!loadLlm().enabled) return;
+  const btn = document.createElement('button');
+  btn.className = 'ghost small';
+  btn.id = 'agenda-fix-ai';
+  btn.style.marginLeft = '8px';
+  btn.textContent = 'AIに直してもらう';
+  btn.onclick = () => aiRefineAgenda();
+  err.appendChild(document.createElement('br'));
+  err.appendChild(btn);
+}
+
+// 議題＋今日決めること を refine-agenda に投げ、{question, goal, comment} を提案表示。
+async function aiRefineAgenda() {
+  const input = document.getElementById('agenda-input');
+  const goalEl = document.getElementById('agenda-goal');
+  const status = document.getElementById('agenda-assist-status');
+  const resultBox = document.getElementById('agenda-assist-result');
+  if (!resultBox) return; // OFF時はDOMが無い
+  const q = (input.value || '').trim();
+  const goal = (goalEl.value || '').trim();
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  if (!q && !goal) { status.textContent = '添削したい議題を入力してください。'; return; }
+  status.textContent = '添削中…';
+  const payloadInput = goal ? (q + '\n今日決めること: ' + goal) : q;
+
+  let resp = null;
+  try { resp = await llmAssist('refine-agenda', { input: payloadInput }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（機能劣化なし）。
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || typeof r.question !== 'string') {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' 手入力で議題を追加できます。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+  renderAgendaProposal(r);
+}
+
+function renderAgendaProposal(r) {
+  const resultBox = document.getElementById('agenda-assist-result');
+  resultBox.className = 'alert ok';
+  resultBox.innerHTML = '';
+  const qLine = document.createElement('div');
+  const qb = document.createElement('b'); qb.textContent = '問い: ';
+  qLine.appendChild(qb);
+  qLine.appendChild(document.createTextNode(r.question));
+  const gLine = document.createElement('div');
+  const gb = document.createElement('b'); gb.textContent = '今日決めること: ';
+  gLine.appendChild(gb);
+  gLine.appendChild(document.createTextNode(r.goal || ''));
+  const cLine = document.createElement('div');
+  cLine.className = 'note';
+  cLine.textContent = r.comment || '';
+  const use = document.createElement('button');
+  use.className = 'primary small';
+  use.id = 'agenda-assist-use';
+  use.style.marginTop = '8px';
+  use.textContent = 'この案を使う';
+  use.onclick = () => {
+    document.getElementById('agenda-input').value = r.question;
+    if (r.goal) document.getElementById('agenda-goal').value = r.goal;
+    resultBox.classList.add('hidden');
+    document.getElementById('agenda-error').classList.add('hidden');
+  };
+  resultBox.append(qLine, gLine, cLine, use);
+  resultBox.classList.remove('hidden');
+}
 
 function addMember() {
   const nameEl = document.getElementById('member-name');
@@ -1971,8 +2069,105 @@ function renderCockpitAgendas() {
 // --- アクション行の追加（「何を」曖昧語はハードブロック / Owner・Due 必須） ---
 function showActErr(msg) {
   const err = document.getElementById('action-error');
-  err.textContent = msg;
+  err.textContent = msg; // textContent 再設定で前回の「AI具体化」ボタンも消える
   err.classList.remove('hidden');
+  const panel = document.getElementById('act-concretize-panel');
+  if (panel) panel.classList.add('hidden'); // 別エラー時は古い具体化候補を隠す
+}
+
+// ---------- R3 曖昧アクション具体化（AI） ----------
+// 曖昧語ハードブロックは強制のまま。AIは「具体化案」だけを提案する（LLM ON時のみ導線）。
+function appendConcretizeButton() {
+  if (!loadLlm().enabled) return; // #15踏襲: OFF時はボタンをDOMに残さない
+  const err = document.getElementById('action-error');
+  const btn = document.createElement('button');
+  btn.className = 'ghost small';
+  btn.id = 'act-concretize-btn';
+  btn.style.marginLeft = '8px';
+  btn.textContent = 'AIに具体化案を出してもらう';
+  btn.onclick = () => aiConcretizeAction();
+  err.appendChild(document.createElement('br'));
+  err.appendChild(btn);
+}
+
+function ensureConcretizePanel() {
+  let panel = document.getElementById('act-concretize-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'act-concretize-panel';
+    panel.className = 'alert ok hidden';
+    panel.style.marginTop = '8px';
+    const err = document.getElementById('action-error');
+    err.parentNode.insertBefore(panel, err.nextSibling);
+  }
+  return panel;
+}
+
+async function aiConcretizeAction() {
+  const whatEl = document.getElementById('act-what');
+  const input = (whatEl.value || '').trim();
+  if (!input) return;
+  const a = (mtg && mtg.agendas) ? mtg.agendas[mtg.current] : null;
+  const context = {
+    participants: (mtg && mtg.members) ? mtg.members.map(m => m.name) : [],
+    agenda: a ? a.q : ''
+  };
+  const panel = ensureConcretizePanel();
+  panel.className = 'alert ok';
+  panel.textContent = '具体化中…';
+  panel.classList.remove('hidden');
+
+  let resp = null;
+  try { resp = await llmAssist('concretize-action', { input, context }); } catch (e) { resp = null; }
+
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || !Array.isArray(r.candidates) || !r.candidates.length) {
+    panel.className = 'alert bad';
+    panel.textContent = LLM_UNAVAILABLE_MSG + ' 手入力で具体化してください。';
+    panel.classList.remove('hidden');
+    return;
+  }
+  renderConcretizeCandidates(r.candidates.slice(0, 3));
+}
+
+function renderConcretizeCandidates(candidates) {
+  const panel = ensureConcretizePanel();
+  panel.className = 'alert ok';
+  panel.innerHTML = '';
+  const title = document.createElement('div');
+  const tb = document.createElement('b'); tb.textContent = '具体化案';
+  title.appendChild(tb);
+  title.appendChild(document.createTextNode('（選ぶとアクション行にプリフィルします）'));
+  panel.appendChild(title);
+  const ul = document.createElement('ul');
+  ul.className = 'plain';
+  ul.id = 'act-concretize-list';
+  candidates.forEach((c) => {
+    const li = document.createElement('li');
+    li.style.margin = '6px 0';
+    const txt = document.createElement('span');
+    txt.className = 'grow';
+    txt.textContent = c.what + '（担当: ' + c.ownerHint + ' / 期限: ' + c.dueHint + '）';
+    const use = document.createElement('button');
+    use.className = 'ghost small act-concretize-use';
+    use.style.marginLeft = '8px';
+    use.textContent = 'この案を使う';
+    use.onclick = () => applyConcretizeCandidate(c);
+    li.append(txt, use);
+    ul.appendChild(li);
+  });
+  panel.appendChild(ul);
+  panel.classList.remove('hidden');
+}
+
+function applyConcretizeCandidate(c) {
+  const whatEl = document.getElementById('act-what');
+  const ownerEl = document.getElementById('act-owner');
+  if (whatEl) whatEl.value = c.what || '';
+  if (ownerEl && c.ownerHint) ownerEl.value = c.ownerHint;
+  const panel = document.getElementById('act-concretize-panel');
+  if (panel) panel.classList.add('hidden');
+  document.getElementById('action-error').classList.add('hidden');
 }
 function addCockpitAction() {
   const a = mtg.agendas[mtg.current];
@@ -1986,6 +2181,7 @@ function addCockpitAction() {
   if (!what) { showActErr('「何を（アクション）」を入力してください。'); return; }
   if (isVague(what)) {
     showActErr('「' + what + '」は曖昧で、これでは誰も動けません。誰が・いつまでに・何を、を具体的に。' + VAGUE_EXAMPLE);
+    appendConcretizeButton();
     return;
   }
   if (!owner) { showActErr('「誰が（Owner）」は必須です。担当者名を入れてください。'); return; }
@@ -2881,6 +3077,7 @@ renderDash();
 renderA3();
 renderLlmSettings();
 renderAiRouterCard();
+renderAgendaAssist();
 </script>
 </body>
 </html>
