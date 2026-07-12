@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>会議関所 — Meeting Gatekeeper</title>
+<title>会議ルーター — Meeting Router</title>
 <style>
   :root {
     --ink: #1a2333;
@@ -187,6 +187,15 @@
     padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
   }
   .cause-list input { width: auto; }
+  /* AIアシスト設定 */
+  .llm-toggle { display: flex; align-items: center; gap: 8px; font-weight: 700; margin: 12px 0 0; }
+  .llm-toggle input { width: auto; margin: 0; }
+  .llm-preview {
+    background: var(--paper, #f7f7f4); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; font-size: 12px; white-space: pre-wrap; word-break: break-word;
+    max-height: 220px; overflow: auto; margin: 8px 0 0;
+  }
+  .llm-dest { font-size: 13px; margin: 6px 0 0; word-break: break-all; }
   /* A3案件ビュー */
   .a3-case { border-left: 4px solid var(--accent); }
   .a3-case.closed { border-left-color: var(--ok); opacity: .85; }
@@ -215,11 +224,11 @@
 <body>
 
 <header>
-  <h1>会議関所</h1>
-  <span class="tagline">会議は1分でも短く、1人でも少なく。相談だけが関所を通れる。</span>
+  <h1>会議ルーター</h1>
+  <span class="tagline">伝えたいことを最適な宛先へ——レポート・チャット・会議。会議は1分でも短く、1人でも少なく。</span>
 </header>
 <nav>
-  <button id="tab-triage" class="active" onclick="showScreen('triage')">① 関所（報連相仕分け）</button>
+  <button id="tab-triage" class="active" onclick="showScreen('triage')">① ルーター（報連相仕分け）</button>
   <button id="tab-design" onclick="showScreen('design')" disabled>② 会議設計</button>
   <button id="tab-cockpit" onclick="showScreen('cockpit')" disabled>③ コックピット</button>
   <button id="tab-report" onclick="showScreen('report')" disabled>④ 申し送り</button>
@@ -229,8 +238,11 @@
 
 <main>
 
-<!-- ===================== ① 関所（トリアージ） ===================== -->
+<!-- ===================== ① ルーター（トリアージ） ===================== -->
 <section id="screen-triage" class="screen active">
+  <!-- AIオートルーター: sekisho.llm.enabled 時のみ JS で中身を注入（OFF時はDOMに残さない） -->
+  <div id="ai-router-card" class="card hidden"></div>
+
   <div class="card">
     <h2>伝えたいことは、いつの話ですか？</h2>
     <p class="note">会議を開けるのは「相談（未来の話）」だけです。報告と連絡は、ここで済ませて会議を1件減らしましょう。</p>
@@ -306,7 +318,7 @@
 <!-- ===================== ② 会議設計 ===================== -->
 <section id="screen-design" class="screen">
   <div class="card">
-    <h2>相談の設計 <span class="badge meet">関所通過</span> <span id="design-seq" class="badge" style="background:var(--gold-soft);color:var(--gold);display:none"></span></h2>
+    <h2>相談の設計 <span class="badge meet">ルーター通過</span> <span id="design-seq" class="badge" style="background:var(--gold-soft);color:var(--gold);display:none"></span></h2>
     <p class="note">議題は「未来の問い（〜するか？〜すべきか？）」だけ。参加者は役割がある人だけ。値札を見てから開きます。</p>
     <label for="mtg-title">会議名</label>
     <input type="text" id="mtg-title" placeholder="例）新製品の価格をどう設定するか" oninput="renderInvite()">
@@ -332,6 +344,8 @@
       </div>
       <div style="flex:0"><button class="ghost" onclick="addAgenda()">追加</button></div>
     </div>
+    <!-- R2 議題解像度チェッカー: LLM ON時のみ JS で中身を注入（OFF時はDOMに残さない） -->
+    <div id="agenda-assist" class="hidden" style="margin-top:6px"></div>
     <div id="agenda-error" class="alert bad hidden"></div>
     <ul class="plain" id="agenda-list"></ul>
     <div id="overflow-box" class="hidden">
@@ -446,6 +460,8 @@
     <div class="row">
       <div><button class="ghost" onclick="copyReport(this)">申し送りをコピー</button></div>
     </div>
+    <!-- R4 申し送り3行要約: LLM ON時のみ JS で中身を注入（OFF時はDOMに残さない） -->
+    <div id="handoff-assist" class="hidden" style="margin-top:8px"></div>
   </div>
 
   <div class="card" id="next-connect-card">
@@ -467,10 +483,12 @@
     <p class="note">8ブロックすべてを1枚に整形しました。標準化（横展開）の共有にお使いください。</p>
     <pre class="report" id="a3-onepager-body"></pre>
     <div class="row"><div><button class="ghost" onclick="copyTextContent('a3-onepager-body', this)">A3レポートをコピー</button></div></div>
+    <!-- R5 A3・1枚コンパイラ: LLM ON時のみ JS で中身を注入（OFF時はDOMに残さない） -->
+    <div id="a3-compile-assist" class="hidden" style="margin-top:8px"></div>
   </div>
 
   <div class="card">
-    <div><button class="primary" onclick="resetFlow()">次の案件を関所にかける</button></div>
+    <div><button class="primary" onclick="resetFlow()">次の案件をルーターにかける</button></div>
   </div>
 </section>
 
@@ -478,7 +496,7 @@
 <section id="screen-a3" class="screen">
   <div class="card" id="a3-empty">
     <h2>A3案件</h2>
-    <p class="note">継続的な問題解決（トヨタ8ステップ）を1枚で俯瞰する、誰でも見に行ける一次情報源です。案件はまだありません。① 関所で「相談」を選び「A3案件として始める」から作成してください。</p>
+    <p class="note">継続的な問題解決（トヨタ8ステップ）を1枚で俯瞰する、誰でも見に行ける一次情報源です。案件はまだありません。① ルーターで「相談」を選び「A3案件として始める」から作成してください。</p>
   </div>
   <div id="a3-case-list"></div>
 
@@ -491,6 +509,8 @@
       <span id="a3-char-count"></span>
     </div>
     <div id="a3-char-warn" class="alert warn hidden">A3・1枚を超えています。判断に必要な情報だけに絞ってください</div>
+    <!-- R6 なぜなぜ深掘り(Step4のみ): LLM ON時のみ JS で中身を注入（OFF時はDOMに残さない） -->
+    <div id="step4-whys-assist" class="hidden" style="margin-top:8px"></div>
     <div class="row" style="margin-top:10px">
       <div style="flex:0"><button class="primary" id="a3-editor-save" onclick="saveStepEditor()">このStepを埋めて保存</button></div>
       <div style="flex:0"><button class="ghost" onclick="closeStepEditor()">閉じる</button></div>
@@ -556,10 +576,29 @@
         <li><b>「ごっこ」のムダ</b> 事前に練ったシナリオどおりの"シャンシャン"会議をしていませんか？ 決めようとせず、その周辺ばかりをつつくことで議論した気になっていませんか？</li>
       </ol>
     </details>
+    <!-- R7 ムダ診断（AIアシスト）: LLM ON時のみボタンを注入。OFF時はDOMに残さない。 -->
+    <div id="muda-diagnose" class="hidden" style="margin-top:14px"></div>
+  </div>
+
+  <div class="card">
+    <h2>AIアシスト設定</h2>
+    <p class="note">アシストは任意です。OFFのままでも全機能がそのまま使えます（オフラインファースト）。送信は必ずボタン操作＋送信前プレビューへの同意でのみ行われ、データはこの端末のlocalStorageにだけ残ります（ゼロリテンション）。</p>
+    <label for="llm-endpoint">エンドポイントURL</label>
+    <input type="text" id="llm-endpoint" placeholder="http://localhost:8787">
+    <label class="llm-toggle"><input type="checkbox" id="llm-enabled"><span>AIアシストを有効にする（既定: OFF）</span></label>
+    <div style="margin-top:14px">
+      <button class="primary small" onclick="saveLlmFromUI()">設定を保存</button>
+      <span id="llm-save-status" class="note" style="margin-left:8px"></span>
+    </div>
   </div>
 </section>
 
 </main>
+
+<footer style="text-align:center; padding:18px 20px 32px; color:var(--sub); font-size:12px;">
+  データはこのブラウザ内（localStorage）にのみ保存されます。
+  <a href="/privacy" style="color:var(--accent);">プライバシーとデータの扱い</a>
+</footer>
 
 <datalist id="owner-datalist"></datalist>
 
@@ -633,6 +672,136 @@ function saveMeetings(list) {
 }
 function loadActions() { return loadArray(ACTIONS_KEY); }
 function saveActions(list) { localStorage.setItem(ACTIONS_KEY, JSON.stringify(list)); }
+
+// ---------- AIアシスト（v3土台: 設定・共通クライアント・フォールバック） ----------
+// 設計原則: ①オフラインファースト（OFFでもv2全機能が完全動作）
+//           ②ゼロリテンション（設定はlocalStorageのみ）
+//           ③明示的送信（ボタン操作＋送信前プレビュー同意でのみ発火。自動送信はしない）
+const LLM_KEY = 'sekisho.llm';
+const LLM_DEFAULT_ENDPOINT = 'http://localhost:8787';
+const LLM_TIMEOUT_MS = 10000;
+const LLM_UNAVAILABLE_MSG = 'AIアシストは利用できません。手動で続行してください。';
+
+function loadLlm() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LLM_KEY) || '{}');
+    return {
+      endpoint: (typeof v.endpoint === 'string' && v.endpoint.trim()) ? v.endpoint.trim() : LLM_DEFAULT_ENDPOINT,
+      enabled: v.enabled === true
+    };
+  } catch (e) {
+    return { endpoint: LLM_DEFAULT_ENDPOINT, enabled: false };
+  }
+}
+function saveLlm(cfg) {
+  const endpoint = (cfg && typeof cfg.endpoint === 'string' && cfg.endpoint.trim()) ? cfg.endpoint.trim() : LLM_DEFAULT_ENDPOINT;
+  const enabled = !!(cfg && cfg.enabled);
+  localStorage.setItem(LLM_KEY, JSON.stringify({ endpoint, enabled }));
+  return { endpoint, enabled };
+}
+
+// 設定カードの表示・保存
+function renderLlmSettings() {
+  const cfg = loadLlm();
+  const ep = document.getElementById('llm-endpoint');
+  const en = document.getElementById('llm-enabled');
+  if (ep) ep.value = cfg.endpoint;
+  if (en) en.checked = cfg.enabled;
+}
+function saveLlmFromUI() {
+  const ep = document.getElementById('llm-endpoint');
+  const en = document.getElementById('llm-enabled');
+  const saved = saveLlm({ endpoint: ep ? ep.value : '', enabled: en ? en.checked : false });
+  if (ep) ep.value = saved.endpoint; // 空入力は既定値に正規化して反映
+  const st = document.getElementById('llm-save-status');
+  if (st) st.textContent = '保存しました（' + (saved.enabled ? 'ON' : 'OFF') + '）';
+  renderAiRouterCard(); // 保存で即座にAI仕分けカードの表示/非表示を反映
+  renderAgendaAssist(); // R2 議題添削ボタンの表示/非表示も即反映
+  renderMudaDiagnose(); // R7 ムダ診断ボタンの表示/非表示も即反映
+}
+
+function llmUrl(endpoint, kind) {
+  return String(endpoint).replace(/\/+$/, '') + '/api/v1/' + kind;
+}
+
+// 送信前プレビュー同意モーダル: 送信内容全文と送信先を表示し「送信する／やめる」
+function openLlmConsent(kind, payload, endpoint, onSend, onCancel) {
+  if (typeof mtg !== 'undefined' && mtg) mtg.modalOpen = true;
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  title.textContent = 'AIアシストに送信しますか？';
+  body.innerHTML = '';
+  const lead = document.createElement('p');
+  lead.className = 'note';
+  lead.style.margin = '0';
+  lead.textContent = '以下の内容だけを送信先へ送ります。確認して同意する場合のみ「送信する」を押してください。同意しない限り送信は行われません。';
+  const dest = document.createElement('p');
+  dest.className = 'llm-dest';
+  const destLabel = document.createElement('b');
+  destLabel.textContent = '送信先: ';
+  dest.appendChild(destLabel);
+  dest.appendChild(document.createTextNode(llmUrl(endpoint, kind)));
+  const pre = document.createElement('pre');
+  pre.className = 'llm-preview';
+  pre.textContent = JSON.stringify(payload, null, 2);
+  body.appendChild(lead);
+  body.appendChild(dest);
+  body.appendChild(pre);
+  actions.innerHTML = '';
+  const send = document.createElement('button');
+  send.className = 'primary';
+  send.id = 'llm-consent-send';
+  send.textContent = '送信する';
+  send.onclick = () => { closeModal(); onSend(); };
+  const cancel = document.createElement('button');
+  cancel.className = 'ghost';
+  cancel.id = 'llm-consent-cancel';
+  cancel.textContent = 'やめる';
+  cancel.onclick = () => { closeModal(); onCancel(); };
+  actions.appendChild(send);
+  actions.appendChild(cancel);
+  showModal();
+}
+
+// タイムアウト・HTTPエラー・ネットワーク断はすべて捕捉し null を返す
+function llmFetch(endpoint, kind, payload) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LLM_TIMEOUT_MS);
+  return fetch(llmUrl(endpoint, kind), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: ctrl.signal
+  }).then((res) => {
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return res.json().catch(() => null);
+  }).catch(() => {
+    clearTimeout(timer);
+    return null;
+  });
+}
+
+// 共通クライアント。OFF時は fetch せず null。ON時は同意モーダルを経てのみ fetch。
+// 失敗（タイムアウト/HTTPエラー/ネットワーク断/同意拒否）はすべて null で返す。
+function llmAssist(kind, payload) {
+  const cfg = loadLlm();
+  if (!cfg.enabled) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    openLlmConsent(
+      kind, payload, cfg.endpoint,
+      () => { resolve(llmFetch(cfg.endpoint, kind, payload)); },
+      () => { resolve(null); }
+    );
+  });
+}
+
+// テスト用に公開（本Issueでは各画面への呼び出しボタンは設けない）
+window.llmAssist = llmAssist;
+window.loadLlm = loadLlm;
+window.saveLlm = saveLlm;
+window.LLM_UNAVAILABLE_MSG = LLM_UNAVAILABLE_MSG;
 
 // --- series CRUD ---
 function createSeries(title, goal) {
@@ -863,10 +1032,12 @@ function showScreen(name) {
     document.getElementById('tab-' + s).classList.toggle('active', s === name);
   });
   if (name === 'a3') renderA3();
+  if (name === 'triage') renderAiRouterCard();
+  if (name === 'design') renderAgendaAssist();
 }
 function unlockTab(name, on) { document.getElementById('tab-' + name).disabled = !on; }
 
-// ---------- ① 関所（トリアージ） ----------
+// ---------- ① ルーター（トリアージ） ----------
 let triageKind = null; // 'past' | 'present' | 'future'
 
 function triage(kind) {
@@ -906,6 +1077,88 @@ function renderTemplate() {
     ta.value = `【報告】${topic}\n\n■ 結論（1行で）\n・\n\n■ 事実・経緯\n・\n\n■ 数字・実績\n・\n\n■ 所感・学び\n・\n\n※質問は本レポートへの返信でお願いします（会議は開きません）`;
   } else {
     ta.value = `【連絡】${topic}\n\n・いつ：\n・何が：\n・誰に影響：\n・お願いしたいこと：\n\n※確認したら 👍 リアクションをお願いします（返信・会議は不要です）`;
+  }
+}
+
+// --- AIオートルーター（R1 / Issue #15） ---
+// サーバの kind をアプリの3レーンへ対応づける: report=報告(過去) / chat=連絡(現在) / meeting=相談(未来)
+const AI_ROUTE_MAP = {
+  report:  { tense: 'past',    label: '報告' },
+  chat:    { tense: 'present', label: '連絡' },
+  meeting: { tense: 'future',  label: '相談' }
+};
+
+// AI仕分けカードの表示制御。LLM有効時のみ中身をDOMへ注入する。
+// OFF時は空にしてDOMから撤去し、既存の手動フロー（button.primary 等の想定）を無劣化に保つ。
+const AI_ROUTER_CARD_HTML =
+  '<h2>AIに仕分けてもらう <span class="badge meet">AIアシスト</span></h2>' +
+  '<p class="note">伝えたい内容をそのまま貼り付けて「仕分ける」を押すと、報告／連絡／相談のどれに当たるかをAIが判定し、テンプレートまで用意します。送信前に内容を確認する同意画面が出ます。判定に納得できないときは、下の3択から手動で選べます。</p>' +
+  '<label for="ai-router-input">仕分けたい自由文</label>' +
+  '<textarea id="ai-router-input" rows="4" placeholder="例）先週の展示会の結果を共有したいです。来場者は前年比120%で、名刺は80枚集まりました。"></textarea>' +
+  '<div class="row" style="margin-top:8px">' +
+    '<div><button class="primary" id="ai-router-btn" onclick="aiRoute()">仕分ける</button></div>' +
+    '<div><span id="ai-router-status" class="note"></span></div>' +
+  '</div>' +
+  '<div id="ai-router-result" class="alert ok hidden" style="margin-top:10px"></div>';
+
+function renderAiRouterCard() {
+  const card = document.getElementById('ai-router-card');
+  if (!card) return;
+  const on = loadLlm().enabled;
+  if (on) {
+    if (!document.getElementById('ai-router-btn')) card.innerHTML = AI_ROUTER_CARD_HTML;
+    card.classList.remove('hidden');
+  } else {
+    card.innerHTML = '';
+    card.classList.add('hidden');
+  }
+}
+
+// 自由文を llmAssist('route') に投げ、判定→該当時制のtriageを自動実行、formattedをテンプレへ反映。
+async function aiRoute() {
+  const inputEl = document.getElementById('ai-router-input');
+  const status = document.getElementById('ai-router-status');
+  const resultBox = document.getElementById('ai-router-result');
+  const input = (inputEl.value || '').trim();
+  resultBox.classList.add('hidden');
+  resultBox.textContent = '';
+  if (!input) { status.textContent = '仕分けたい内容を入力してください。'; return; }
+  status.textContent = '仕分け中…';
+
+  let resp = null;
+  try { resp = await llmAssist('route', { input }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（エラーを露出させない）。
+  const result = resp && resp.ok && resp.result ? resp.result : null;
+  if (!result || !AI_ROUTE_MAP[result.kind]) {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' 下の3択から手動で選んで続けられます。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+
+  const m = AI_ROUTE_MAP[result.kind];
+  resultBox.className = 'alert ok';
+  const b = document.createElement('b');
+  b.textContent = m.label;
+  resultBox.appendChild(b);
+  resultBox.appendChild(document.createTextNode(' と判定しました — ' + (result.reason || '')));
+  resultBox.classList.remove('hidden');
+
+  // 該当時制のトリアージを自動実行（既存フローを再利用）。
+  triage(m.tense);
+
+  const formatted = typeof result.formatted === 'string' ? result.formatted : '';
+  if (m.tense === 'future') {
+    // 相談（要会議）は分岐（単発／A3案件）へ誘導。案件名候補に先頭行を流し込む。
+    if (formatted) {
+      const t = document.getElementById('new-series-title');
+      if (t && !t.value.trim()) t.value = formatted.split('\n')[0].slice(0, 60);
+    }
+  } else if (formatted) {
+    // 報告／連絡は整形済み本文をテンプレエリアに反映（ユーザー編集可）。
+    document.getElementById('triage-template').value = formatted;
   }
 }
 
@@ -988,10 +1241,11 @@ function addAgenda() {
   if (isThemeForm(q)) {
     err.textContent = 'テーマではなく、終了時に決まっているべき問いを書いてください。「〜について」「〜の件」は議題になりません（例：「発売日を6月に前倒しすべきか？」）。';
     err.classList.remove('hidden');
+    appendAgendaAssistLink(err);
     return;
   }
   if (!isQuestionForm(q)) {
-    err.textContent = '議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。「〜の報告」「〜の共有」なら、この会議は不要です——関所に戻ってレポート／チャットで済ませましょう。';
+    err.textContent = '議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。「〜の報告」「〜の共有」なら、この会議は不要です——ルーターに戻ってレポート／チャットで済ませましょう。';
     err.classList.remove('hidden');
     return;
   }
@@ -1007,6 +1261,99 @@ function addAgenda() {
   renderDesign();
 }
 function removeAgenda(i) { agendas.splice(i, 1); renderDesign(); }
+
+// ---------- R2 議題解像度チェッカー（AI添削） ----------
+// 正規表現バリデーション（疑問形・テーマ型拒否）は強制のまま維持し、AIは「直し方の提案」だけを担う。
+const AGENDA_ASSIST_HTML =
+  '<button class="ghost small" id="agenda-assist-btn" onclick="aiRefineAgenda()">AIに添削してもらう</button>' +
+  '<span id="agenda-assist-status" class="note" style="margin-left:8px"></span>' +
+  '<div id="agenda-assist-result" class="alert ok hidden" style="margin-top:8px"></div>';
+
+// #15踏襲: OFF時はDOMに残さない（ボタンごと消す）。
+function renderAgendaAssist() {
+  const box = document.getElementById('agenda-assist');
+  if (!box) return;
+  if (loadLlm().enabled) {
+    if (!document.getElementById('agenda-assist-btn')) box.innerHTML = AGENDA_ASSIST_HTML;
+    box.classList.remove('hidden');
+  } else {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+}
+
+// テーマ型拒否エラー等に「AIに直してもらう」導線を足す（LLM ON時のみ）。
+function appendAgendaAssistLink(err) {
+  if (!loadLlm().enabled) return;
+  const btn = document.createElement('button');
+  btn.className = 'ghost small';
+  btn.id = 'agenda-fix-ai';
+  btn.style.marginLeft = '8px';
+  btn.textContent = 'AIに直してもらう';
+  btn.onclick = () => aiRefineAgenda();
+  err.appendChild(document.createElement('br'));
+  err.appendChild(btn);
+}
+
+// 議題＋今日決めること を refine-agenda に投げ、{question, goal, comment} を提案表示。
+async function aiRefineAgenda() {
+  const input = document.getElementById('agenda-input');
+  const goalEl = document.getElementById('agenda-goal');
+  const status = document.getElementById('agenda-assist-status');
+  const resultBox = document.getElementById('agenda-assist-result');
+  if (!resultBox) return; // OFF時はDOMが無い
+  const q = (input.value || '').trim();
+  const goal = (goalEl.value || '').trim();
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  if (!q && !goal) { status.textContent = '添削したい議題を入力してください。'; return; }
+  status.textContent = '添削中…';
+  const payloadInput = goal ? (q + '\n今日決めること: ' + goal) : q;
+
+  let resp = null;
+  try { resp = await llmAssist('refine-agenda', { input: payloadInput }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（機能劣化なし）。
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || typeof r.question !== 'string') {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' 手入力で議題を追加できます。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+  renderAgendaProposal(r);
+}
+
+function renderAgendaProposal(r) {
+  const resultBox = document.getElementById('agenda-assist-result');
+  resultBox.className = 'alert ok';
+  resultBox.innerHTML = '';
+  const qLine = document.createElement('div');
+  const qb = document.createElement('b'); qb.textContent = '問い: ';
+  qLine.appendChild(qb);
+  qLine.appendChild(document.createTextNode(r.question));
+  const gLine = document.createElement('div');
+  const gb = document.createElement('b'); gb.textContent = '今日決めること: ';
+  gLine.appendChild(gb);
+  gLine.appendChild(document.createTextNode(r.goal || ''));
+  const cLine = document.createElement('div');
+  cLine.className = 'note';
+  cLine.textContent = r.comment || '';
+  const use = document.createElement('button');
+  use.className = 'primary small';
+  use.id = 'agenda-assist-use';
+  use.style.marginTop = '8px';
+  use.textContent = 'この案を使う';
+  use.onclick = () => {
+    document.getElementById('agenda-input').value = r.question;
+    if (r.goal) document.getElementById('agenda-goal').value = r.goal;
+    resultBox.classList.add('hidden');
+    document.getElementById('agenda-error').classList.add('hidden');
+  };
+  resultBox.append(qLine, gLine, cLine, use);
+  resultBox.classList.remove('hidden');
+}
 
 function addMember() {
   const nameEl = document.getElementById('member-name');
@@ -1736,8 +2083,105 @@ function renderCockpitAgendas() {
 // --- アクション行の追加（「何を」曖昧語はハードブロック / Owner・Due 必須） ---
 function showActErr(msg) {
   const err = document.getElementById('action-error');
-  err.textContent = msg;
+  err.textContent = msg; // textContent 再設定で前回の「AI具体化」ボタンも消える
   err.classList.remove('hidden');
+  const panel = document.getElementById('act-concretize-panel');
+  if (panel) panel.classList.add('hidden'); // 別エラー時は古い具体化候補を隠す
+}
+
+// ---------- R3 曖昧アクション具体化（AI） ----------
+// 曖昧語ハードブロックは強制のまま。AIは「具体化案」だけを提案する（LLM ON時のみ導線）。
+function appendConcretizeButton() {
+  if (!loadLlm().enabled) return; // #15踏襲: OFF時はボタンをDOMに残さない
+  const err = document.getElementById('action-error');
+  const btn = document.createElement('button');
+  btn.className = 'ghost small';
+  btn.id = 'act-concretize-btn';
+  btn.style.marginLeft = '8px';
+  btn.textContent = 'AIに具体化案を出してもらう';
+  btn.onclick = () => aiConcretizeAction();
+  err.appendChild(document.createElement('br'));
+  err.appendChild(btn);
+}
+
+function ensureConcretizePanel() {
+  let panel = document.getElementById('act-concretize-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'act-concretize-panel';
+    panel.className = 'alert ok hidden';
+    panel.style.marginTop = '8px';
+    const err = document.getElementById('action-error');
+    err.parentNode.insertBefore(panel, err.nextSibling);
+  }
+  return panel;
+}
+
+async function aiConcretizeAction() {
+  const whatEl = document.getElementById('act-what');
+  const input = (whatEl.value || '').trim();
+  if (!input) return;
+  const a = (mtg && mtg.agendas) ? mtg.agendas[mtg.current] : null;
+  const context = {
+    participants: (mtg && mtg.members) ? mtg.members.map(m => m.name) : [],
+    agenda: a ? a.q : ''
+  };
+  const panel = ensureConcretizePanel();
+  panel.className = 'alert ok';
+  panel.textContent = '具体化中…';
+  panel.classList.remove('hidden');
+
+  let resp = null;
+  try { resp = await llmAssist('concretize-action', { input, context }); } catch (e) { resp = null; }
+
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || !Array.isArray(r.candidates) || !r.candidates.length) {
+    panel.className = 'alert bad';
+    panel.textContent = LLM_UNAVAILABLE_MSG + ' 手入力で具体化してください。';
+    panel.classList.remove('hidden');
+    return;
+  }
+  renderConcretizeCandidates(r.candidates.slice(0, 3));
+}
+
+function renderConcretizeCandidates(candidates) {
+  const panel = ensureConcretizePanel();
+  panel.className = 'alert ok';
+  panel.innerHTML = '';
+  const title = document.createElement('div');
+  const tb = document.createElement('b'); tb.textContent = '具体化案';
+  title.appendChild(tb);
+  title.appendChild(document.createTextNode('（選ぶとアクション行にプリフィルします）'));
+  panel.appendChild(title);
+  const ul = document.createElement('ul');
+  ul.className = 'plain';
+  ul.id = 'act-concretize-list';
+  candidates.forEach((c) => {
+    const li = document.createElement('li');
+    li.style.margin = '6px 0';
+    const txt = document.createElement('span');
+    txt.className = 'grow';
+    txt.textContent = c.what + '（担当: ' + c.ownerHint + ' / 期限: ' + c.dueHint + '）';
+    const use = document.createElement('button');
+    use.className = 'ghost small act-concretize-use';
+    use.style.marginLeft = '8px';
+    use.textContent = 'この案を使う';
+    use.onclick = () => applyConcretizeCandidate(c);
+    li.append(txt, use);
+    ul.appendChild(li);
+  });
+  panel.appendChild(ul);
+  panel.classList.remove('hidden');
+}
+
+function applyConcretizeCandidate(c) {
+  const whatEl = document.getElementById('act-what');
+  const ownerEl = document.getElementById('act-owner');
+  if (whatEl) whatEl.value = c.what || '';
+  if (ownerEl && c.ownerHint) ownerEl.value = c.ownerHint;
+  const panel = document.getElementById('act-concretize-panel');
+  if (panel) panel.classList.add('hidden');
+  document.getElementById('action-error').classList.add('hidden');
 }
 function addCockpitAction() {
   const a = mtg.agendas[mtg.current];
@@ -1751,6 +2195,7 @@ function addCockpitAction() {
   if (!what) { showActErr('「何を（アクション）」を入力してください。'); return; }
   if (isVague(what)) {
     showActErr('「' + what + '」は曖昧で、これでは誰も動けません。誰が・いつまでに・何を、を具体的に。' + VAGUE_EXAMPLE);
+    appendConcretizeButton();
     return;
   }
   if (!owner) { showActErr('「誰が（Owner）」は必須です。担当者名を入れてください。'); return; }
@@ -2046,6 +2491,75 @@ function buildReport(elapsedSec, actualCost, saved) {
     rec.textContent = '送付先（会議に呼ばなかった人）: ' + mtg.recipients.map(r => r.name).join('、');
     sum.appendChild(rec);
   }
+  renderHandoffAssist(); // R4: LLM ON時のみ「AIで3行要約」ボタンを注入
+}
+
+// ---------- R4 申し送り3行要約（AIアシスト） ----------
+// #15踏襲: OFF時はボタンごとDOMに残さない。要約は既存の申し送り生成を一切変えず、追加提案のみ担う。
+const HANDOFF_ASSIST_HTML =
+  '<button class="ghost small" id="handoff-summary-btn" onclick="aiSummarizeHandoff()">AIで3行要約</button>' +
+  '<span id="handoff-summary-status" class="note" style="margin-left:8px"></span>' +
+  '<div id="handoff-summary-result" class="alert ok hidden" style="margin-top:8px"></div>';
+
+function renderHandoffAssist() {
+  const box = document.getElementById('handoff-assist');
+  if (!box) return;
+  if (loadLlm().enabled) {
+    if (!document.getElementById('handoff-summary-btn')) box.innerHTML = HANDOFF_ASSIST_HTML;
+    box.classList.remove('hidden');
+  } else {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+}
+
+// 申し送り全文を summarize-handoff に投げ、{summary}（3行以内）をチャット貼り付け用に表示・コピー可に。
+async function aiSummarizeHandoff() {
+  const status = document.getElementById('handoff-summary-status');
+  const resultBox = document.getElementById('handoff-summary-result');
+  if (!resultBox) return; // OFF時はDOMが無い
+  const input = (document.getElementById('report-body').textContent || '').trim();
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  if (!input) { status.textContent = '要約する申し送りがありません。'; return; }
+  status.textContent = '要約中…';
+
+  let resp = null;
+  try { resp = await llmAssist('summarize-handoff', { input }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（機能劣化なし＝手動コピーで続行）。
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || typeof r.summary !== 'string') {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' 申し送り全文を手動でコピーしてください。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+  renderHandoffSummary(r.summary);
+}
+
+function renderHandoffSummary(summary) {
+  const resultBox = document.getElementById('handoff-summary-result');
+  resultBox.className = 'alert ok';
+  resultBox.innerHTML = '';
+  const title = document.createElement('div');
+  const tb = document.createElement('b'); tb.textContent = '3行要約';
+  title.appendChild(tb);
+  title.appendChild(document.createTextNode('（チャット貼り付け用にコピーできます）'));
+  const pre = document.createElement('pre');
+  pre.className = 'report';
+  pre.id = 'handoff-summary-body';
+  pre.style.marginTop = '6px';
+  pre.textContent = summary;
+  const copy = document.createElement('button');
+  copy.className = 'ghost small';
+  copy.id = 'handoff-summary-copy';
+  copy.style.marginTop = '6px';
+  copy.textContent = '要約をコピー';
+  copy.onclick = () => copyTextContent('handoff-summary-body', copy);
+  resultBox.append(title, pre, copy);
+  resultBox.classList.remove('hidden');
 }
 
 // --- 次回への接続UI ---
@@ -2129,6 +2643,81 @@ function buildA3OnePager(sid) {
   }
   document.getElementById('a3-onepager-body').textContent = L.join('\n').trim();
   document.getElementById('a3-onepager-card').classList.remove('hidden');
+  renderA3CompileAssist(); // R5: LLM ON時のみ「AIで1枚に圧縮」ボタンを注入
+}
+
+// ---------- R5 A3・1枚コンパイラ（AIアシスト） ----------
+// #15踏襲: OFF時はボタンごとDOMに残さない。既存のルールベース生成(v2)はそのまま残し、AI版は代替案として並記。
+const A3_COMPILE_ASSIST_HTML =
+  '<button class="ghost small" id="a3-compile-btn" onclick="aiCompileA3()">AIで1枚に圧縮</button>' +
+  '<span id="a3-compile-status" class="note" style="margin-left:8px"></span>' +
+  '<div id="a3-compile-result" class="alert ok hidden" style="margin-top:8px"></div>';
+
+function renderA3CompileAssist() {
+  const box = document.getElementById('a3-compile-assist');
+  if (!box) return;
+  if (loadLlm().enabled) {
+    if (!document.getElementById('a3-compile-btn')) box.innerHTML = A3_COMPILE_ASSIST_HTML;
+    box.classList.remove('hidden');
+  } else {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+}
+
+// 8ブロック全文を compile-a3 に投げ、{a3}（1,500字以内に圧縮）を代替案として表示・コピー可＋文字数表示。
+async function aiCompileA3() {
+  const status = document.getElementById('a3-compile-status');
+  const resultBox = document.getElementById('a3-compile-result');
+  if (!resultBox) return; // OFF時はDOMが無い
+  const input = (document.getElementById('a3-onepager-body').textContent || '').trim();
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  if (!input) { status.textContent = '圧縮するA3・1枚がありません。'; return; }
+  status.textContent = '圧縮中…';
+
+  let resp = null;
+  try { resp = await llmAssist('compile-a3', { input }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（既存のルールベース生成が残るので機能劣化なし）。
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || typeof r.a3 !== 'string') {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' 上のルールベースのA3・1枚をそのままお使いください。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+  renderA3Compiled(r.a3);
+}
+
+function renderA3Compiled(a3) {
+  const resultBox = document.getElementById('a3-compile-result');
+  resultBox.className = 'alert ok';
+  resultBox.innerHTML = '';
+  const title = document.createElement('div');
+  const tb = document.createElement('b'); tb.textContent = 'AI圧縮版（代替案）';
+  title.appendChild(tb);
+  title.appendChild(document.createTextNode('（ルールベース版はそのまま残ります）'));
+  const pre = document.createElement('pre');
+  pre.className = 'report';
+  pre.id = 'a3-compile-body';
+  pre.style.marginTop = '6px';
+  pre.textContent = a3;
+  // A3・1枚メーター連動: 圧縮後の文字数を表示
+  const count = document.createElement('div');
+  count.className = 'note';
+  count.id = 'a3-compile-count';
+  const over = a3.length > A3_CHAR_LIMIT;
+  count.innerHTML = '文字数 <b>' + a3.length + '</b> / 目安 ' + A3_CHAR_LIMIT + '字' + (over ? '（超過）' : '');
+  const copy = document.createElement('button');
+  copy.className = 'ghost small';
+  copy.id = 'a3-compile-copy';
+  copy.style.marginTop = '6px';
+  copy.textContent = 'AI圧縮版をコピー';
+  copy.onclick = () => copyTextContent('a3-compile-body', copy);
+  resultBox.append(title, pre, count, copy);
+  resultBox.classList.remove('hidden');
 }
 
 // 次回会議設計へ遷移し、series.nextDraft から議題をプリフィル（seqは+1）
@@ -2220,7 +2809,7 @@ function resetFlow() {
   showScreen('triage');
 }
 
-// ---------- ① 関所の分岐: 単発 or A3案件 ----------
+// ---------- ① ルーターの分岐: 単発 or A3案件 ----------
 function startSingleConsult() {
   document.getElementById('triage-future-branch').classList.add('hidden');
   unlockTab('design', true);
@@ -2300,7 +2889,7 @@ function goToEscalationDesign(seriesId) {
   renderDesign();
 }
 
-// マンネリ検知 → 会議を開かずに回避コストを記録する導線（関所の記録セクションへ）
+// マンネリ検知 → 会議を開かずに回避コストを記録する導線（ルーターの記録セクションへ）
 function goToAvoidRecord() {
   showScreen('triage');
   triage('past'); // 報告レーンを開くと回避コスト記録セクションが表示される
@@ -2560,7 +3149,93 @@ function openStepEditor(seriesId, stepNo, mode) {
   document.getElementById('a3-editor-body').value = existing || stepTemplate(stepNo, mode);
   editor.classList.remove('hidden');
   updateA3CharMeter();
+  renderStep4WhysAssist(); // R6: Step4(要因解析)レポート時のみ「なぜ？を深掘り」ボタンを注入
   editor.scrollIntoView({ behavior: 'smooth' });
+}
+
+// ---------- R6 なぜなぜ深掘り（Step4 AIアシスト） ----------
+// #15踏襲: OFF時・Step4以外・チャットモード時はボタンごとDOMに残さない。テンプレ記入は既存のまま、追記候補のみ担う。
+const STEP4_WHYS_ASSIST_HTML =
+  '<button class="ghost small" id="step4-whys-btn" onclick="aiFiveWhys()">AIに「なぜ？」を深掘りしてもらう</button>' +
+  '<span id="step4-whys-status" class="note" style="margin-left:8px"></span>' +
+  '<div id="step4-whys-result" class="alert ok hidden" style="margin-top:8px"></div>';
+
+function renderStep4WhysAssist() {
+  const box = document.getElementById('step4-whys-assist');
+  if (!box) return;
+  const show = loadLlm().enabled && a3Editing && a3Editing.stepNo === 4 && a3Editing.mode !== 'chat';
+  if (show) {
+    if (!document.getElementById('step4-whys-btn')) box.innerHTML = STEP4_WHYS_ASSIST_HTML;
+    box.classList.remove('hidden');
+  } else {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+}
+
+// 現在の記入内容を five-whys に投げ、{whys:[...]} を候補として表示。クリックでテンプレ末尾へ追記（編集可）。
+async function aiFiveWhys() {
+  const status = document.getElementById('step4-whys-status');
+  const resultBox = document.getElementById('step4-whys-result');
+  if (!resultBox) return; // 非表示時はDOMが無い
+  const input = (document.getElementById('a3-editor-body').value || '').trim();
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  if (!input) { status.textContent = '深掘りしたい事象を記入してください。'; return; }
+  status.textContent = '深掘り中…';
+
+  let resp = null;
+  try { resp = await llmAssist('five-whys', { input }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（手動記入で続行＝機能劣化なし）。
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || !Array.isArray(r.whys) || !r.whys.length) {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' テンプレに手動で「なぜ」を記入してください。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+  renderFiveWhysCandidates(r.whys);
+}
+
+function renderFiveWhysCandidates(whys) {
+  const resultBox = document.getElementById('step4-whys-result');
+  resultBox.className = 'alert ok';
+  resultBox.innerHTML = '';
+  const title = document.createElement('div');
+  const tb = document.createElement('b'); tb.textContent = '「なぜ？」候補';
+  title.appendChild(tb);
+  title.appendChild(document.createTextNode('（クリックでテンプレ末尾に追記。追記後も自由に編集できます）'));
+  resultBox.appendChild(title);
+  const ul = document.createElement('ul');
+  ul.className = 'plain';
+  ul.id = 'step4-whys-list';
+  whys.forEach((w) => {
+    const li = document.createElement('li');
+    li.style.margin = '6px 0';
+    const txt = document.createElement('span');
+    txt.className = 'grow';
+    txt.textContent = w;
+    const use = document.createElement('button');
+    use.className = 'ghost small step4-whys-use';
+    use.style.marginLeft = '8px';
+    use.textContent = 'テンプレに追記';
+    use.onclick = () => appendWhyToTemplate(w);
+    li.append(txt, use);
+    ul.appendChild(li);
+  });
+  resultBox.appendChild(ul);
+  resultBox.classList.remove('hidden');
+}
+
+function appendWhyToTemplate(w) {
+  const body = document.getElementById('a3-editor-body');
+  if (!body) return;
+  const cur = body.value.replace(/\s+$/, '');
+  body.value = cur + '\n' + w;
+  updateA3CharMeter();
+  body.focus();
 }
 function closeStepEditor() {
   a3Editing = null;
@@ -2630,7 +3305,93 @@ function renderDashMetrics() {
   document.getElementById('dash-stagnant-actions').textContent = fmtCount(dm.stagnantActionCount);
   document.getElementById('dash-mannerism-series').textContent = fmtCount(dm.mannerismSeriesCount);
   document.getElementById('dash-dissent-zero-rate').textContent = fmtPct(dm.dissentZeroMeetingRate);
+  renderMudaDiagnose(); // R7: LLM ON時のみ「AIにムダ診断してもらう」ボタンを注入
 }
+
+// ---------- R7 ムダ診断（ダッシュボードAIアシスト） ----------
+// #15踏襲: OFF時はボタンごとDOMに残さない。既存の数値表示はそのまま、AIは「診断コメント」だけを担う。
+const MUDA_DIAGNOSE_HTML =
+  '<button class="ghost small" id="muda-diagnose-btn" onclick="aiDiagnoseMuda()">AIにムダ診断してもらう</button>' +
+  '<span id="muda-diagnose-status" class="note" style="margin-left:8px"></span>' +
+  '<div id="muda-diagnose-result" class="alert ok hidden" style="margin-top:8px"></div>';
+
+function renderMudaDiagnose() {
+  const box = document.getElementById('muda-diagnose');
+  if (!box) return;
+  if (loadLlm().enabled) {
+    if (!document.getElementById('muda-diagnose-btn')) box.innerHTML = MUDA_DIAGNOSE_HTML;
+    box.classList.remove('hidden');
+  } else {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+}
+
+// 速さの指標＋ムダ検知の現在値をテキスト化して diagnose に渡す入力を作る。
+function buildDiagnoseInput() {
+  const dm = dashMetrics();
+  const lines = [
+    '# 速さの指標',
+    'アクション完了率: ' + fmtPct(dm.actionCompletionRate),
+    '期限内完了率: ' + fmtPct(dm.onTimeCompletionRate),
+    '議題の持ち越し率: ' + fmtPct(dm.carriedAgendaRate),
+    '会議の延長率: ' + fmtPct(dm.extensionRate),
+    '30分以内終了率: ' + fmtPct(dm.within30MinRate),
+    '決着したA3案件数: ' + fmtCount(dm.closedSeriesCount),
+    '案件リードタイム: ' + fmtLeadDays(dm.avgLeadTimeDays),
+    '期限超過アクション件数: ' + fmtCount(dm.overdueOpenCount),
+    '持ち越し原因トップ: ' + fmtTopCause(dm.topCarryCause),
+    '# ムダ検知',
+    '決定ゼロ会議数: ' + fmtCount(dm.decisionZeroMeetingCount),
+    'A3・1枚超過レポート数: ' + fmtCount(dm.overLengthReportCount),
+    '停滞アクション: ' + fmtCount(dm.stagnantActionCount),
+    'マンネリ疑い案件数: ' + fmtCount(dm.mannerismSeriesCount),
+    '異論ゼロ会議率: ' + fmtPct(dm.dissentZeroMeetingRate)
+  ];
+  return lines.join('\n');
+}
+
+// 現在の指標を diagnose に投げ、{advice} を1段落で表示。
+async function aiDiagnoseMuda() {
+  const status = document.getElementById('muda-diagnose-status');
+  const resultBox = document.getElementById('muda-diagnose-result');
+  if (!resultBox) return; // OFF時はDOMが無い
+  const input = buildDiagnoseInput();
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  status.textContent = '診断中…';
+
+  let resp = null;
+  try { resp = await llmAssist('diagnose', { input }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（数値表示は残るので機能劣化なし）。
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || typeof r.advice !== 'string' || !r.advice.trim()) {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' 上の指標を手がかりに、続ける理由を問い直してください。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+  renderMudaAdvice(r.advice);
+}
+
+function renderMudaAdvice(advice) {
+  const resultBox = document.getElementById('muda-diagnose-result');
+  resultBox.className = 'alert ok';
+  resultBox.innerHTML = '';
+  const title = document.createElement('div');
+  const tb = document.createElement('b'); tb.textContent = 'AIムダ診断';
+  title.appendChild(tb);
+  title.appendChild(document.createTextNode('（現在の指標にもとづく改善提案です）'));
+  const p = document.createElement('p');
+  p.id = 'muda-diagnose-advice';
+  p.style.margin = '6px 0 0';
+  p.textContent = advice;
+  resultBox.append(title, p);
+  resultBox.classList.remove('hidden');
+}
+
 function resetStats() {
   if (!confirm('累計統計をリセットしますか？')) return;
   stats = { totalSaved:0, avoidedCount:0, avoidedCost:0, heldCount:0, shortenCost:0, savedMin:0, spared:0, decisions:0 };
@@ -2644,6 +3405,9 @@ renderSeriesOptions();
 renderDesign();
 renderDash();
 renderA3();
+renderLlmSettings();
+renderAiRouterCard();
+renderAgendaAssist();
 </script>
 </body>
 </html>
