@@ -256,6 +256,10 @@
   .a3-nav .lead { margin: 0 0 6px; }
   .a3-hist li { justify-content: flex-start; gap: 8px; }
   .a3-hist .seq { font-weight: 700; }
+  .a3-dec-list { margin: 6px 0 0; }
+  .a3-dec-item { display: block; padding: 8px 0; border-top: 1px dashed var(--line); }
+  .a3-dec-item:first-child { border-top: 0; }
+  .notify-list { margin: 4px 0 6px; font-size: 13px; }
   .a3-overdue { color: var(--bad); font-weight: 700; }
   .basic-flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
   .basic-flow .flow-step { background: var(--gold-soft); color: var(--gold); border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
@@ -803,6 +807,13 @@ const STEP_STATUSES = ['todo', 'draft', 'review', 'ready', 'done', 'reinvestigat
 // 衝突しにくい簡易ID
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// HTML特殊文字のエスケープ（innerHTMLに動的文字列を差し込む箇所で使用）
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function loadArray(key) {
@@ -1361,7 +1372,7 @@ function startAction(id, atMs) {
 function addDecision(fields) {
   const d = Object.assign({
     id: genId(), seriesId: null, stepNo: null, meetingId: null,
-    text: '', basis: '', rejectedOptions: [], dissent: '', notifyTo: [], decidedAt: Date.now()
+    text: '', basis: '', rejectedOptions: [], dissent: '', notifyTo: [], decidedBy: '', decidedAt: Date.now()
   }, fields || {});
   if (!Array.isArray(d.rejectedOptions)) d.rejectedOptions = [];
   if (!Array.isArray(d.notifyTo)) d.notifyTo = [];
@@ -1898,8 +1909,10 @@ const A3_STEPS = {
 // 各Stepの推奨手段（報連相ナビが案内し続ける）: meeting=🤝会議 / report=📄レポート / chat=💬チャット
 // v4-5: 手段は固定ではなく「推奨」。どのStepにもレポート・チャット・会議・Actionを追加できる。
 const STEP_MEANS = { 1: 'meeting', 2: 'report', 3: 'meeting', 4: 'report', 5: 'meeting', 6: 'chat', 7: 'report', 8: 'meeting' };
-const MEANS_BADGE = { report: '📄', chat: '💬', meeting: '🤝', action: '✅' };
-const MEANS_LABEL = { report: 'レポート', chat: 'チャット', meeting: '会議', action: 'アクション' };
+const MEANS_BADGE = { report: '📄', chat: '💬', meeting: '🤝', action: '✅', decision: '✍️' };
+const MEANS_LABEL = { report: 'レポート', chat: 'チャット', meeting: '会議', action: 'アクション', decision: '会議外決定' };
+// 判断Step（会議で意思決定する想定のStep）。会議なしDecision登録を特に促す。
+const DECISION_STEPS = [1, 3, 5, 8];
 // Step状態7値の表示ラベル（doing は v2 互換のため残置）。
 const STATUS_LABEL = {
   todo: '未着手', draft: '下書き', review: 'レビュー待ち', ready: '判断可能',
@@ -2834,6 +2847,59 @@ function renderCockpitAgendas() {
       dissent.value = a.dissent || '';
       div.appendChild(dissent);
 
+      // 判断根拠（なぜこれにしたか）（任意）
+      const bLabel = document.createElement('label');
+      bLabel.textContent = '判断根拠（なぜこれにしたか）（任意）';
+      div.appendChild(bLabel);
+      const basis = document.createElement('textarea');
+      basis.id = 'basis-input';
+      basis.rows = 2;
+      basis.placeholder = 'この決定に至った理由・決め手（後から「なぜこう決めたか」を辿れるように）';
+      basis.value = a.basis || '';
+      div.appendChild(basis);
+
+      // 採用しなかった案（比較した選択肢）（任意・1行1件）
+      const rLabel = document.createElement('label');
+      rLabel.textContent = '採用しなかった案（比較した選択肢）（任意・1行1件）';
+      div.appendChild(rLabel);
+      const rejected = document.createElement('textarea');
+      rejected.id = 'rejected-input';
+      rejected.rows = 2;
+      rejected.placeholder = '検討したが採らなかった案（例：9月発売案\n段階的リリース案）';
+      rejected.value = (Array.isArray(a.rejectedOptions) ? a.rejectedOptions.join('\n') : '');
+      div.appendChild(rejected);
+
+      // 通知対象（誰に知らせるか）（任意・送付先から選択＋自由追加）
+      const nLabel = document.createElement('label');
+      nLabel.textContent = '通知対象（誰に知らせるか）（任意）';
+      div.appendChild(nLabel);
+      const notifyBox = document.createElement('div');
+      notifyBox.id = 'notify-box';
+      notifyBox.className = 'notify-list';
+      const notifyCands = (mtg.recipients || []).map(r => r.name);
+      if (notifyCands.length) {
+        notifyCands.forEach(name => {
+          const lb = document.createElement('label');
+          lb.style.marginRight = '10px';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.value = name; cb.className = 'notify-cb';
+          lb.appendChild(cb);
+          lb.appendChild(document.createTextNode(' ' + name));
+          notifyBox.appendChild(lb);
+        });
+      } else {
+        const none = document.createElement('span');
+        none.className = 'note';
+        none.textContent = '送付先リストは未登録です。下の欄に自由に追加できます。';
+        notifyBox.appendChild(none);
+      }
+      div.appendChild(notifyBox);
+      const notifyFree = document.createElement('input');
+      notifyFree.type = 'text';
+      notifyFree.id = 'notify-free';
+      notifyFree.placeholder = 'その他の通知対象（カンマ区切りで追加）';
+      div.appendChild(notifyFree);
+
       // アクション行（何を／誰が／いつまでに）
       const aLabel = document.createElement('label');
       aLabel.textContent = 'アクション（何を・誰が・いつまでに）';
@@ -3040,6 +3106,18 @@ function closeAgenda() {
   const a = mtg.agendas[mtg.current];
   a.decision = decision;
   a.dissent = (document.getElementById('dissent-input').value || '').trim();
+  // 判断根拠・採用しなかった案・通知対象（任意）
+  const basisEl = document.getElementById('basis-input');
+  a.basis = basisEl ? (basisEl.value || '').trim() : '';
+  const rejEl = document.getElementById('rejected-input');
+  const rejRaw = rejEl ? (rejEl.value || '').trim() : '';
+  a.rejectedOptions = rejRaw ? rejRaw.split('\n').map(x => x.trim()).filter(Boolean) : [];
+  const notify = [];
+  document.querySelectorAll('.notify-cb:checked').forEach(cb => notify.push(cb.value));
+  const notifyFreeEl = document.getElementById('notify-free');
+  const notifyFree = notifyFreeEl ? (notifyFreeEl.value || '').trim() : '';
+  if (notifyFree) notifyFree.split(/[,、]/).map(x => x.trim()).filter(Boolean).forEach(n => { if (notify.indexOf(n) < 0) notify.push(n); });
+  a.notifyTo = notify;
   a.spentSec = (Date.now() - mtg.agendaStartMs) / 1000;
   // アクションを sekisho.actions に owner/due つきで保存
   a.actions.forEach(act => addAction({
@@ -3128,6 +3206,9 @@ function persistMeeting() {
     agendas: mtg.agendas.map(a => ({
       q: a.q, min: a.min, goal: a.goal,
       decision: a.decision, dissent: a.dissent,
+      basis: a.basis || '',
+      rejectedOptions: Array.isArray(a.rejectedOptions) ? a.rejectedOptions.slice() : [],
+      notifyTo: Array.isArray(a.notifyTo) ? a.notifyTo.slice() : [],
       carried: a.carried, carryCauses: a.carryCauses
     }))
   };
@@ -3146,6 +3227,9 @@ function recordDecisionsFromMeeting() {
       stepNo: (mtg.stepNo != null ? mtg.stepNo : null),
       meetingId: mtg.id,
       text: a.decision,
+      basis: a.basis || '',
+      rejectedOptions: Array.isArray(a.rejectedOptions) ? a.rejectedOptions.slice() : [],
+      notifyTo: Array.isArray(a.notifyTo) ? a.notifyTo.slice() : [],
       dissent: a.dissent || '',
       decidedAt: (mtg.endMs != null ? mtg.endMs : Date.now())
     });
@@ -3236,6 +3320,9 @@ function buildReport(elapsedSec, actualCost, saved) {
     decided.forEach((a, i) => {
       lines.push(`${i + 1}. ${a.q}`);
       lines.push(`   → ${a.decision}`);
+      if (a.basis) lines.push(`   💡 判断根拠: ${a.basis}`);
+      if (Array.isArray(a.rejectedOptions) && a.rejectedOptions.length) lines.push(`   ✗ 採用しなかった案: ${a.rejectedOptions.join(' / ')}`);
+      if (Array.isArray(a.notifyTo) && a.notifyTo.length) lines.push(`   📣 通知対象: ${a.notifyTo.join('、')}`);
       if (a.dissent) lines.push(`   ⚠ 出た異論・懸念: ${a.dissent}`);
     });
   } else {
@@ -3915,6 +4002,9 @@ function buildCaseCard(s, meetings, actions, todayStr) {
   }
   card.appendChild(hul);
 
+  // 決定履歴（会議内外のDecisionを時系列で一覧。会議で決定／会議外で決定をバッジで区別）
+  card.appendChild(buildDecisionHistory(s));
+
   // 未完了アクション（期限超過は赤・ここで消し込み可）
   const open = actions.filter(a => a.seriesId === s.id && a.status === 'open');
   const h3a = document.createElement('h3');
@@ -3961,6 +4051,89 @@ function buildStepsDetail(s, meetings, actions) {
   for (let i = 1; i <= 8; i++) {
     wrap.appendChild(buildStepDetail(s, i, meetings, actions));
   }
+  return wrap;
+}
+
+// ---------- 決定履歴（案件単位・会議内外を時系列で一覧） ----------
+function buildDecisionHistory(s) {
+  const decs = loadDecisions()
+    .filter(d => d.seriesId === s.id)
+    .slice()
+    .sort((a, b) => (a.decidedAt || 0) - (b.decidedAt || 0));
+  const wrap = document.createElement('div');
+  wrap.className = 'a3-decisions';
+  wrap.id = 'a3-decisions-' + s.id;
+  const h3 = document.createElement('h3');
+  h3.textContent = '決定履歴（' + decs.length + '件）';
+  wrap.appendChild(h3);
+  const ul = document.createElement('ul');
+  ul.className = 'plain a3-dec-list';
+  if (decs.length === 0) {
+    const li = document.createElement('li');
+    li.style.color = 'var(--sub)';
+    li.textContent = '（まだ決定はありません）';
+    ul.appendChild(li);
+  } else {
+    decs.forEach(d => {
+      const li = document.createElement('li');
+      li.className = 'a3-dec-item';
+      li.dataset.decisionId = d.id;
+      const badge = document.createElement('span');
+      const viaMeeting = d.meetingId != null;
+      badge.className = 'badge ' + (viaMeeting ? 'meet' : 'report') + ' a3-dec-badge';
+      badge.dataset.via = viaMeeting ? 'meeting' : 'nonmeeting';
+      badge.textContent = viaMeeting ? '🤝 会議で決定' : '✍️ 会議外で決定';
+      li.appendChild(badge);
+      const when = document.createElement('span');
+      when.style.color = 'var(--sub)';
+      when.style.marginLeft = '6px';
+      when.textContent = d.decidedAt ? new Date(d.decidedAt).toLocaleDateString('ja-JP') : '';
+      li.appendChild(when);
+      if (d.stepNo) {
+        const stp = document.createElement('span');
+        stp.className = 'note';
+        stp.style.marginLeft = '6px';
+        stp.textContent = 'Step' + d.stepNo + ' ' + (A3_STEPS[d.stepNo] || '');
+        li.appendChild(stp);
+      }
+      const txt = document.createElement('div');
+      txt.style.marginTop = '2px';
+      txt.textContent = '決定: ' + (d.text || '');
+      li.appendChild(txt);
+      if (d.decidedBy) {
+        const by = document.createElement('div');
+        by.className = 'note';
+        by.textContent = '決定者: ' + d.decidedBy;
+        li.appendChild(by);
+      }
+      if (d.basis) {
+        const b = document.createElement('div');
+        b.className = 'note';
+        b.textContent = '💡 判断根拠: ' + d.basis;
+        li.appendChild(b);
+      }
+      if (Array.isArray(d.rejectedOptions) && d.rejectedOptions.length) {
+        const r = document.createElement('div');
+        r.className = 'note';
+        r.textContent = '✗ 採用しなかった案: ' + d.rejectedOptions.join(' / ');
+        li.appendChild(r);
+      }
+      if (Array.isArray(d.notifyTo) && d.notifyTo.length) {
+        const n = document.createElement('div');
+        n.className = 'note';
+        n.textContent = '📣 通知対象: ' + d.notifyTo.join('、');
+        li.appendChild(n);
+      }
+      if (d.dissent) {
+        const di = document.createElement('div');
+        di.className = 'note';
+        di.textContent = '⚠ 出た異論・懸念: ' + d.dissent;
+        li.appendChild(di);
+      }
+      ul.appendChild(li);
+    });
+  }
+  wrap.appendChild(ul);
   return wrap;
 }
 
@@ -4053,6 +4226,9 @@ function buildStepDetail(s, i, meetings, actions) {
       } else if (a.type === 'meeting' && a.refId) {
         const m = meetings.find(x => x.id === a.refId);
         if (m) detail.textContent = '：' + (m.title || (m.seq ? '第' + m.seq + '回' : '会議'));
+      } else if (a.type === 'decision' && a.refId) {
+        const dec = loadDecisions().find(x => x.id === a.refId);
+        if (dec) detail.textContent = '：' + dec.text;
       }
       const dt = document.createElement('span');
       dt.style.color = 'var(--sub)';
@@ -4078,6 +4254,9 @@ function buildStepDetail(s, i, meetings, actions) {
   add.appendChild(mkAdd('💬 チャット追加', 'a3-add-chat', () => openStepEditor(s.id, i, 'chat')));
   add.appendChild(mkAdd('🤝 会議を設計', 'a3-add-meeting', () => goToStepDesign(s.id, i)));
   add.appendChild(mkAdd('✅ Action追加', 'a3-add-action', () => addStepActionUI(s.id, i)));
+  // 会議を経由しないDecision登録（メール・立ち話・上位判断など）。判断Stepでは特に推奨。
+  const decBtnLabel = (DECISION_STEPS.indexOf(i) >= 0) ? '✍️ 会議なしで決定を記録（推奨）' : '✍️ 会議なしで決定を記録';
+  add.appendChild(mkAdd(decBtnLabel, 'a3-add-decision', () => openDecisionForm(s.id, i)));
   box.appendChild(add);
 
   // 変更履歴（折りたたみ: いつ・どの状態から・なぜ）
@@ -4359,6 +4538,78 @@ function addStepActionUI(sid, stepNo) {
   const dueRaw = (window.prompt('期限（YYYY-MM-DD、任意）:', '') || '').trim();
   const a = addAction({ seriesId: sid, what: what.trim(), owner, due: dueRaw || null, stepNo });
   addStepArtifact(sid, stepNo, 'action', a.id);
+  renderA3();
+}
+
+// 会議を経由しないDecisionをフォームで登録（メール・立ち話・上位判断など）。
+// meetingId なしの Decision として保存し、Stepに artifacts(type:'decision') で紐づける。
+function openDecisionForm(seriesId, stepNo) {
+  const s = getSeries(seriesId);
+  if (!s) return;
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  title.textContent = '会議なしで決定を記録';
+  // 通知対象の候補: この案件の関係者（notify対象）＋自由追加
+  const stk = loadStakeholders().filter(x => x.seriesId === seriesId);
+  let notifyRows = '';
+  if (stk.length) {
+    notifyRows = stk.map(x =>
+      '<label style="margin-right:10px"><input type="checkbox" class="dec-notify-cb" value="' +
+      escapeHtml(x.name) + '"> ' + escapeHtml(x.name) + (x.role ? '（' + escapeHtml(x.role) + '）' : '') + '</label>'
+    ).join('');
+  }
+  let stepOpts = '';
+  for (let i = 1; i <= 8; i++) {
+    stepOpts += '<option value="' + i + '"' + (i === stepNo ? ' selected' : '') + '>Step' + i + ' ' + A3_STEPS[i] + '</option>';
+  }
+  body.innerHTML =
+    '<p class="note" style="margin:0 0 8px">会議を開かずに決まったこと（メール・立ち話・上位判断など）を記録します。判断の背景も残せます。</p>' +
+    '<label>決定内容（必須）</label>' +
+    '<input type="text" id="dec-form-text" placeholder="決定事項（例：試作は外注せず社内で行う。担当:田中、期限:5/20）">' +
+    '<label>判断根拠（なぜこれにしたか）（任意）</label>' +
+    '<textarea id="dec-form-basis" rows="2" placeholder="この決定に至った理由・決め手"></textarea>' +
+    '<label>採用しなかった案（比較した選択肢）（任意・1行1件）</label>' +
+    '<textarea id="dec-form-rejected" rows="2" placeholder="検討したが採らなかった案（1行1件）"></textarea>' +
+    '<label>決定者（任意）</label>' +
+    '<input type="text" id="dec-form-by" placeholder="誰が決めたか（例：部長 山田）">' +
+    '<label>通知対象（誰に知らせるか）（任意）</label>' +
+    '<div id="dec-form-notify-box" class="notify-list">' + (notifyRows || '<span class="note">関係者は未登録です。下の欄に自由に追加できます。</span>') + '</div>' +
+    '<input type="text" id="dec-form-notify-free" placeholder="その他の通知対象（カンマ区切りで追加）">' +
+    '<label>紐づくStep</label>' +
+    '<select id="dec-form-step">' + stepOpts + '</select>' +
+    '<div class="alert bad hidden" id="dec-form-error">決定内容は必須です。</div>';
+  actions.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'ghost'; cancel.textContent = 'キャンセル';
+  cancel.onclick = () => closeModal();
+  actions.appendChild(cancel);
+  const save = document.createElement('button');
+  save.className = 'primary'; save.id = 'dec-form-save'; save.textContent = 'この決定を記録';
+  save.onclick = () => saveDecisionForm(seriesId);
+  actions.appendChild(save);
+  showModal();
+}
+
+function saveDecisionForm(seriesId) {
+  const text = (document.getElementById('dec-form-text').value || '').trim();
+  if (!text) { document.getElementById('dec-form-error').classList.remove('hidden'); return; }
+  const basis = (document.getElementById('dec-form-basis').value || '').trim();
+  const rejRaw = (document.getElementById('dec-form-rejected').value || '').trim();
+  const rejectedOptions = rejRaw ? rejRaw.split('\n').map(x => x.trim()).filter(Boolean) : [];
+  const decidedBy = (document.getElementById('dec-form-by').value || '').trim();
+  const notifyTo = [];
+  document.querySelectorAll('.dec-notify-cb:checked').forEach(cb => notifyTo.push(cb.value));
+  const freeVal = (document.getElementById('dec-form-notify-free').value || '').trim();
+  if (freeVal) freeVal.split(/[,、]/).map(x => x.trim()).filter(Boolean).forEach(n => { if (notifyTo.indexOf(n) < 0) notifyTo.push(n); });
+  const stepNo = Number(document.getElementById('dec-form-step').value);
+  const d = addDecision({
+    seriesId, stepNo, meetingId: null,
+    text, basis, rejectedOptions, decidedBy, notifyTo,
+    decidedAt: Date.now()
+  });
+  addStepArtifact(seriesId, stepNo, 'decision', d.id);
+  closeModal();
   renderA3();
 }
 
