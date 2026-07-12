@@ -105,7 +105,7 @@
 
   <div class="card">
     <h2>外部AIサービスについて</h2>
-    <p>AIアシストは Anthropic の Claude API を利用します。実運用では、送信された対象テキストが Anthropic のAPIへ転送され、応答生成に使われます。Anthropic 側の取り扱いは同社のポリシーに従います。モック動作（<code>MOCK_LLM</code>）では外部送信は一切行いません。</p>
+    <p>AIアシストは OpenAI 互換 API（運用者が <code>OPENAI_BASE_URL</code> で指定した宛先）を利用します。実運用では、送信された対象テキストがそのAPIへ転送され、応答生成に使われます。API提供事業者側の取り扱いは同事業者のポリシーに従います。モック動作（<code>MOCK_LLM</code>）では外部送信は一切行いません。</p>
   </div>
 
 </main>
