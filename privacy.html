@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>プライバシーとデータの扱い — 会議ルーター</title>
+<style>
+  :root {
+    --ink: #1a2333;
+    --sub: #5b6575;
+    --bg: #f2f4f8;
+    --card: #ffffff;
+    --line: #dde3ec;
+    --accent: #0f62fe;
+    --accent-soft: #e8f0fe;
+    --ok: #0e8a5f;
+    --ok-soft: #e2f5ec;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+    line-height: 1.7;
+  }
+  header {
+    background: var(--ink); color: #fff; padding: 14px 20px;
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: 2px; }
+  header .tagline { font-size: 12px; opacity: .75; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 20px 60px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 20px 22px; margin-bottom: 18px;
+  }
+  h2 { font-size: 18px; margin: 0 0 10px; }
+  h3 { font-size: 15px; margin: 18px 0 6px; }
+  p { margin: 8px 0; }
+  ul { margin: 8px 0; padding-left: 1.3em; }
+  li { margin: 6px 0; }
+  .lead {
+    background: var(--ok-soft); border-left: 4px solid var(--ok);
+    padding: 12px 16px; border-radius: 6px; font-weight: 600;
+  }
+  .note { color: var(--sub); font-size: 13px; }
+  a { color: var(--accent); }
+  footer { text-align: center; padding: 20px; color: var(--sub); font-size: 12px; }
+  code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>会議ルーター</h1>
+  <span class="tagline">プライバシーとデータの扱い</span>
+</header>
+
+<main>
+
+  <div class="card">
+    <h2>サーバーはあなたのデータを保持しません（ゼロリテンション）</h2>
+    <p class="lead">このサービスのサーバーは、あなたが入力した会議・案件・報連相の本文を保存しません。データベースもファイル書き込みもありません。AIアシストのために一時的に処理するだけで、応答を返し終えたら破棄します。</p>
+    <p class="note">「ゼロリテンション」とは、サーバー側にユーザーデータを一切ためない設計方針です。あなたの作業データは、あなたのブラウザの中だけに残ります。</p>
+  </div>
+
+  <div class="card">
+    <h2>データはどこに保存されるのか</h2>
+    <p>案件（A3）・会議・議題・決定・申し送り・アクションといったあなたの作業データは、すべて <strong>あなたのブラウザの localStorage</strong> に保存されます。サーバーには送られません。</p>
+    <ul>
+      <li>別の端末やブラウザからは見えません（同期しません）。</li>
+      <li>ブラウザの保存データを消去すると、作業データも消えます。</li>
+      <li>共有端末では、使い終わりにブラウザデータを消去することをおすすめします。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>AIアシストのときだけ、対象テキストが送信されます</h2>
+    <p>AIアシスト（報連相の自動仕分け、議題の添削、要約、なぜなぜ深掘りなど）は、<strong>あなたが明示的にボタンを押した操作のときだけ</strong>動きます。自動では送信しません。</p>
+    <h3>送信されるもの</h3>
+    <ul>
+      <li>そのアシストの対象となるテキスト（例: 仕分けしたい文章、添削したい議題）のみ。</li>
+      <li>アシストに必要な最小限の付随情報（context）。</li>
+    </ul>
+    <h3>送信されないもの</h3>
+    <ul>
+      <li>localStorage に貯まった過去の案件・会議・アクションなどのデータ一式。</li>
+      <li>氏名・メールアドレスなどのアカウント情報（そもそも取得しません。ログインもありません）。</li>
+    </ul>
+    <p class="note">送信された対象テキストは、AIの応答を生成するためだけに使われ、サーバー側には保存されません。</p>
+  </div>
+
+  <div class="card">
+    <h2>ログはメタデータのみ</h2>
+    <p>サーバーの運用ログには、リクエストのメタデータだけを記録します。<strong>入力本文やAIの応答本文は決してログに出力しません。</strong></p>
+    <ul>
+      <li>記録するもの: 日時、呼び出したエンドポイント名、HTTPステータス、入力の文字数、処理時間。</li>
+      <li>記録しないもの: 入力本文、AIの応答本文、個人を特定する情報。</li>
+    </ul>
+    <p class="note">リバースプロキシ（前段のWebサーバー）を挟んで運用する場合は、そのアクセスログにリクエストボディを残さない設定にしてください。詳細は <code>docs/DEPLOY.md</code> を参照してください。</p>
+  </div>
+
+  <div class="card">
+    <h2>外部AIサービスについて</h2>
+    <p>AIアシストは Anthropic の Claude API を利用します。実運用では、送信された対象テキストが Anthropic のAPIへ転送され、応答生成に使われます。Anthropic 側の取り扱いは同社のポリシーに従います。モック動作（<code>MOCK_LLM</code>）では外部送信は一切行いません。</p>
+  </div>
+
+</main>
+
+<footer>
+  <a href="/">← 会議ルーターに戻る</a>
+</footer>
+
+</body>
+</html>

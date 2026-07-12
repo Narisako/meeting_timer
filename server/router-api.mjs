@@ -2,7 +2,14 @@
 // - Node 18+ 標準ライブラリ + 組み込み fetch のみ。npm 依存ゼロ。
 // - ゼロリテンション: DB・ファイル書き込み一切なし。ログはメタデータのみ（入力本文・LLM応答本文は出さない）。
 // - LLMアシスト専用。MOCK_LLM=1 で決定的モック、ANTHROPIC_API_KEY で Claude API。
+// - 静的配信: GET / → index.html、GET /privacy → privacy.html（ゼロリテンション方針は不変。本文は保持・記録しない）。
 import http from 'node:http';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// リポジトリルート（server/ の一つ上）。静的ファイルはここから配信する。
+const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const PORT = Number(process.env.PORT || 8787);
 const MOCK = process.env.MOCK_LLM === '1';
@@ -176,6 +183,28 @@ function readBody(req) {
     req.on('error', () => resolve({ error: true }));
   });
 }
+// ---- 静的配信（ホワイトリストのみ。パストラバーサル不可） ----
+// キー: URLパス、値: ルート相対のファイル名。ユーザー本文は一切保持・記録しない。
+const STATIC = {
+  '/': 'index.html',
+  '/index.html': 'index.html',
+  '/privacy': 'privacy.html',
+  '/privacy.html': 'privacy.html'
+};
+function serveStatic(res, rel) {
+  try {
+    const buf = readFileSync(path.join(ROOT, rel));
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      ...corsHeaders()
+    });
+    res.end(buf);
+  } catch (e) {
+    sendJson(res, 404, { ok: false, error: 'not_found' });
+  }
+}
+
 function extractJson(text) {
   let s = String(text).trim();
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -231,6 +260,12 @@ const server = http.createServer(async (req, res) => {
   // ヘルスチェック
   if (req.method === 'GET' && path === '/healthz') {
     sendJson(res, 200, { ok: true, mock: MOCK });
+    return;
+  }
+
+  // 静的配信（index.html / privacy.html のみ）。本文を扱わないためログもメタ含め出さない。
+  if ((req.method === 'GET' || req.method === 'HEAD') && Object.prototype.hasOwnProperty.call(STATIC, path)) {
+    serveStatic(res, STATIC[path]);
     return;
   }
 
