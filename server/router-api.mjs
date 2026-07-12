@@ -31,7 +31,7 @@ const MODEL = OPENAI_MODEL;
 const ROUTES = {
   // R1 報連相仕分け
   'route': {
-    model: MODEL, maxTokens: 512,
+    model: MODEL, maxTokens: 2048,
     // フロントのレーン(報告=過去/連絡=現在/相談=未来)と整合させる。
     // report=報告(すでに済んだ過去の事実), chat=連絡(いま知らせたい現在の共有), meeting=相談(これから決めたい未来の要決定=要会議)。
     system: 'あなたは日本の職場の「報連相」仕分け係です。入力メッセージを report(報告=すでに済んだ過去の事実や結果の報告)/chat(連絡=いま知らせたい現在の共有・連絡事項)/meeting(相談=これから決めたい未来の要決定事項＝要会議) のいずれかに分類し、理由と整形済み本文を返します。必ず次のJSONのみを出力: {"kind":"report|chat|meeting","reason":"日本語の短い理由","formatted":"整形済み本文"}',
@@ -53,7 +53,7 @@ const ROUTES = {
   },
   // R2 議題添削
   'refine-agenda': {
-    model: MODEL, maxTokens: 512,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたは会議の議題を添削する専門家です。曖昧な議題を「問い」の形に磨き、達成ゴールと一言コメントを返します。必ず次のJSONのみを出力: {"question":"問いの形にした議題","goal":"この議題で決めるべきゴール","comment":"改善の一言"}',
     mock(input) {
       const t = input.trim();
@@ -70,7 +70,7 @@ const ROUTES = {
   },
   // R3 曖昧アクション具体化
   'concretize-action': {
-    model: MODEL, maxTokens: 768,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたは曖昧なアクションを「誰が・何を・いつまで」に具体化する係です。入力から候補を抽出し配列で返します。必ず次のJSONのみを出力: {"candidates":[{"what":"具体的な作業","ownerHint":"担当の目安","dueHint":"期限の目安"}]}',
     mock(input) {
       const lines = input.split(/[\n、。]/).map(s => s.trim()).filter(Boolean).slice(0, 3);
@@ -91,7 +91,7 @@ const ROUTES = {
   },
   // R4 3行要約
   'summarize-handoff': {
-    model: MODEL, maxTokens: 512,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたは引き継ぎ要約の専門家です。入力を3行以内の要約にまとめます。必ず次のJSONのみを出力: {"summary":"3行以内の要約（改行区切り）"}',
     mock(input) {
       const t = input.replace(/\s+/g, ' ').trim();
@@ -113,7 +113,7 @@ const ROUTES = {
   },
   // R6 なぜなぜ候補
   'five-whys': {
-    model: MODEL, maxTokens: 768,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたは「なぜなぜ分析」のファシリテーターです。入力の事象に対し「なぜ」を掘り下げる候補を返します。必ず次のJSONのみを出力: {"whys":["なぜ1","なぜ2","なぜ3","なぜ4","なぜ5"]}',
     mock(input) {
       const t = input.trim();
@@ -123,7 +123,7 @@ const ROUTES = {
   },
   // R7 指標からの改善提案
   'diagnose': {
-    model: MODEL, maxTokens: 768,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたは会議指標のアナリストです。入力の指標データから改善提案を返します。必ず次のJSONのみを出力: {"advice":"具体的な改善提案の文章"}',
     mock(input) {
       return { advice: `指標（${input.length}字）を診断: 停滞の兆候があれば担当と期限を明確化し、決定ゼロ会議を減らす一手を打ちましょう。` };
@@ -133,7 +133,7 @@ const ROUTES = {
   // v5-2 AIインテーク（ステートレス対話）。他ルートと異なり {messages, state} を受け、
   //   {reply, choices?, actions?, state?} を返す。chat:true でハンドラ側の分岐を切り替える。
   'intake': {
-    model: MODEL, maxTokens: 1024, chat: true,
+    model: MODEL, maxTokens: 4096, chat: true,
     system: [
       'あなたは「会議招集の前に」という報連相トリアージ・システムの対話ガイドです。',
       'ユーザーとの短い対話で「会議招集の文面に足る情報」を最短で集めることがゴールです。',
@@ -462,14 +462,16 @@ async function openaiComplete({ model, maxTokens, system, messages }) {
 
   // Chat Completions API
   const url = `${OPENAI_BASE_URL}/chat/completions`;
+  const payload = {
+    model,
+    max_completion_tokens: maxTokens,
+    messages: [{ role: 'system', content: system }, ...messages],
+    response_format: { type: 'json_object' }
+  };
   const res = await fetch(url, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      messages: [{ role: 'system', content: system }, ...messages]
-    })
+    body: JSON.stringify(payload)
   });
   if (!res.ok) throw new apiError(res.status, await res.text());
   const data = await res.json();
