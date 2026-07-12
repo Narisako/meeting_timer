@@ -2,6 +2,8 @@
 // - Node 18+ 標準ライブラリ + 組み込み fetch のみ。npm 依存ゼロ。
 // - ゼロリテンション: DB・ファイル書き込み一切なし。ログはメタデータのみ（入力本文・LLM応答本文は出さない）。
 // - LLMアシスト専用。MOCK_LLM=1 で決定的モック、OpenAI API (gpt-4o) で実行。
+// - OPENAI_BASE_URL は必須の環境変数（デフォルト値なし）。宛先は運用者が明示的に指定すること。
+//   未設定（空文字）の場合、非MOCK時のLLM呼び出しは 503 llm_unavailable を返す（SSRF対策）。
 // - 静的配信: GET / → index.html、GET /privacy → privacy.html（ゼロリテンション方針は不変。本文は保持・記録しない）。
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -14,7 +16,8 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PORT = Number(process.env.PORT || 8787);
 const MOCK = process.env.MOCK_LLM === '1';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'http://169.254.169.254/gateway/llm/openai/v1';
+// SSRF対策: デフォルト値なし。運用者が明示的に指定する必須環境変数。未設定なら非MOCK時 503。
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || '';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 const DAILY_LIMIT = Number(process.env.DAILY_LIMIT || 1000);
 
@@ -126,6 +129,176 @@ const ROUTES = {
       return { advice: `指標（${input.length}字）を診断: 停滞の兆候があれば担当と期限を明確化し、決定ゼロ会議を減らす一手を打ちましょう。` };
     },
     validate(r) { return r && typeof r.advice === 'string'; }
+  },
+  // v5-2 AIインテーク（ステートレス対話）。他ルートと異なり {messages, state} を受け、
+  //   {reply, choices?, actions?, state?} を返す。chat:true でハンドラ側の分岐を切り替える。
+  'intake': {
+    model: MODEL, maxTokens: 1024, chat: true,
+    system: [
+      'あなたは「会議招集の前に」という報連相トリアージ・システムの対話ガイドです。',
+      '思想を厳守してください:',
+      '(1) 報連相を仕分け、原則はメール/チャット/レポートで済ませ、例外理由があるときだけ会議を開く。',
+      '(2) 決めるための事実（数字・現状・原因）が揃うまで会議は開かない。先に現状把握レポートで事実を共有する。',
+      '(3) 会議は最小メンバー（決裁者＋意見・情報を持つ人）に絞る。',
+      '(4) 「聞くだけ」の人は招集せず、レポート送付に回す。',
+      '(5) 最初の問いは必ず「案件名を教えてください。」。',
+      'ユーザーの自由入力を理解し、トヨタA3の8ステップ（背景/現状/目標/要因/対策/計画/実施/評価）を埋めるのに必要なことを対話で深掘りし、会議要否と最小メンバーを見極めます。',
+      '常に「次の一問」を1つだけ返し、構造化された actions を添えてください。',
+      '必ず次のJSONのみを出力: {"reply":"次の一問（日本語）","choices":["選択肢",...],"actions":[{"type":"set_title|set_route|fill_step|set_question|add_member|propose_meeting|suggest_report",...}],"state":{"phase":"次の局面",...}}'
+    ].join('\n'),
+    // MOCK: v5-1 の質問ツリーを決定的になぞる。state.phase で局面を進める。
+    mock(messages, state) {
+      const st = (state && typeof state === 'object') ? state : {};
+      const phase = st.phase || 'askName';
+      const users = messages.filter(m => m && m.role === 'user');
+      const text = users.length ? String(users[users.length - 1].text || '') : '';
+      const EXC = ['判断が必要', '関係者間に認識差がある', '不確実性が高い', '緊急性が高い', '判断が不可逆', '部門横断の調整が必要', '決定権者の判断が必要'];
+      const next = (extra) => Object.assign({}, st, extra);
+      switch (phase) {
+        case 'askName': {
+          const title = text.trim() || '無題の案件';
+          return {
+            reply: `案件「${title}」を下書きとして作成しました。この件で、いま一番したいことは何ですか？`,
+            choices: ['過去の結果・経緯を伝えたい', 'いま起きていることを知らせたい', 'これから何かを決めたい・相談したい'],
+            actions: [{ type: 'set_title', title }],
+            state: next({ phase: 'want', title })
+          };
+        }
+        case 'want': {
+          let tense = 'future';
+          if (/過去|報告|結果|経緯|実績/.test(text)) tense = 'past';
+          else if (/いま|連絡|知らせ|共有|周知/.test(text)) tense = 'present';
+          if (tense === 'future') {
+            return {
+              reply: '決めるために、事実（数字・現状・原因）は揃っていますか？',
+              choices: ['揃っている', '揃っていない', 'わからない'],
+              actions: [{ type: 'set_route', route: 'meeting', tense }],
+              state: next({ phase: 'facts', tense })
+            };
+          }
+          return {
+            reply: '会議が必要になりやすい例外条件に当てはまるものはありますか？無ければ「該当なし」を選んでください。',
+            choices: EXC.concat(['該当なし']),
+            actions: [{ type: 'set_route', route: tense === 'present' ? 'chat' : 'report', tense }],
+            state: next({ phase: 'exception', tense })
+          };
+        }
+        case 'exception': {
+          if (/該当なし|無し|ない$/.test(text.trim())) {
+            const kind = st.tense === 'present' ? 'chat' : 'report';
+            return {
+              reply: `会議は不要です。${kind === 'chat' ? 'チャット' : 'レポート'}で済ませましょう。テンプレートを用意します。`,
+              choices: ['テンプレートを開く', '対話をやり直す'],
+              actions: [{ type: 'suggest_report', kind }],
+              state: next({ phase: 'doneNoMeeting' })
+            };
+          }
+          return {
+            reply: '例外条件に該当します。では、決めるための事実（数字・現状・原因）は揃っていますか？',
+            choices: ['揃っている', '揃っていない', 'わからない'],
+            actions: [{ type: 'set_route', route: 'meeting', tense: 'future' }],
+            state: next({ phase: 'facts', tense: 'future', exception: text.trim() })
+          };
+        }
+        case 'facts': {
+          if (/揃っている|ある|はい/.test(text) && !/いない|揃っていない/.test(text)) {
+            return {
+              reply: 'では、この会議で何を決めますか？1つの問いにしてください。',
+              choices: [],
+              actions: [],
+              state: next({ phase: 'decisionQ' })
+            };
+          }
+          return {
+            reply: '先に現状把握レポート（Step2）で事実を共有しましょう。会議はそれからでも遅くありません。',
+            choices: ['現状把握レポート（Step2）を開く', 'それでも今すぐ会議が必要'],
+            actions: [{ type: 'suggest_report', kind: 'report', step: 2 }],
+            state: next({ phase: 'factsNotReady' })
+          };
+        }
+        case 'factsNotReady': {
+          if (/今すぐ|それでも|必要/.test(text)) {
+            return {
+              reply: 'わかりました。では、この会議で何を決めますか？1つの問いにしてください。',
+              choices: [],
+              actions: [],
+              state: next({ phase: 'decisionQ' })
+            };
+          }
+          return {
+            reply: '現状把握レポート（Step2）を開きます。事実が揃ってから会議を検討しましょう。',
+            choices: [],
+            actions: [{ type: 'suggest_report', kind: 'report', step: 2 }],
+            state: next({ phase: 'doneReport' })
+          };
+        }
+        case 'decisionQ': {
+          const q = text.trim();
+          return {
+            reply: 'それを決められる人（決裁者）は誰ですか？',
+            choices: [],
+            actions: [{ type: 'set_question', question: q }],
+            state: next({ phase: 'decider', decisionQuestion: q })
+          };
+        }
+        case 'decider': {
+          const name = text.trim();
+          return {
+            reply: '意見や情報が必要な人はいますか？名前を入力してください。「聞くだけ」の人は招集せずレポート送付に回します。いなければ「まとめへ」を選んでください。',
+            choices: ['まとめへ'],
+            actions: [{ type: 'add_member', name, role: 'decider' }],
+            state: next({ phase: 'participants', decider: name })
+          };
+        }
+        case 'participants': {
+          if (/まとめ|完了|いない|なし/.test(text)) {
+            return {
+              reply: '【まとめ】必要な事実が揃い、決裁者と最小メンバーが決まりました。判断セッション（会議）の設計に進みましょう。',
+              choices: ['判断セッション設計へ進む'],
+              actions: [],
+              state: next({ phase: 'summary' })
+            };
+          }
+          return {
+            reply: `「${text.trim()}」さんの役割を選んでください。`,
+            choices: ['意見を出す人', '情報を持っている人', '聞くだけ（レポート送付）'],
+            actions: [],
+            state: next({ phase: 'partRole', pendingName: text.trim() })
+          };
+        }
+        case 'partRole': {
+          let role = 'opinion';
+          if (/情報/.test(text)) role = 'info';
+          else if (/聞くだけ|レポート|送付/.test(text)) role = 'listener';
+          const name = st.pendingName || '';
+          const note = role === 'listener'
+            ? `「${name}」さんはレポート送付に回します。他にいますか？いなければ「まとめへ」を選んでください。`
+            : `「${name}」さんを追加しました。他にいますか？いなければ「まとめへ」を選んでください。`;
+          return {
+            reply: note,
+            choices: ['まとめへ'],
+            actions: [{ type: 'add_member', name, role }],
+            state: next({ phase: 'participants', pendingName: '' })
+          };
+        }
+        case 'summary': {
+          return {
+            reply: '判断セッション設計へプリフィルします。決める問い・背景・最小メンバーを引き継ぎます。',
+            choices: [],
+            actions: [{ type: 'propose_meeting', question: st.decisionQuestion || '' }],
+            state: next({ phase: 'done' })
+          };
+        }
+        default:
+          return { reply: '案件名を教えてください。', choices: [], actions: [], state: { phase: 'askName' } };
+      }
+    },
+    validate(r) {
+      return r && typeof r.reply === 'string' &&
+        (r.choices === undefined || Array.isArray(r.choices)) &&
+        (r.actions === undefined || Array.isArray(r.actions)) &&
+        (r.state === undefined || (r.state && typeof r.state === 'object'));
+    }
   }
 };
 
@@ -223,33 +396,31 @@ function isCodexModel(model) {
   return model.toLowerCase().includes('codex');
 }
 
-// ---- 実LLM呼び出し (OpenAI Chat Completions / Responses API) ----
-async function callLlm(route, input, context) {
-  const userContent = context && Object.keys(context).length
-    ? `${input}\n\n# context\n${JSON.stringify(context)}`
-    : input;
-
+// ---- OpenAI 呼び出し共通ヘルパー (Chat Completions / Responses API) ----
+// system: system prompt 文字列。messages: [{role:'user'|'assistant', content}] の会話配列。
+// Codex モデルは Responses API、それ以外は Chat Completions API を使う。応答テキストを返す。
+async function openaiComplete({ model, maxTokens, system, messages }) {
   const headers = { 'content-type': 'application/json' };
   if (OPENAI_API_KEY) headers['authorization'] = `Bearer ${OPENAI_API_KEY}`;
 
-  let text;
-  if (isCodexModel(route.model)) {
-    // Responses API for codex models
+  if (isCodexModel(model)) {
+    // Responses API for codex models（system は instructions、会話は input に連結）
+    const input = messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
     const url = `${OPENAI_BASE_URL}/responses`;
     const res = await fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: route.model,
-        instructions: route.system,
-        input: userContent,
+        model,
+        instructions: system,
+        input,
         stream: false
       })
     });
     if (!res.ok) throw new apiError(res.status, await res.text());
     const data = await res.json();
     // Extract text from output[].type=="message" -> content[].type=="output_text"
-    text = '';
+    let text = '';
     if (Array.isArray(data.output)) {
       for (const out of data.output) {
         if (out.type === 'message' && Array.isArray(out.content)) {
@@ -259,26 +430,36 @@ async function callLlm(route, input, context) {
         }
       }
     }
-  } else {
-    // Chat Completions API
-    const url = `${OPENAI_BASE_URL}/chat/completions`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: route.model,
-        max_tokens: route.maxTokens,
-        messages: [
-          { role: 'system', content: route.system },
-          { role: 'user', content: userContent }
-        ]
-      })
-    });
-    if (!res.ok) throw new apiError(res.status, await res.text());
-    const data = await res.json();
-    text = data.choices?.[0]?.message?.content || '';
+    return text;
   }
 
+  // Chat Completions API
+  const url = `${OPENAI_BASE_URL}/chat/completions`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: 'system', content: system }, ...messages]
+    })
+  });
+  if (!res.ok) throw new apiError(res.status, await res.text());
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+// ---- 実LLM呼び出し (OpenAI Chat Completions / Responses API) ----
+async function callLlm(route, input, context) {
+  const userContent = context && Object.keys(context).length
+    ? `${input}\n\n# context\n${JSON.stringify(context)}`
+    : input;
+  const text = await openaiComplete({
+    model: route.model,
+    maxTokens: route.maxTokens,
+    system: route.system,
+    messages: [{ role: 'user', content: userContent }]
+  });
   const parsed = extractJson(text);
   if (!route.validate(parsed)) throw new Error('invalid_llm_shape');
   return parsed;
@@ -291,6 +472,27 @@ class apiError extends Error {
     this.statusCode = statusCode;
     this.body = body;
   }
+}
+
+// ---- 実LLM呼び出し（対話ルート: messages + state → {reply, choices?, actions?, state?}） ----
+// v5 対話インテーク特有の要件（会話履歴を {role,content} に変換し、system prompt に現在の状態を
+// JSON 埋め込みする）を維持しつつ、HTTP 呼び出しは OpenAI 共通ヘルパー（openaiComplete）に委譲する。
+async function callLlmChat(route, messages, state) {
+  const convo = messages.map(m => ({
+    role: m && m.role === 'assistant' ? 'assistant' : 'user',
+    content: String((m && m.text) || '')
+  }));
+  if (!convo.length) convo.push({ role: 'user', content: '（開始）' });
+  const system = route.system + '\n\n# 現在の状態\n' + JSON.stringify(state || {});
+  const text = await openaiComplete({
+    model: route.model,
+    maxTokens: route.maxTokens,
+    system,
+    messages: convo
+  });
+  const parsed = extractJson(text);
+  if (!route.validate(parsed)) throw new Error('invalid_llm_shape');
+  return parsed;
 }
 
 // ---- リクエスト処理 ----
@@ -348,22 +550,50 @@ const server = http.createServer(async (req, res) => {
       try { parsedReq = JSON.parse(raw || '{}'); } catch (e) {
         status = 400; sendJson(res, 400, { ok: false, error: 'bad_request' }); return;
       }
-      const input = parsedReq && typeof parsedReq.input === 'string' ? parsedReq.input : '';
-      const context = parsedReq && parsedReq.context && typeof parsedReq.context === 'object' ? parsedReq.context : undefined;
-      if (!input) {
-        status = 400; sendJson(res, 400, { ok: false, error: 'bad_request' }); return;
-      }
-      inputChars = input.length;
 
-      // LLM 実行
       let result;
-      if (MOCK) {
-        result = route.mock(input, context);
+      if (route.chat) {
+        // 対話ルート: {messages:[{role,text}...], state:{...}} を受ける（ステートレス）
+        const messages = Array.isArray(parsedReq && parsedReq.messages)
+          ? parsedReq.messages.filter(m => m && typeof m.text === 'string')
+          : null;
+        const state = parsedReq && parsedReq.state && typeof parsedReq.state === 'object' ? parsedReq.state : {};
+        if (!messages) {
+          status = 400; sendJson(res, 400, { ok: false, error: 'bad_request' }); return;
+        }
+        inputChars = messages.reduce((n, m) => n + m.text.length, 0);
+        if (MOCK) {
+          result = route.mock(messages, state);
+        } else if (!OPENAI_BASE_URL) {
+          // SSRF対策: OPENAI_BASE_URL は必須。未設定なら実LLM呼び出しを行わず 503。
+          status = 503; sendJson(res, 503, { ok: false, error: 'llm_unavailable' }); return;
+        } else {
+          try {
+            result = await callLlmChat(route, messages, state);
+          } catch (e) {
+            status = 502; sendJson(res, 502, { ok: false, error: 'llm_error' }); return;
+          }
+        }
       } else {
-        try {
-          result = await callLlm(route, input, context);
-        } catch (e) {
-          status = 502; sendJson(res, 502, { ok: false, error: 'llm_error' }); return;
+        const input = parsedReq && typeof parsedReq.input === 'string' ? parsedReq.input : '';
+        const context = parsedReq && parsedReq.context && typeof parsedReq.context === 'object' ? parsedReq.context : undefined;
+        if (!input) {
+          status = 400; sendJson(res, 400, { ok: false, error: 'bad_request' }); return;
+        }
+        inputChars = input.length;
+
+        // LLM 実行
+        if (MOCK) {
+          result = route.mock(input, context);
+        } else if (!OPENAI_BASE_URL) {
+          // SSRF対策: OPENAI_BASE_URL は必須。未設定なら実LLM呼び出しを行わず 503。
+          status = 503; sendJson(res, 503, { ok: false, error: 'llm_unavailable' }); return;
+        } else {
+          try {
+            result = await callLlm(route, input, context);
+          } catch (e) {
+            status = 502; sendJson(res, 502, { ok: false, error: 'llm_error' }); return;
+          }
         }
       }
 
