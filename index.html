@@ -591,6 +591,20 @@
       <span id="llm-save-status" class="note" style="margin-left:8px"></span>
     </div>
   </div>
+
+  <div class="card">
+    <h2>データ管理（エクスポート／インポート）</h2>
+    <p class="note">この端末のデータ（案件・会議・Decision・アクション・統計・設定）を1つのJSONに書き出し、別の端末やバックアップとして持ち運べます。インポートは<b>現在のデータを全て上書き</b>します。</p>
+    <div class="alert warn" style="margin-top:0">localStorage版は個人用デモです。複数人での共有には共有データストアが必要です。</div>
+    <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:10px; align-items:center">
+      <button class="primary small" onclick="exportAllData()">エクスポート（JSONダウンロード）</button>
+      <button class="ghost small" onclick="document.getElementById('data-import-file').click()">インポート（ファイルを選択）</button>
+      <input type="file" id="data-import-file" accept="application/json,.json" class="hidden" onchange="handleImportFile(this)">
+      <button class="ghost small" id="data-restore-btn" onclick="restoreLastBackup()" disabled>直前の状態に戻す</button>
+    </div>
+    <div id="data-mgmt-error" class="alert bad hidden"></div>
+    <div id="data-mgmt-status" class="note" style="margin-top:8px"></div>
+  </div>
 </section>
 
 </main>
@@ -775,6 +789,215 @@ function migrateSchema() {
   saveDecisions(decisions);
 
   localStorage.setItem(SCHEMA_KEY, SCHEMA_VERSION);
+}
+
+// ---------- データ管理（エクスポート／インポート／バックアップ） Issue #24 ----------
+// 全 sekisho.* キーを1つのJSONへ書き出し、別端末やバックアップとして持ち運ぶ。
+// インポートは全置換（schema違いは migrateSchema を通す）。実行前に現在の全データを
+// sekisho.backup.last へ自動退避し、ワンクリックで直前状態に戻せる。
+const BACKUP_LAST_KEY = 'sekisho.backup.last'; // インポート直前の自動バックアップ
+const KNOWN_IMPORT_SCHEMAS = ['2', '3'];       // 受け入れ可能なスキーマ（v2/v3）
+
+// 現在の sekisho.* を収集（backup.last 自身は除外）。値はJSONとして展開できれば展開、
+// 展開できなければ生文字列のまま保持する（round-trip 保証）。
+function collectAllData() {
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || k.indexOf('sekisho.') !== 0 || k === BACKUP_LAST_KEY) continue;
+    const raw = localStorage.getItem(k);
+    try { data[k] = JSON.parse(raw); } catch (e) { data[k] = raw; }
+  }
+  return data;
+}
+
+// エクスポートペイロード { schema, exportedAt, data:{...} } を生成（テストから直接検証可能）。
+function buildExportPayload() {
+  return {
+    schema: localStorage.getItem(SCHEMA_KEY) || SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: collectAllData()
+  };
+}
+
+function backupDateStamp(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return '' + y + m + day;
+}
+
+// エクスポート: Blob + a[download] でJSONをダウンロードさせる。
+function exportAllData() {
+  const payload = buildExportPayload();
+  const json = JSON.stringify(payload, null, 2);
+  const fname = 'kaigi-shoshu-backup-' + backupDateStamp(new Date()) + '.json';
+  try {
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  } catch (e) { /* ダウンロード不可環境でもペイロードは返す */ }
+  setDataMgmtStatus('エクスポートしました（' + fname + '）');
+  clearDataMgmtError();
+  return { payload: payload, json: json, filename: fname };
+}
+
+// インポート内容の検証。壊れたJSON・data欠落・未知スキーマは例外を投げる（既存データは触らない）。
+function validateImportPayload(text) {
+  let obj;
+  try { obj = JSON.parse(text); }
+  catch (e) { throw new Error('JSONとして読み込めませんでした。ファイルが壊れている可能性があります。'); }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('バックアップの形式が不正です。');
+  if (!obj.data || typeof obj.data !== 'object' || Array.isArray(obj.data)) throw new Error('data がありません。バックアップの形式が不正です。');
+  const scRaw = (obj.schema != null) ? obj.schema : obj.data[SCHEMA_KEY];
+  const sc = (scRaw == null) ? '' : String(scRaw);
+  if (KNOWN_IMPORT_SCHEMAS.indexOf(sc) < 0) throw new Error('未知のスキーマ（' + (sc || '不明') + '）です。このファイルはインポートできません。');
+  return obj;
+}
+
+// プレビュー用の件数集計。
+function importCounts(payload) {
+  const d = (payload && payload.data) || {};
+  const cnt = (k) => (Array.isArray(d[k]) ? d[k].length : 0);
+  return {
+    schema: String((payload.schema != null) ? payload.schema : (d[SCHEMA_KEY] != null ? d[SCHEMA_KEY] : '')),
+    series: cnt(SERIES_KEY),
+    meetings: cnt(MEETINGS_KEY),
+    actions: cnt(ACTIONS_KEY),
+    decisions: cnt(DECISIONS_KEY)
+  };
+}
+
+// 現在の sekisho.* を全消去（backup.last は残す）。
+function clearSekishoKeys() {
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.indexOf('sekisho.') === 0 && k !== BACKUP_LAST_KEY) toRemove.push(k);
+  }
+  toRemove.forEach(k => localStorage.removeItem(k));
+}
+
+// data マップを localStorage へ書き戻す。
+function restoreDataMap(data) {
+  Object.keys(data || {}).forEach(k => {
+    if (k.indexOf('sekisho.') !== 0 || k === BACKUP_LAST_KEY) return;
+    const v = data[k];
+    localStorage.setItem(k, (typeof v === 'string') ? v : JSON.stringify(v));
+  });
+}
+
+// インポート実行（全置換）。実行前に現在の全データを backup.last へ自動退避し、
+// schema違いは migrateSchema で正規化する。
+function applyImport(payload) {
+  const backup = { schema: localStorage.getItem(SCHEMA_KEY), savedAt: new Date().toISOString(), data: collectAllData() };
+  localStorage.setItem(BACKUP_LAST_KEY, JSON.stringify(backup));
+  clearSekishoKeys();
+  restoreDataMap(payload.data);
+  migrateSchema();       // schema違いを通す（冪等）
+  refreshAllViews();
+}
+
+// 直前バックアップへ復元。
+function restoreLastBackup() {
+  const raw = localStorage.getItem(BACKUP_LAST_KEY);
+  if (!raw) { setDataMgmtStatus('復元できるバックアップがありません。'); return false; }
+  let backup;
+  try { backup = JSON.parse(raw); } catch (e) { setDataMgmtError('バックアップが壊れています。'); return false; }
+  if (!backup || !backup.data) { setDataMgmtError('バックアップが壊れています。'); return false; }
+  clearSekishoKeys();
+  restoreDataMap(backup.data);
+  migrateSchema();
+  refreshAllViews();
+  clearDataMgmtError();
+  setDataMgmtStatus('直前の状態に復元しました。');
+  return true;
+}
+
+// ファイル選択 → 読み込み → 検証 → 確認モーダル。
+function handleImportFile(input) {
+  clearDataMgmtError();
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    input.value = ''; // 同じファイルを再選択できるようにリセット
+    let payload;
+    try { payload = validateImportPayload(String(reader.result)); }
+    catch (e) { setDataMgmtError('インポートできませんでした: ' + e.message); return; }
+    openImportConfirm(payload);
+  };
+  reader.onerror = () => { input.value = ''; setDataMgmtError('ファイルを読み込めませんでした。'); };
+  reader.readAsText(file);
+}
+
+// インポート確認モーダル（プレビュー＋上書き警告）。
+function openImportConfirm(payload) {
+  const counts = importCounts(payload);
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  if (!title || !body || !actions) { // モーダル不在環境では即適用しない（安全側）
+    setDataMgmtError('確認画面を表示できませんでした。');
+    return;
+  }
+  title.textContent = 'インポートの確認';
+  body.innerHTML =
+    '<div class="alert bad" style="margin-top:0">現在のこの端末のデータは<b>全て上書き</b>されます。実行前に現在のデータは自動バックアップされ、「直前の状態に戻す」で復元できます。</div>' +
+    '<p class="note" style="margin:8px 0 4px">読み込むデータ（schema ' + counts.schema + '）:</p>' +
+    '<ul style="margin:0 0 4px 18px; padding:0">' +
+    '<li>案件数: <b>' + counts.series + '</b></li>' +
+    '<li>会議数: <b>' + counts.meetings + '</b></li>' +
+    '<li>アクション数: <b>' + counts.actions + '</b></li>' +
+    '<li>Decision数: <b>' + counts.decisions + '</b></li>' +
+    '</ul>';
+  actions.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'ghost'; cancel.textContent = 'キャンセル';
+  cancel.onclick = () => closeModal();
+  const ok = document.createElement('button');
+  ok.className = 'danger'; ok.textContent = '上書きしてインポート';
+  ok.onclick = () => {
+    closeModal();
+    try {
+      applyImport(payload);
+      clearDataMgmtError();
+      setDataMgmtStatus('インポートが完了しました（案件 ' + counts.series + ' 件 / 会議 ' + counts.meetings + ' 件 / アクション ' + counts.actions + ' 件）。');
+    } catch (e) { setDataMgmtError('インポートに失敗しました: ' + e.message); }
+  };
+  actions.appendChild(cancel);
+  actions.appendChild(ok);
+  showModal();
+}
+
+// 各ビューの再描画（存在する関数のみ安全に呼ぶ）。
+function refreshAllViews() {
+  try { stats = loadStats(); } catch (e) {}
+  ['renderSeriesOptions', 'renderDesign', 'renderDash', 'renderA3', 'renderDataMgmt'].forEach(fn => {
+    try { if (typeof window[fn] === 'function') window[fn](); } catch (e) {}
+  });
+}
+
+function setDataMgmtStatus(msg) {
+  const el = document.getElementById('data-mgmt-status');
+  if (el) el.textContent = msg || '';
+}
+function setDataMgmtError(msg) {
+  const el = document.getElementById('data-mgmt-error');
+  if (el) { el.textContent = msg || ''; el.classList.toggle('hidden', !msg); }
+}
+function clearDataMgmtError() { setDataMgmtError(''); }
+
+// 「直前の状態に戻す」ボタンの活性状態を backup.last の有無で更新する。
+function renderDataMgmt() {
+  const btn = document.getElementById('data-restore-btn');
+  if (btn) btn.disabled = (localStorage.getItem(BACKUP_LAST_KEY) === null);
 }
 
 // ---------- AIアシスト（v3土台: 設定・共通クライアント・フォールバック） ----------
@@ -3739,6 +3962,7 @@ renderA3();
 renderLlmSettings();
 renderAiRouterCard();
 renderAgendaAssist();
+renderDataMgmt();
 </script>
 </body>
 </html>
