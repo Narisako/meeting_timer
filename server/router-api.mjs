@@ -27,6 +27,40 @@ const RATE_PER_MIN = 30;            // IPごと 30req/分
 // 全ルートで同一モデルを使用（環境変数で切替）
 const MODEL = OPENAI_MODEL;
 
+// v6-5(#47): propose_advice アクションの型ガード。不正形状のフィールドは破棄して無害化し、
+//   有効なセクションが1つも残らない場合は null（＝アクションごと破棄）を返す。
+function sanitizeAdviceAction(a) {
+  if (!a || a.type !== 'propose_advice') return a; // 対象外はそのまま通す
+  const mapFilter = (arr, fn) => Array.isArray(arr) ? arr.map(fn).filter(Boolean) : [];
+  const discuss = mapFilter(a.discuss, (d) => {
+    if (!d || typeof d.title !== 'string' || !d.title.trim()) return null;
+    const o = { title: d.title.trim() };
+    if (typeof d.note === 'string' && d.note.trim()) o.note = d.note.trim();
+    return o;
+  });
+  const presend = mapFilter(a.presend, (p) => {
+    if (!p || typeof p.text !== 'string' || !p.text.trim()) return null;
+    return { kind: (p.kind === 'chat' ? 'chat' : 'report'), text: p.text.trim() };
+  });
+  const members = mapFilter(a.members, (m) => {
+    if (!m || !['decider', 'opinion', 'info'].includes(m.role)) return null;
+    const o = { role: m.role };
+    if (typeof m.name === 'string' && m.name.trim()) o.name = m.name.trim();
+    o.reason = (typeof m.reason === 'string') ? m.reason.trim() : '';
+    return o;
+  });
+  const agenda = mapFilter(a.agenda, (g) => {
+    if (!g || typeof g.title !== 'string' || !g.title.trim()) return null;
+    const min = Number(g.minutes);
+    return { title: g.title.trim(), minutes: (Number.isFinite(min) && min > 0) ? Math.round(min) : 5, goal: (typeof g.goal === 'string') ? g.goal.trim() : '' };
+  });
+  const memberFeedback = (typeof a.memberFeedback === 'string' && a.memberFeedback.trim()) ? a.memberFeedback.trim() : '';
+  if (!discuss.length && !presend.length && !members.length && !agenda.length && !memberFeedback) return null;
+  const out = { type: 'propose_advice', discuss, presend, members, agenda };
+  if (memberFeedback) out.memberFeedback = memberFeedback;
+  return out;
+}
+
 // ---- エンドポイント定義 (path -> {model, maxTokens, system, mock, validate}) ----
 const ROUTES = {
   // R1 報連相仕分け
@@ -155,6 +189,7 @@ const ROUTES = {
       '- add_member: {"type":"add_member","name":"氏名","role":"decider|opinion|info|listener"}。name は必ず1人のフルネームのみ。複数人を招集する場合は add_member を人数分だけ繰り返す（1 action = 1人）。1つの name に「成迫,森,広瀬」のように複数名を詰め込んではならない。role は必ず decider / opinion / info / listener のいずれか一つ。決裁者は role を必ず "decider" とし、最低1人は含めること。',
       '- set_question: {"type":"set_question","question":"決める問い"}。question にはあなた自身の質問文（例「何を決めますか？」）を入れてはならない。ユーザーが実際に答えた「決めること」の要約（1つの問い）だけを入れる。',
       '- propose_meeting: {"type":"propose_meeting","question":"決める問い"}。question は set_question と同様、あなたの質問文ではなくユーザーが答えた決定事項の要約を入れる。',
+      '- propose_advice: {"type":"propose_advice","discuss":[{"title":"議論すべきこと(疑問形推奨)","note":"やわらかい補足(任意)"}],"presend":[{"kind":"report|chat","text":"会議前に済ませる報告/連絡"}],"members":[{"name":"氏名(任意)","role":"decider|opinion|info","reason":"招集する理由"}],"memberFeedback":"人数や役割へのやわらかい助言(任意)","agenda":[{"title":"議題","minutes":分,"goal":"今日決めること(終了条件)"}]}。会議主催者への3点アドバイス（①会議で議論すべきこと ②招集すべき人 ③アジェンダ）をまとめる。判断基準: 「議論すべきこと」は相談（未来の判断が必要な問い）だけにし、報告（過去）・連絡（現在）は presend へ振り分ける。members は必要最小限＋役割つき（決める人は decider を1名）、「聞くだけ」の人は招集せず議事レポート送付に回す。agenda は冒頭に目的確認・末尾に決定とO/D/N確認を置き、各議題にタイムボックス（minutes）と「今日決めること」（goal）を付け、合計は30分以内を推奨する。7つのムダに触れそうな点は note や memberFeedback でやわらかく注意し、断定・禁止表現（〜してはいけない等）は使わずガイドに徹する。分かった範囲だけでよく、毎ターン返す必要はない。会議をやる流れが固まったとき（propose_meeting の前後）に1回返せばよい。',
       '【構造化抽出 extract】対話から分かった範囲だけで、裏側のトヨタA3・7つのムダ・報連相の3フレームワークへ反映するための抽出を返してください。分かった範囲だけでよく、完璧を期す必要はありません（分からなければ空でよい）。形式:',
       '  "extract": {',
       '    "a3": { "該当ステップ番号(1〜8の文字列)": "その断片（1=背景/2=現状/3=目標/4=要因/5=対策/6=計画/7=実施/8=評価）" },',
@@ -163,7 +198,7 @@ const ROUTES = {
       '  }',
       '  ・presend は「会議までに事前送付すべき資料（例: 現状把握レポート）」のとき true。',
       '  ・a3/muda のキーは文字列の番号。分かった項目だけ入れ、埋まらない項目は省略してよい。',
-      '必ず次のJSONのみを出力: {"reply":"次の一問（日本語）","choices":["選択肢",...],"actions":[{"type":"set_title|set_route|fill_step|set_question|add_member|propose_meeting|suggest_report",...}],"extract":{"a3":{},"horenso":[],"muda":{}},"state":{"phase":"次の局面",...}}'
+      '必ず次のJSONのみを出力: {"reply":"次の一問（日本語）","choices":["選択肢",...],"actions":[{"type":"set_title|set_route|fill_step|set_question|add_member|propose_meeting|propose_advice|suggest_report",...}],"extract":{"a3":{},"horenso":[],"muda":{}},"state":{"phase":"次の局面",...}}'
     ].join('\n'),
     // MOCK: v5-1 の質問ツリーを決定的になぞる。state.phase で局面を進める。
     mock(messages, state) {
@@ -237,7 +272,7 @@ const ROUTES = {
             choices: ['現状把握レポート（Step2）を開く', 'それでも今すぐ会議が必要'],
             actions: [{ type: 'suggest_report', kind: 'report', step: 2 }],
             extract: { a3: { '2': '判断に必要な事実が未収集。現状把握レポートで先に共有する' }, horenso: [{ kind: 'report', text: '現状把握レポート（Step2）', presend: true }], muda: {} },
-            state: next({ phase: 'factsNotReady' })
+            state: next({ phase: 'factsNotReady', factsNotReady: true })
           };
         }
         case 'factsNotReady': {
@@ -268,10 +303,24 @@ const ROUTES = {
         }
         case 'decider': {
           const name = text.trim();
+          const dq = st.decisionQuestion || '';
+          // v6-5(#47): 会議をやる流れが固まったこの局面で、主催者への3点アドバイスを1回返す。
+          const advice = {
+            type: 'propose_advice',
+            discuss: dq ? [{ title: dq, note: '未来の判断が必要な相談です。会議で扱います' }] : [],
+            presend: st.factsNotReady ? [{ kind: 'report', text: '現状把握レポート（Step2）で事実を事前共有' }] : [],
+            members: [{ name, role: 'decider', reason: 'この問いを決められる決裁者（必須1名）' }],
+            memberFeedback: '「聞くだけ」の人は招集せず、議事レポートの送付に回すのがおすすめです。役割が曖昧な人は外して最小限にしましょう。',
+            agenda: [
+              { title: '目的・ゴールの確認', minutes: 3, goal: 'この会議で決めることを全員で共有' },
+              { title: dq || '決める問い', minutes: 20, goal: 'この問いに結論を出し、担当と期限まで決める' },
+              { title: '決定事項とO/D/N（宿題・次アクション）の確認', minutes: 5, goal: '決定・担当・期限・次アクションを確認' }
+            ]
+          };
           return {
             reply: '意見や情報が必要な人はいますか？名前を入力してください。「聞くだけ」の人は招集せずレポート送付に回します。いなければ「まとめへ」を選んでください。',
             choices: ['まとめへ'],
-            actions: [{ type: 'add_member', name, role: 'decider' }],
+            actions: [{ type: 'add_member', name, role: 'decider' }, advice],
             extract: { a3: {}, horenso: [], muda: { '1': { status: 'ok', note: `決める人が明確（${name}）` } } },
             state: next({ phase: 'participants', decider: name })
           };
@@ -325,6 +374,15 @@ const ROUTES = {
         (r.actions === undefined || Array.isArray(r.actions)) &&
         (r.extract === undefined || (r.extract && typeof r.extract === 'object' && !Array.isArray(r.extract))) &&
         (r.state === undefined || (r.state && typeof r.state === 'object'));
+    },
+    // v6-5(#47): 応答内の propose_advice アクションを型ガードで無害化（不正形状は破棄）。
+    sanitize(r) {
+      if (r && Array.isArray(r.actions)) {
+        r.actions = r.actions
+          .map(a => (a && a.type === 'propose_advice') ? sanitizeAdviceAction(a) : a)
+          .filter(Boolean);
+      }
+      return r;
     }
   }
 };
@@ -625,6 +683,9 @@ const server = http.createServer(async (req, res) => {
           }
         }
       }
+
+      // v6-5(#47): 応答の型ガード（例: propose_advice の不正形状を破棄して無害化）。
+      if (route.sanitize && result) { try { result = route.sanitize(result); } catch (e) {} }
 
       sendJson(res, 200, {
         ok: true,

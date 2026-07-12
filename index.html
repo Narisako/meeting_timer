@@ -290,6 +290,18 @@
   /* v6-1: チャット内の会議招集文面ブロック（コピー可能な pre） */
   .intake-invite-block { align-self: stretch; max-width: 100%; background: #fff; border: 1px solid var(--accent); border-radius: 12px; padding: 10px 12px; }
   .intake-invite-pre { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.5; margin: 0 0 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  /* v6-5(#47): チャット内「主催者への3点アドバイス」カード */
+  .intake-advice { align-self: stretch; max-width: 100%; background: #fff; border: 1px solid var(--gold, var(--accent)); border-left: 4px solid var(--gold, var(--accent)); border-radius: 12px; padding: 10px 14px; font-size: 13px; line-height: 1.6; }
+  .intake-advice .adv-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+  .intake-advice .adv-sec { margin-top: 8px; }
+  .intake-advice .adv-sec-h { font-weight: 700; }
+  .intake-advice ul { margin: 4px 0 0; padding-left: 18px; }
+  .intake-advice li { margin: 2px 0; }
+  .intake-advice .adv-note { color: var(--sub); }
+  .intake-advice .adv-presend { color: var(--accent); font-size: 12px; }
+  .intake-advice .adv-warn { color: var(--warn); }
+  .intake-advice .adv-cost { color: var(--sub); font-size: 12px; margin-top: 2px; }
+  .intake-advice .adv-foot { color: var(--sub); font-size: 12px; margin-top: 8px; font-style: italic; }
   /* v6-2: 参照専用3タブ（A3・ムダ・報連相の自動反映ビュー） */
   .ref-note { background: var(--accent-soft); border-radius: 8px; padding: 6px 10px; margin: 6px 0 10px; font-size: 13px; color: var(--ink); }
   .ref-selector { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
@@ -5290,6 +5302,8 @@ function resetStats() {
 // ==================================================================
 // 役割ラベル（招集メンバーの表示・招集文面生成で使用）。
 const INTAKE_ROLE_LABEL = { opinion: '意見を出す人', info: '情報を持っている人', listener: '聞くだけ（レポート送付）' };
+// v6-5(#47): 3点アドバイスカード用の役割ラベル（decider を含む）。
+const INTAKE_ADVICE_ROLE_LABEL = { decider: '決める人', opinion: '意見を出す人', info: '情報を持っている人' };
 
 // v5-4 bugfix(#41): 複数名一括入力を分割する。区切りは , 、 ， / と改行。trim・空要素除去。
 function intakeSplitNames(str) {
@@ -5335,6 +5349,8 @@ function newIntakeState() {
     // v6-3: AI応答の extract（a3/horenso/muda）を対話をまたいで累積する器。裏タブ反映で
     //   ルールベースのヒューリスティック反映と共存させる（intakeSyncSeriesData で統合）。
     aiExtract: { a3: {}, horenso: [], muda: {} },
+    // v6-5(#47): AI/決定的に生成した「主催者への3点アドバイス」（会議招集文面へ反映）。
+    advice: null,
     // v6-4 AIモード: aiMode は 'ai'（既定）|'off'（LLM設定OFF時）。aiState はサーバへ毎回送る局面。
     //   ルールベース質問ツリーへのフォールバック（旧 'rule'）は #46 で廃止。
     aiMode: 'ai', aiState: null, aiBusy: false
@@ -5391,6 +5407,10 @@ function renderIntake() {
       msgs.appendChild(wrap);
       return;
     }
+    if (m.kind === 'advice' && m.advice) {
+      msgs.appendChild(intakeRenderAdviceCard(m.advice));
+      return;
+    }
     const div = document.createElement('div');
     div.className = 'intake-msg intake-' + m.role;
     div.textContent = m.text;
@@ -5414,6 +5434,138 @@ function intakeSayInvite(text) {
   intake.log.push({ role: 'system', kind: 'invite', text: text, at: Date.now() });
   persistIntakeLog();
   renderIntake();
+}
+// v6-5(#47): 「主催者への3点アドバイス」カードをチャットに積む（構造化データを保持し再描画に耐える）。
+function intakeSayAdvice(advice) {
+  intake.log.push({ role: 'system', kind: 'advice', advice: advice, text: '', at: Date.now() });
+  persistIntakeLog();
+  renderIntake();
+}
+// v6-5(#47): AIが返した propose_advice を防御的に正規化する（不正形状は破棄・無害化）。
+//   サーバー側でも sanitize 済みだが、クライアントでも二重に守る。
+function intakeNormalizeAdvice(a) {
+  if (!a || typeof a !== 'object') return null;
+  const arr = function (x) { return Array.isArray(x) ? x : []; };
+  const discuss = arr(a.discuss).map(function (d) {
+    if (!d || typeof d.title !== 'string' || !d.title.trim()) return null;
+    return { title: d.title.trim(), note: (typeof d.note === 'string') ? d.note.trim() : '' };
+  }).filter(Boolean);
+  const presend = arr(a.presend).map(function (p) {
+    if (!p || typeof p.text !== 'string' || !p.text.trim()) return null;
+    return { kind: (p.kind === 'chat' ? 'chat' : 'report'), text: p.text.trim() };
+  }).filter(Boolean);
+  const members = arr(a.members).map(function (m) {
+    if (!m || ['decider', 'opinion', 'info'].indexOf(m.role) < 0) return null;
+    return { name: (typeof m.name === 'string') ? m.name.trim() : '', role: m.role, reason: (typeof m.reason === 'string') ? m.reason.trim() : '' };
+  }).filter(Boolean);
+  const agenda = arr(a.agenda).map(function (g) {
+    if (!g || typeof g.title !== 'string' || !g.title.trim()) return null;
+    const min = Number(g.minutes);
+    return { title: g.title.trim(), minutes: (isFinite(min) && min > 0) ? Math.round(min) : 5, goal: (typeof g.goal === 'string') ? g.goal.trim() : '' };
+  }).filter(Boolean);
+  const memberFeedback = (typeof a.memberFeedback === 'string') ? a.memberFeedback.trim() : '';
+  if (!discuss.length && !presend.length && !members.length && !agenda.length && !memberFeedback) return null;
+  return { discuss: discuss, presend: presend, members: members, agenda: agenda, memberFeedback: memberFeedback };
+}
+// v6-5(#47): 3点アドバイスカードのDOMを組み立てる（読み取り専用・チャット内完結）。
+function intakeRenderAdviceCard(advice) {
+  const wrap = document.createElement('div');
+  wrap.className = 'intake-msg intake-advice';
+  const h = document.createElement('div');
+  h.className = 'adv-title';
+  h.textContent = '💡 会議主催者への3点アドバイス';
+  wrap.appendChild(h);
+
+  // 1. 会議で議論すべきこと（相談のみ）＋ 議論しない項目は事前送付がおすすめ
+  const s1 = document.createElement('div'); s1.className = 'adv-sec';
+  const s1h = document.createElement('div'); s1h.className = 'adv-sec-h'; s1h.textContent = '1. 会議で議論すべきこと（相談＝未来の判断のみ）';
+  s1.appendChild(s1h);
+  if (advice.discuss && advice.discuss.length) {
+    const ul = document.createElement('ul');
+    advice.discuss.forEach(function (d) {
+      const li = document.createElement('li');
+      li.textContent = d.title;
+      if (d.note) { const n = document.createElement('span'); n.className = 'adv-note'; n.textContent = '（' + d.note + '）'; li.appendChild(n); }
+      ul.appendChild(li);
+    });
+    s1.appendChild(ul);
+  } else {
+    const p = document.createElement('div'); p.className = 'adv-note'; p.textContent = '（まだ相談＝決める問いが定まっていません。対話で1つに絞ると議論が締まります）';
+    s1.appendChild(p);
+  }
+  if (advice.presend && advice.presend.length) {
+    advice.presend.forEach(function (p) {
+      const d = document.createElement('div'); d.className = 'adv-presend';
+      d.textContent = '→ ' + p.text + '（会議で扱わず、会議前に' + (p.kind === 'chat' ? 'チャット' : 'レポート') + 'で済ませるのがおすすめ）';
+      s1.appendChild(d);
+    });
+  }
+  wrap.appendChild(s1);
+
+  // 2. 招集すべき人（必要最小限＋役割・理由）＋ 適切性フィードバック＋参考換算額
+  const s2 = document.createElement('div'); s2.className = 'adv-sec';
+  const s2h = document.createElement('div'); s2h.className = 'adv-sec-h'; s2h.textContent = '2. 招集すべき人（必要最小限・役割つき）';
+  s2.appendChild(s2h);
+  if (advice.members && advice.members.length) {
+    const ul = document.createElement('ul');
+    advice.members.forEach(function (m) {
+      const li = document.createElement('li');
+      const label = INTAKE_ADVICE_ROLE_LABEL[m.role] || m.role;
+      li.textContent = (m.name ? m.name + '（' + label + '）' : label) + (m.reason ? '… ' + m.reason : '');
+      ul.appendChild(li);
+    });
+    s2.appendChild(ul);
+  } else {
+    const p = document.createElement('div'); p.className = 'adv-note'; p.textContent = '（決める人1名＋意見・情報を持つ人だけに絞りましょう。「聞くだけ」の人は議事レポート送付へ）';
+    s2.appendChild(p);
+  }
+  if (advice.memberFeedback) {
+    const fb = document.createElement('div'); fb.className = 'adv-warn'; fb.textContent = '⚠️ ' + advice.memberFeedback;
+    s2.appendChild(fb);
+  }
+  const cost = intakeAdviceCostText(advice);
+  if (cost) { const c = document.createElement('div'); c.className = 'adv-cost'; c.textContent = cost; s2.appendChild(c); }
+  wrap.appendChild(s2);
+
+  // 3. アジェンダ案（タイムボックス／今日決めること）
+  const s3 = document.createElement('div'); s3.className = 'adv-sec';
+  const s3h = document.createElement('div'); s3h.className = 'adv-sec-h'; s3h.textContent = '3. アジェンダ案（タイムボックス／今日決めること）';
+  s3.appendChild(s3h);
+  if (advice.agenda && advice.agenda.length) {
+    const total = advice.agenda.reduce(function (n, g) { return n + (g.minutes || 0); }, 0);
+    const ul = document.createElement('ul');
+    advice.agenda.forEach(function (g) {
+      const li = document.createElement('li');
+      li.textContent = g.title + '（' + (g.minutes || 0) + '分）' + (g.goal ? '／今日決めること: ' + g.goal : '');
+      ul.appendChild(li);
+    });
+    s3.appendChild(ul);
+    const t = document.createElement('div'); t.className = 'adv-note'; t.textContent = '合計 ' + total + '分';
+    s3.appendChild(t);
+    if (total > 30) { const w = document.createElement('div'); w.className = 'adv-warn'; w.textContent = '⚠️ 30分を超えています。分割して次回へ回すのもおすすめです（強制ではありません）。'; s3.appendChild(w); }
+  } else {
+    const p = document.createElement('div'); p.className = 'adv-note'; p.textContent = '（冒頭に目的確認・末尾に決定確認を置き、合計30分以内を目安に）';
+    s3.appendChild(p);
+  }
+  wrap.appendChild(s3);
+
+  const foot = document.createElement('div'); foot.className = 'adv-foot';
+  foot.textContent = 'あくまでおすすめです。対話を続けて自由に変更できます。';
+  wrap.appendChild(foot);
+  return wrap;
+}
+// v6-5(#47): アドバイスの招集メンバー人数から参考換算額を出す（1人減らす意思決定を後押し）。
+function intakeAdviceCostText(advice) {
+  const rate = loadRate();
+  let count = (advice && Array.isArray(advice.members)) ? advice.members.length : 0;
+  // 対話で集めた最小メンバー（決裁者＋招集する人）も考慮し、多い方を使う。
+  const active = (intake && intake.participants) ? intake.participants.filter(function (p) { return p.role !== 'listener'; }) : [];
+  const collected = (intake && intake.decider ? 1 : 0) + active.length;
+  count = Math.max(count, collected);
+  if (!count) return '';
+  const perPerson = Math.round(30 * rate / 60);
+  const est = count * perPerson;
+  return '参考: この会議の値札（見込み）¥' + est.toLocaleString() + '（' + count + '人 × 30分 × 人時単価 ¥' + rate.toLocaleString() + '）。1人減らすと¥' + perPerson.toLocaleString() + '節約。';
 }
 function persistIntakeLog() {
   if (!intake.seriesId) return;
@@ -5544,23 +5696,62 @@ function intakeToDesign() {
 //   ・「事実が揃っていない/わからない」と判明していれば【会議までに事前送付のお願い】を付す。
 // ==================================================================
 
+// v6-5(#47): 3点アドバイスの素材（propose_advice があれば優先、無ければ対話情報から決定的生成）。
+function intakeAdviceData() {
+  return (intake && intake.advice && typeof intake.advice === 'object') ? intake.advice : null;
+}
+// ①会議で議論すべきこと（相談のみ）。[{title, note}]
+function intakeDiscussItems() {
+  const ad = intakeAdviceData();
+  if (ad && Array.isArray(ad.discuss) && ad.discuss.length) {
+    return ad.discuss.map(function (d) { return { title: d.title, note: d.note || '' }; });
+  }
+  if (intake.decisionQuestion) return [{ title: intake.decisionQuestion, note: '未来の判断が必要な相談です' }];
+  return [];
+}
+// ③アジェンダ（タイムボックス／今日決めること）。[{title, minutes, goal}]
+function intakeAgendaItems() {
+  const ad = intakeAdviceData();
+  if (ad && Array.isArray(ad.agenda) && ad.agenda.length) {
+    return ad.agenda.map(function (g) { return { title: g.title, minutes: g.minutes || 5, goal: g.goal || '' }; });
+  }
+  if (intake.decisionQuestion) {
+    return [
+      { title: '目的・ゴールの確認', minutes: 3, goal: 'この会議で決めることを全員で共有' },
+      { title: intake.decisionQuestion, minutes: 20, goal: 'この問いに結論を出し、担当と期限まで決める' },
+      { title: '決定事項とO/D/N（宿題・次アクション）の確認', minutes: 5, goal: '決定・担当・期限・次アクションを確認' }
+    ];
+  }
+  return [];
+}
+
 // 会議前に事前送付を依頼すべき資料の列挙（該当がなければ空配列＝セクション省略）。
 function intakePresendItems() {
   const items = [];
+  const who = intake.decider || '決裁者または情報を持っている人';
   const factsNotReady = (intake.factsReady === 'no' || intake.factsReady === 'unknown');
   if (factsNotReady) {
-    const who = intake.decider || '決裁者または情報を持っている人';
     items.push('現状把握レポート（Step2）を会議前に事前送付してください（担当: ' + who + '）');
   }
   // v6-3: AI対話由来の presend=true の報連相（事前送付すべき資料）も事前送付セクションへ反映。
   const ax = (intake && intake.aiExtract && Array.isArray(intake.aiExtract.horenso)) ? intake.aiExtract.horenso : [];
   ax.forEach(function (h) {
     if (!h || !h.presend || !h.text) return;
-    const who = intake.decider || '決裁者または情報を持っている人';
     const line = h.text + 'を会議前に事前送付してください（担当: ' + who + '）';
     // 既存項目と実質重複しないときだけ追加（現状把握レポートは上で既出になり得る）。
     if (!items.some(function (x) { return x.indexOf(h.text) >= 0; })) items.push(line);
   });
+  // v6-5(#47): アドバイスの presend（会議で扱わず会議前に済ませる報告/連絡）も反映。
+  const ad = intakeAdviceData();
+  if (ad && Array.isArray(ad.presend)) {
+    ad.presend.forEach(function (p) {
+      if (!p || !p.text) return;
+      // 大まかなキーで重複判定（「現状把握レポート（Step2）で事実を〜」等の言い回し差を吸収）。
+      const key = String(p.text).replace(/で事実を.*$|を会議前.*$/, '').trim();
+      if (key && items.some(function (x) { return x.indexOf(key) >= 0; })) return;
+      items.push(p.text + 'を会議前に' + (p.kind === 'chat' ? 'チャットで共有' : '事前送付') + 'してください（担当: ' + who + '）');
+    });
+  }
   return items;
 }
 
@@ -5577,20 +5768,40 @@ function intakeBuildInviteText() {
   L.push('');
   L.push('■ 背景');
   L.push(intakeSummaryText());
+  // v6-5(#47) ①会議で議論すべきこと（相談＝未来の判断のみ）
+  const discuss = intakeDiscussItems();
+  if (discuss.length) {
+    L.push('');
+    L.push('■ 会議で議論すること（相談＝未来の判断のみ）');
+    discuss.forEach(function (d, i) {
+      L.push((i + 1) + '. ' + d.title);
+      if (d.note) L.push('   ' + d.note);
+    });
+  }
   if (intake.decisionQuestion) {
     L.push('');
     L.push('■ 判断する問い');
     L.push(intake.decisionQuestion);
+  }
+  // v6-5(#47) ③アジェンダ（タイムボックス／今日決めること）。ヘッダは既存互換のため「議題と今日決めること」を維持。
+  const agenda = intakeAgendaItems();
+  if (agenda.length) {
+    const totalMin = agenda.reduce(function (n, g) { return n + (g.minutes || 0); }, 0);
     L.push('');
-    L.push('■ 議題と今日決めること（合計 10分）');
-    L.push('1. ' + intake.decisionQuestion + '（10分）');
-    L.push('   今日決めること: この問いに結論を出し、担当と期限まで決める');
+    L.push('■ 議題と今日決めること（合計 ' + totalMin + '分）');
+    agenda.forEach(function (g, i) {
+      L.push((i + 1) + '. ' + g.title + '（' + (g.minutes || 0) + '分）');
+      if (g.goal) L.push('   今日決めること: ' + g.goal);
+    });
+    if (totalMin > 30) L.push('※ 合計が30分を超えています。分割して次回へ回すのがおすすめです（強制ではありません）。');
   }
   L.push('');
   L.push('■ 招集メンバー（役割つき・最小）');
   if (memberCount) {
     if (intake.decider) L.push('・' + intake.decider + '（決める人）');
     active.forEach(function (p) { L.push('・' + p.name + '（' + INTAKE_ROLE_LABEL[p.role] + '）'); });
+    const ad = intakeAdviceData();
+    if (ad && ad.memberFeedback) L.push('（' + ad.memberFeedback + '）');
   } else {
     L.push('（招集メンバーは未設定です。決める人・意見・情報の役割で最小限に絞ってください）');
   }
@@ -6162,6 +6373,16 @@ function intakeApplyAction(a, replyText) {
       if (a.question && !intakeIsSelfReference(a.question, replyText)) intake.decisionQuestion = a.question;
       intakeToDesign();
       break;
+    case 'propose_advice': {
+      // v6-5(#47): 主催者への3点アドバイスをチャット内に表示し、intake state / series に保持する。
+      const ad = intakeNormalizeAdvice(a);
+      if (ad) {
+        intake.advice = ad;
+        intakeSayAdvice(ad);
+        if (intake.seriesId) intakeSyncSeriesData();
+      }
+      break;
+    }
     case 'suggest_report':
       if (a.step === 2 && intake.seriesId) {
         openStepEditor(intake.seriesId, 2, 'report');
