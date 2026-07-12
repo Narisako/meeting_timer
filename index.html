@@ -198,6 +198,13 @@
     max-height: 220px; overflow: auto; margin: 8px 0 0;
   }
   .llm-dest { font-size: 13px; margin: 6px 0 0; word-break: break-all; }
+  /* v5-3: 初回のみの軽量通知（非ブロッキング・クリックを妨げない） */
+  .llm-first-notice {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    max-width: 90%; background: #1f2937; color: #fff; padding: 10px 16px;
+    border-radius: 8px; font-size: 13px; line-height: 1.5; z-index: 9999;
+    box-shadow: 0 4px 16px rgba(0,0,0,.25); pointer-events: none; display: none;
+  }
   /* A3案件ビュー */
   .a3-case { border-left: 4px solid var(--accent); }
   .a3-case.closed { border-left-color: var(--ok); opacity: .85; }
@@ -769,10 +776,11 @@
 
   <div class="card">
     <h2>AIアシスト設定</h2>
-    <p class="note">アシストは任意です。OFFのままでも全機能がそのまま使えます（オフラインファースト）。送信は必ずボタン操作＋送信前プレビューへの同意でのみ行われ、データはこの端末のlocalStorageにだけ残ります（ゼロリテンション）。</p>
+    <p class="note">オンライン前提でAIアシストは既定でONです。送信はAIアシストのボタン操作でのみ発火し、初回だけ「サーバーへ送信します（保存されません）」を1度お知らせします（以後はワンクリック送信）。送信内容はサーバーに保存されず、設定・データはこの端末のlocalStorageにだけ残ります（ゼロリテンション）。エンドポイントは同一オリジンを自動検出します。OFFにする、またはサーバーへ届かない場合も、全機能はルールベースでそのまま使えます。</p>
     <label for="llm-endpoint">エンドポイントURL</label>
     <input type="text" id="llm-endpoint" placeholder="http://localhost:8787">
-    <label class="llm-toggle"><input type="checkbox" id="llm-enabled"><span>AIアシストを有効にする（既定: OFF）</span></label>
+    <label class="llm-toggle"><input type="checkbox" id="llm-enabled"><span>AIアシストを有効にする（既定: ON）</span></label>
+    <label class="llm-toggle"><input type="checkbox" id="llm-always-confirm"><span>送信前確認を毎回表示する（既定: OFF）</span></label>
     <div style="margin-top:14px">
       <button class="primary small" onclick="saveLlmFromUI()">設定を保存</button>
       <span id="llm-save-status" class="note" style="margin-left:8px"></span>
@@ -1195,13 +1203,18 @@ function renderDataMgmt() {
 }
 
 // ---------- AIアシスト（v3土台: 設定・共通クライアント・フォールバック） ----------
-// 設計原則: ①オフラインファースト（OFFでもv2全機能が完全動作）
-//           ②ゼロリテンション（設定はlocalStorageのみ）
-//           ③明示的送信（ボタン操作＋送信前プレビュー同意でのみ発火。自動送信はしない）
+// 設計原則: ①オフラインファースト（OFF・サーバー不達でも全機能が完全動作）
+//           ②ゼロリテンション（設定はlocalStorageのみ・送信内容はサーバーに保存しない）
+//           ③明示的送信（AIアシストは必ずボタン操作でのみ発火。自動送信はしない）
+//           ④使い勝手優先（v5-3）: 毎クリック同意モーダルは廃止。初回のみ軽量通知を1度出し、
+//             以後はワンクリック送信。毎回確認したい人向けに alwaysConfirm オプションを残す。
 const LLM_KEY = 'sekisho.llm';
 const LLM_DEFAULT_ENDPOINT = 'http://localhost:8787';
 const LLM_TIMEOUT_MS = 10000;
 const LLM_UNAVAILABLE_MSG = 'AIアシストは利用できません。手動で続行してください。';
+// v5-3: 初回のみの軽量通知（1度だけ表示し、以後はこのフラグで抑止する）
+const LLM_NOTICE_KEY = 'sekisho.llm.firstNoticeShown';
+const LLM_FIRST_NOTICE = 'AIアシストは、この操作の内容をサーバーへ送信します（サーバーには保存されません／ゼロリテンション）。以後この通知は表示しません。';
 
 // 既定エンドポイントの自動検出: http(s) 配信なら同一オリジン、file:// なら localhost:8787。
 function autoLlmEndpoint() {
@@ -1216,17 +1229,20 @@ function loadLlm() {
     const v = JSON.parse(localStorage.getItem(LLM_KEY) || '{}');
     return {
       endpoint: (typeof v.endpoint === 'string' && v.endpoint.trim()) ? v.endpoint.trim() : autoLlmEndpoint(),
-      enabled: v.enabled === false ? false : true
+      enabled: v.enabled === false ? false : true,
+      // v5-3: 既定は false（ワンクリック送信）。true のときのみ毎回送信前プレビューを表示する。
+      alwaysConfirm: v.alwaysConfirm === true
     };
   } catch (e) {
-    return { endpoint: autoLlmEndpoint(), enabled: true };
+    return { endpoint: autoLlmEndpoint(), enabled: true, alwaysConfirm: false };
   }
 }
 function saveLlm(cfg) {
   const endpoint = (cfg && typeof cfg.endpoint === 'string' && cfg.endpoint.trim()) ? cfg.endpoint.trim() : LLM_DEFAULT_ENDPOINT;
   const enabled = !!(cfg && cfg.enabled);
-  localStorage.setItem(LLM_KEY, JSON.stringify({ endpoint, enabled }));
-  return { endpoint, enabled };
+  const alwaysConfirm = !!(cfg && cfg.alwaysConfirm);
+  localStorage.setItem(LLM_KEY, JSON.stringify({ endpoint, enabled, alwaysConfirm }));
+  return { endpoint, enabled, alwaysConfirm };
 }
 
 // 設定カードの表示・保存
@@ -1234,13 +1250,16 @@ function renderLlmSettings() {
   const cfg = loadLlm();
   const ep = document.getElementById('llm-endpoint');
   const en = document.getElementById('llm-enabled');
+  const ac = document.getElementById('llm-always-confirm');
   if (ep) ep.value = cfg.endpoint;
   if (en) en.checked = cfg.enabled;
+  if (ac) ac.checked = cfg.alwaysConfirm;
 }
 function saveLlmFromUI() {
   const ep = document.getElementById('llm-endpoint');
   const en = document.getElementById('llm-enabled');
-  const saved = saveLlm({ endpoint: ep ? ep.value : '', enabled: en ? en.checked : false });
+  const ac = document.getElementById('llm-always-confirm');
+  const saved = saveLlm({ endpoint: ep ? ep.value : '', enabled: en ? en.checked : false, alwaysConfirm: ac ? ac.checked : false });
   if (ep) ep.value = saved.endpoint; // 空入力は既定値に正規化して反映
   const st = document.getElementById('llm-save-status');
   if (st) st.textContent = '保存しました（' + (saved.enabled ? 'ON' : 'OFF') + '）';
@@ -1312,24 +1331,54 @@ function llmFetch(endpoint, kind, payload) {
   });
 }
 
-// 共通クライアント。OFF時は fetch せず null。ON時は同意モーダルを経てのみ fetch。
+// v5-3: 初回のみの軽量通知。1度だけ画面下に非ブロッキングで表示し、以後はフラグで抑止する。
+// pointer-events:none なのでボタン操作を妨げない（ワンクリック送信を阻害しない）。
+function llmFirstNoticeSeen() {
+  try { return localStorage.getItem(LLM_NOTICE_KEY) === '1'; } catch (e) { return false; }
+}
+function showLlmFirstNoticeOnce() {
+  if (llmFirstNoticeSeen()) return;
+  try { localStorage.setItem(LLM_NOTICE_KEY, '1'); } catch (e) {}
+  let el = document.getElementById('llm-first-notice');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'llm-first-notice';
+    el.className = 'llm-first-notice';
+    document.body.appendChild(el);
+  }
+  el.textContent = LLM_FIRST_NOTICE;
+  el.style.display = 'block';
+  clearTimeout(showLlmFirstNoticeOnce._t);
+  showLlmFirstNoticeOnce._t = setTimeout(() => { const e = document.getElementById('llm-first-notice'); if (e) e.style.display = 'none'; }, 6000);
+}
+
+// 共通クライアント。OFF時は fetch せず null。
+// 既定（v5-3）: ワンクリック送信（初回のみ軽量通知を1度表示）。
+// alwaysConfirm=true のときのみ従来の送信前プレビュー同意モーダルを表示する。
 // 失敗（タイムアウト/HTTPエラー/ネットワーク断/同意拒否）はすべて null で返す。
 function llmAssist(kind, payload) {
   const cfg = loadLlm();
   if (!cfg.enabled) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    openLlmConsent(
-      kind, payload, cfg.endpoint,
-      () => { resolve(llmFetch(cfg.endpoint, kind, payload)); },
-      () => { resolve(null); }
-    );
-  });
+  if (cfg.alwaysConfirm) {
+    return new Promise((resolve) => {
+      openLlmConsent(
+        kind, payload, cfg.endpoint,
+        () => { resolve(llmFetch(cfg.endpoint, kind, payload)); },
+        () => { resolve(null); }
+      );
+    });
+  }
+  // 既定: 明示的なボタン操作からのみ呼ばれる想定。ワンクリックで送信し、初回のみ通知する。
+  showLlmFirstNoticeOnce();
+  return llmFetch(cfg.endpoint, kind, payload);
 }
 
 // テスト用に公開（本Issueでは各画面への呼び出しボタンは設けない）
 window.llmAssist = llmAssist;
 window.loadLlm = loadLlm;
 window.saveLlm = saveLlm;
+window.llmFirstNoticeSeen = llmFirstNoticeSeen;
+window.LLM_NOTICE_KEY = LLM_NOTICE_KEY;
 window.LLM_UNAVAILABLE_MSG = LLM_UNAVAILABLE_MSG;
 
 // --- series CRUD ---
@@ -1877,7 +1926,7 @@ const AI_ROUTE_MAP = {
 // OFF時は空にしてDOMから撤去し、既存の手動フロー（button.primary 等の想定）を無劣化に保つ。
 const AI_ROUTER_CARD_HTML =
   '<h2>AIに仕分けてもらう <span class="badge meet">AIアシスト</span></h2>' +
-  '<p class="note">伝えたい内容をそのまま貼り付けて「仕分ける」を押すと、報告／連絡／相談のどれに当たるかをAIが判定し、テンプレートまで用意します。送信前に内容を確認する同意画面が出ます。判定に納得できないときは、下の3択から手動で選べます。</p>' +
+  '<p class="note">伝えたい内容をそのまま貼り付けて「仕分ける」を押すと、報告／連絡／相談のどれに当たるかをAIが判定し、テンプレートまで用意します。ボタンを押すとその場で送信します（初回のみ送信のお知らせを表示）。判定に納得できないときは、下の3択から手動で選べます。</p>' +
   '<label for="ai-router-input">仕分けたい自由文</label>' +
   '<textarea id="ai-router-input" rows="4" placeholder="例）先週の展示会の結果を共有したいです。来場者は前年比120%で、名刺は80枚集まりました。"></textarea>' +
   '<div class="row" style="margin-top:8px">' +
@@ -5463,23 +5512,35 @@ function intakeSummaryText() {
   return L.join('\n');
 }
 
-// 8. まとめ: 会議要否・最小メンバー・値札見込み
+// 8. まとめ: 会議要否・最小化サマリ（必要人数の内訳）・値札見込み・1人減の効果
 function intakeSummary() {
   intake.state = 'summary';
   setIntakeInput(false);
   const needMeeting = (intake.tense === 'future') || intake.exceptions.length > 0;
   const deciderN = intake.decider ? 1 : 0;
   const active = intake.participants.filter(function (p) { return p.role !== 'listener'; });
+  const opinionN = active.filter(function (p) { return p.role === 'opinion'; }).length;
+  const infoN = active.filter(function (p) { return p.role === 'info'; }).length;
   const listeners = intake.participants.filter(function (p) { return p.role === 'listener'; });
   const memberCount = deciderN + active.length;
   const rate = loadRate();
-  const est = Math.round(memberCount * 30 * rate / 60);
+  const perPerson = Math.round(30 * rate / 60); // 1人30分あたりの値札
+  const est = memberCount * perPerson;
   const L = [];
   L.push('【まとめ】');
   L.push('会議要否：' + (needMeeting ? '判断セッション（会議）を推奨' : '会議は不要（レポート／チャットで完了）'));
-  L.push('最小メンバー：' + (memberCount ? (memberCount + '人（決裁者' + deciderN + '＋意見/情報' + active.length + '）') : '未設定'));
-  if (listeners.length) L.push('レポート送付のみ：' + listeners.length + '人（招集せず節約）');
-  L.push('値札見込み：¥' + est.toLocaleString() + '（' + memberCount + '人 × 30分）');
+  // 最小化サマリ（この判断に本当に必要な人数を、聞くだけの人と分けて明示する）
+  if (memberCount) {
+    let line = 'この判断に必要なのは ' + memberCount + '人（決める人' + deciderN + '・意見' + opinionN + '・情報' + infoN + '）です。';
+    if (listeners.length) line += '聞くだけの ' + listeners.length + '人 はレポート送付に回します。';
+    L.push(line);
+  } else {
+    L.push('この判断に必要な人（決める人・意見・情報）はまだ設定されていません。');
+  }
+  L.push('値札見込み：¥' + est.toLocaleString() + '（' + memberCount + '人 × 30分 × 単価¥' + rate.toLocaleString() + '/時）');
+  if (memberCount > 0) {
+    L.push('ヒント：1人減らすと ¥' + perPerson.toLocaleString() + '→ 節約できます。本当に「決める・意見・情報」に必要な人だけに絞りましょう。');
+  }
   intakeSay('system', L.join('\n'));
   setIntakeChoices([
     { label: '判断セッション設計へ進む', onClick: intakeToDesign },
@@ -5488,14 +5549,26 @@ function intakeSummary() {
 }
 
 // まとめ → 判断セッション設計へプリフィル（判断する問い・背景=要約・参加者・案件紐づけ）
+//   ・議題は「判断する問い」1件・タイムボックス最小（10分既定）でプリフィル（追加はユーザー判断）
+//   ・「事実が揃っていない」と答えた案件は、事実ゲートのあるStep3（目標設定）で設計を開き、
+//     判断準備不足の警告（#28）を確実に連動させる（揃っている案件はStep1で開く）。
 function intakeToDesign() {
   const sid = intake.seriesId;
   if (!sid) return;
-  goToStepDesign(sid, 1);
+  // 「事実が揃っていない／わからない」と明示的に答えた場合のみ、事実ゲートのあるStep3で開いて
+  // 判断準備不足の警告（#28）を連動させる。それ以外（揃っている・AI対話で未捕捉=null）はStep1。
+  const factsNotReady = (intake.factsReady === 'no' || intake.factsReady === 'unknown');
+  const stepNo = factsNotReady ? 3 : 1;
+  goToStepDesign(sid, stepNo);
   const dq = document.getElementById('mtg-decision-question');
   if (dq) dq.value = intake.decisionQuestion || '';
   const bg = document.getElementById('mtg-bg');
   if (bg) bg.value = intakeSummaryText();
+  // 議題は「判断する問い」1件・10分でプリフィル（問いが空なら追加しない）
+  agendas = [];
+  if (intake.decisionQuestion) {
+    agendas.push({ q: intake.decisionQuestion, min: 10, goal: 'この問いに結論を出し、担当と期限まで決める' });
+  }
   members = [];
   recipients = [];
   if (intake.decider) members.push({ name: intake.decider, role: 'decider', prep: '' });
