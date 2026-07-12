@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>会議ルーター — Meeting Router</title>
+<title>会議招集の前に — ちょっと待って。その会議、必要ですか？</title>
 <style>
   :root {
     --ink: #1a2333;
@@ -218,28 +218,31 @@
   .a3-hist li { justify-content: flex-start; gap: 8px; }
   .a3-hist .seq { font-weight: 700; }
   .a3-overdue { color: var(--bad); font-weight: 700; }
+  .basic-flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+  .basic-flow .flow-step { background: var(--gold-soft); color: var(--gold); border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
+  .basic-flow .flow-step::after { content: '→'; margin-left: 6px; color: var(--sub); font-weight: 400; }
+  .basic-flow .flow-step:last-child::after { content: ''; margin-left: 0; }
+  .basic-flow .flow-step.is-todo { background: #eee; color: var(--sub); }
+  .basic-flow .flow-step small { font-weight: 400; }
   @media (max-width: 560px) { .a3-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>会議ルーター</h1>
-  <span class="tagline">伝えたいことを最適な宛先へ——レポート・チャット・会議。会議は1分でも短く、1人でも少なく。</span>
+  <h1>会議招集の前に</h1>
+  <span class="tagline">ちょっと待って。その会議、必要ですか？</span>
 </header>
 <nav>
-  <button id="tab-triage" class="active" onclick="showScreen('triage')">① ルーター（報連相仕分け）</button>
-  <button id="tab-design" onclick="showScreen('design')" disabled>② 会議設計</button>
-  <button id="tab-cockpit" onclick="showScreen('cockpit')" disabled>③ コックピット</button>
-  <button id="tab-report" onclick="showScreen('report')" disabled>④ 申し送り</button>
-  <button id="tab-a3" onclick="showScreen('a3')">A3案件</button>
-  <button id="tab-dash" onclick="showScreen('dash')">節約ダッシュボード</button>
+  <button id="tab-a3" class="active" onclick="showScreen('a3')">トヨタA3 8ステップ・キャンバス</button>
+  <button id="tab-triage" onclick="showScreen('triage')">案件トリアージ</button>
+  <button id="tab-dash" onclick="showScreen('dash')">フローダッシュボード</button>
 </nav>
 
 <main>
 
-<!-- ===================== ① ルーター（トリアージ） ===================== -->
-<section id="screen-triage" class="screen active">
+<!-- ===================== 案件トリアージ ===================== -->
+<section id="screen-triage" class="screen">
   <!-- AIオートルーター: sekisho.llm.enabled 時のみ JS で中身を注入（OFF時はDOMに残さない） -->
   <div id="ai-router-card" class="card hidden"></div>
 
@@ -302,23 +305,23 @@
     <div style="margin-bottom:14px">
       <button class="ghost" onclick="startSingleConsult()">単発の相談として設計する（従来フロー）</button>
     </div>
-    <h3 style="margin-top:0">A3案件として始める</h3>
-    <p class="note">案件名とゴールを決め、8ステップで問題解決を進めます。まず Step1（背景・問題の明確化）の会議設計へ進みます。</p>
+    <h3 style="margin-top:0">トヨタA3案件として始める</h3>
+    <p class="note">案件名とゴールを決め、8ステップで問題解決を進めます。まず Step1（背景・問題の明確化）の判断セッション設計へ進みます。</p>
     <label for="new-series-title">案件名</label>
     <input type="text" id="new-series-title" placeholder="例）新製品ラインの不良率を下げる">
     <label for="new-series-goal">ゴール（あるべき姿・目標値）</label>
     <input type="text" id="new-series-goal" placeholder="例）不良率を 3% → 1.5% に半減する">
     <div id="new-series-error" class="alert bad hidden"></div>
     <div style="margin-top:10px">
-      <button class="primary" onclick="startAsA3Case()">A3案件として始める（Step1 会議設計へ）</button>
+      <button class="primary" onclick="startAsA3Case()">トヨタA3案件として始める（Step1 判断セッション設計へ）</button>
     </div>
   </div>
 </section>
 
-<!-- ===================== ② 会議設計 ===================== -->
+<!-- ===================== 判断セッション設計 ===================== -->
 <section id="screen-design" class="screen">
   <div class="card">
-    <h2>相談の設計 <span class="badge meet">ルーター通過</span> <span id="design-seq" class="badge" style="background:var(--gold-soft);color:var(--gold);display:none"></span></h2>
+    <h2>判断セッション設計 <span class="badge meet">トリアージ通過</span> <span id="design-seq" class="badge" style="background:var(--gold-soft);color:var(--gold);display:none"></span></h2>
     <p class="note">議題は「未来の問い（〜するか？〜すべきか？）」だけ。参加者は役割がある人だけ。値札を見てから開きます。</p>
     <label for="mtg-title">会議名</label>
     <input type="text" id="mtg-title" placeholder="例）新製品の価格をどう設定するか" oninput="renderInvite()">
@@ -420,7 +423,7 @@
   </div>
 </section>
 
-<!-- ===================== ③ コックピット ===================== -->
+<!-- ===================== 思考のコックピット ===================== -->
 <section id="screen-cockpit" class="screen">
   <div class="card">
     <h2 id="cockpit-title"></h2>
@@ -450,15 +453,15 @@
   </div>
 </section>
 
-<!-- ===================== ④ 申し送り ===================== -->
+<!-- ===================== 決定事項と申し送り事項 ===================== -->
 <section id="screen-report" class="screen">
   <div class="card">
-    <h2>申し送り（次の状態）</h2>
+    <h2>決定事項と申し送り事項（次の状態）</h2>
     <p class="note">議事録より必要なのは「次の状態」= Decision / Action / Owner / Due / Next の5点。呼ばなかった人へコピーして送付してください。</p>
     <div id="report-summary"></div>
     <pre class="report" id="report-body"></pre>
     <div class="row">
-      <div><button class="ghost" onclick="copyReport(this)">申し送りをコピー</button></div>
+      <div><button class="ghost" onclick="copyReport(this)">決定事項と申し送りをコピー</button></div>
     </div>
     <!-- R4 申し送り3行要約: LLM ON時のみ JS で中身を注入（OFF時はDOMに残さない） -->
     <div id="handoff-assist" class="hidden" style="margin-top:8px"></div>
@@ -473,13 +476,13 @@
     <div id="next-error" class="alert bad hidden"></div>
     <div class="row" style="margin-top:10px">
       <div style="flex:0"><button class="primary" onclick="reserveNextMeeting()">次回会議を予約</button></div>
-      <div style="flex:0"><button class="danger" id="btn-close-series" onclick="closeThisSeries()">この案件は決着</button></div>
+      <div style="flex:0"><button class="danger" id="btn-close-series" onclick="closeThisSeries()">この案件を成果確定</button></div>
     </div>
     <div id="next-status" class="alert ok hidden"></div>
   </div>
 
   <div class="card hidden" id="a3-onepager-card">
-    <h2>A3・1枚レポート（Step8 決着）</h2>
+    <h2>A3・1枚レポート（Step8 成果確定）</h2>
     <p class="note">8ブロックすべてを1枚に整形しました。標準化（横展開）の共有にお使いください。</p>
     <pre class="report" id="a3-onepager-body"></pre>
     <div class="row"><div><button class="ghost" onclick="copyTextContent('a3-onepager-body', this)">A3レポートをコピー</button></div></div>
@@ -488,15 +491,30 @@
   </div>
 
   <div class="card">
-    <div><button class="primary" onclick="resetFlow()">次の案件をルーターにかける</button></div>
+    <div><button class="primary" onclick="resetFlow()">次の案件をトリアージにかける</button></div>
   </div>
 </section>
 
-<!-- ===================== A3案件ビュー ===================== -->
-<section id="screen-a3" class="screen">
+<!-- ===================== トヨタA3 8ステップ・キャンバス ===================== -->
+<section id="screen-a3" class="screen active">
+  <div class="card" id="a3-basic-flow">
+    <h2>トヨタA3 8ステップ・キャンバス</h2>
+    <p class="note">すべての案件を1枚で俯瞰し、意思決定と実行を前へ進める一次情報源です。会議は必要なときだけ、各案件のステップから設計します。</p>
+    <div class="basic-flow" aria-label="基本フロー">
+      <span class="flow-step">案件登録</span>
+      <span class="flow-step">案件トリアージ</span>
+      <span class="flow-step">報連相ナビ</span>
+      <span class="flow-step is-todo">判断準備チェック<small>（近日）</small></span>
+      <span class="flow-step">判断セッション設計</span>
+      <span class="flow-step">思考のコックピット</span>
+      <span class="flow-step">決定事項と申し送り</span>
+      <span class="flow-step">実行・効果確認</span>
+      <span class="flow-step">成果確定</span>
+    </div>
+  </div>
   <div class="card" id="a3-empty">
-    <h2>A3案件</h2>
-    <p class="note">継続的な問題解決（トヨタ8ステップ）を1枚で俯瞰する、誰でも見に行ける一次情報源です。案件はまだありません。① ルーターで「相談」を選び「A3案件として始める」から作成してください。</p>
+    <h2>案件はまだありません</h2>
+    <p class="note">継続的な問題解決（トヨタ8ステップ）を1枚で俯瞰する、誰でも見に行ける一次情報源です。「案件トリアージ」タブで「相談（未来のこと）」を選び「トヨタA3案件として始める」から作成してください。</p>
   </div>
   <div id="a3-case-list"></div>
 
@@ -518,10 +536,10 @@
   </div>
 </section>
 
-<!-- ===================== ダッシュボード ===================== -->
+<!-- ===================== フローダッシュボード ===================== -->
 <section id="screen-dash" class="screen">
   <div class="card">
-    <h2>節約ダッシュボード</h2>
+    <h2>フローダッシュボード</h2>
     <p class="note">使った額ではなく、取り返した時間とお金を数えます。</p>
     <div class="stat-grid">
       <div class="stat gold"><div class="v" id="dash-total-saved">¥0</div><div class="k">累計節約額（回避＋短縮）</div></div>
@@ -547,8 +565,8 @@
       <div class="stat"><div class="v" id="dash-carried-rate">—</div><div class="k">議題の持ち越し率</div></div>
       <div class="stat"><div class="v" id="dash-extension-rate">—</div><div class="k">会議の延長率</div></div>
       <div class="stat"><div class="v" id="dash-within30-rate">—</div><div class="k">30分以内終了率</div></div>
-      <div class="stat"><div class="v" id="dash-closed-series">0件</div><div class="k">決着したA3案件数</div></div>
-      <div class="stat"><div class="v" id="dash-lead-time">—</div><div class="k">案件リードタイム（作成→決着）</div></div>
+      <div class="stat"><div class="v" id="dash-closed-series">0件</div><div class="k">成果確定したA3案件数</div></div>
+      <div class="stat"><div class="v" id="dash-lead-time">—</div><div class="k">案件リードタイム（作成→成果確定）</div></div>
       <div class="stat"><div class="v red" id="dash-overdue-actions">0件</div><div class="k">期限超過アクション件数</div></div>
       <div class="stat"><div class="v" id="dash-top-carry-cause">—</div><div class="k">持ち越し原因トップ</div></div>
     </div>
@@ -1548,16 +1566,18 @@ migrateSchema();
 const SCREENS = ['triage', 'design', 'cockpit', 'report', 'a3', 'dash'];
 function showScreen(name) {
   const tab = document.getElementById('tab-' + name);
-  if (tab.disabled) return;
+  // タブから外した画面（design/cockpit/report）はタブ要素を持たない＝案件カード/トリアージから直接activateする
+  if (tab && tab.disabled) return;
   SCREENS.forEach(s => {
     document.getElementById('screen-' + s).classList.toggle('active', s === name);
-    document.getElementById('tab-' + s).classList.toggle('active', s === name);
+    const t = document.getElementById('tab-' + s);
+    if (t) t.classList.toggle('active', s === name);
   });
   if (name === 'a3') renderA3();
   if (name === 'triage') renderAiRouterCard();
   if (name === 'design') renderAgendaAssist();
 }
-function unlockTab(name, on) { document.getElementById('tab-' + name).disabled = !on; }
+function unlockTab(name, on) { const t = document.getElementById('tab-' + name); if (t) t.disabled = !on; }
 
 // ---------- ① ルーター（トリアージ） ----------
 let triageKind = null; // 'past' | 'present' | 'future'
@@ -1767,7 +1787,7 @@ function addAgenda() {
     return;
   }
   if (!isQuestionForm(q)) {
-    err.textContent = '議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。「〜の報告」「〜の共有」なら、この会議は不要です——ルーターに戻ってレポート／チャットで済ませましょう。';
+    err.textContent = '議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。「〜の報告」「〜の共有」なら、この会議は不要です——案件トリアージに戻ってレポート／チャットで済ませましょう。';
     err.classList.remove('hidden');
     return;
   }
@@ -2181,7 +2201,7 @@ function buildInvite() {
   return L.join('\n');
 }
 
-// ---------- ③ コックピット ----------
+// ---------- 思考のコックピット ----------
 // 30分フェーズ（幅比 3:5:12:5:5、plannedMin に比例スケール）
 const PHASES = [
   { label: '目的確認',   end: 3,  hint: '今日決めることを全員で読み上げる' },
@@ -3164,7 +3184,7 @@ function closeThisSeries() {
   }
   closeSeries(sid);
   status.className = 'alert ok';
-  status.textContent = 'この案件を決着（クローズ）しました。リードタイムは節約ダッシュボードに反映されます。';
+  status.textContent = 'この案件を成果確定（クローズ）しました。リードタイムはフローダッシュボードに反映されます。';
   status.classList.remove('hidden');
   document.getElementById('btn-close-series').disabled = true;
 
@@ -3486,7 +3506,7 @@ function buildCaseCard(s, meetings, actions, todayStr) {
   head.appendChild(h);
   const stat = document.createElement('span');
   stat.className = 'badge ' + (s.status === 'closed' ? 'report' : 'meet');
-  stat.textContent = s.status === 'closed' ? '決着済み' : '進行中';
+  stat.textContent = s.status === 'closed' ? '成果確定済み' : '進行中';
   head.appendChild(stat);
   card.appendChild(head);
   if (s.goal) {
@@ -3574,8 +3594,8 @@ function buildCaseCard(s, meetings, actions, todayStr) {
     p.className = 'lead';
     p.style.margin = '0';
     p.textContent = s.status === 'closed'
-      ? '✅ この案件は決着済みです。'
-      : '✅ 8ステップすべて完了しています。申し送りで「この案件は決着」に進めます。';
+      ? '✅ この案件は成果確定済みです。'
+      : '✅ 8ステップすべて完了しています。決定事項と申し送りで「この案件を成果確定」に進めます。';
     nav.appendChild(p);
   } else {
     const means = STEP_MEANS[next];
@@ -3588,7 +3608,7 @@ function buildCaseCard(s, meetings, actions, todayStr) {
     btn.className = 'primary small';
     btn.dataset.navStep = String(next);
     if (means === 'meeting') {
-      btn.textContent = 'Step' + next + ' → 会議を設計する';
+      btn.textContent = 'Step' + next + ' → 判断セッションを設計する';
       btn.onclick = () => goToStepDesign(s.id, next);
     } else if (means === 'report') {
       btn.textContent = 'Step' + next + ' → ' + (STEP_REPORT_TITLE[next] || 'レポート') + 'で埋める';
@@ -3891,7 +3911,7 @@ function buildDiagnoseInput() {
     '議題の持ち越し率: ' + fmtPct(dm.carriedAgendaRate),
     '会議の延長率: ' + fmtPct(dm.extensionRate),
     '30分以内終了率: ' + fmtPct(dm.within30MinRate),
-    '決着したA3案件数: ' + fmtCount(dm.closedSeriesCount),
+    '成果確定したA3案件数: ' + fmtCount(dm.closedSeriesCount),
     '案件リードタイム: ' + fmtLeadDays(dm.avgLeadTimeDays),
     '期限超過アクション件数: ' + fmtCount(dm.overdueOpenCount),
     '持ち越し原因トップ: ' + fmtTopCause(dm.topCarryCause),
