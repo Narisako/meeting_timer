@@ -267,6 +267,14 @@
   .basic-flow .flow-step:last-child::after { content: ''; margin-left: 0; }
   .basic-flow .flow-step.is-todo { background: #eee; color: var(--sub); }
   .basic-flow .flow-step small { font-weight: 400; }
+  /* 対話インテーク（チャット形式の入り口） */
+  #intake-card { border: 1px solid var(--accent); }
+  .intake-messages { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; padding: 8px; background: var(--accent-soft); border-radius: 8px; margin: 8px 0; }
+  .intake-msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .intake-system { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-top-left-radius: 2px; }
+  .intake-user { align-self: flex-end; background: var(--accent); color: #fff; border-top-right-radius: 2px; }
+  .intake-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+  .intake-choices .intake-choice { text-align: left; }
   @media (max-width: 560px) { .a3-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
@@ -617,6 +625,22 @@
 
 <!-- ===================== トヨタA3 8ステップ・キャンバス ===================== -->
 <section id="screen-a3" class="screen active">
+  <div class="card" id="intake-card">
+    <h2>💬 対話で始める</h2>
+    <p class="note">AIの質問に答えながら、レポート・チャット・会議のどれが必要かを一緒に見極めます。会議は必要最小限のメンバー・招集に絞ります。（LLM不要のルールベースで動きます）</p>
+    <div id="intake-messages" class="intake-messages" aria-live="polite"></div>
+    <div id="intake-choices" class="intake-choices"></div>
+    <div class="row" id="intake-input-row">
+      <div style="flex:3">
+        <input type="text" id="intake-input" placeholder="ここに入力…" onkeydown="if(event.key==='Enter')intakeSubmitText()">
+      </div>
+      <div style="flex:0"><button class="primary" id="intake-send" onclick="intakeSubmitText()">送信</button></div>
+    </div>
+    <div style="margin-top:8px">
+      <button class="ghost" id="intake-restart" onclick="intakeStart()">対話をやり直す</button>
+      <span class="note" style="margin-left:8px">従来の作り方は「案件トリアージ」タブからも使えます。</span>
+    </div>
+  </div>
   <div class="card" id="a3-basic-flow">
     <h2>トヨタA3 8ステップ・キャンバス</h2>
     <p class="note">すべての案件を1枚で俯瞰し、意思決定と実行を前へ進める一次情報源です。会議は必要なときだけ、各案件のステップから設計します。</p>
@@ -5112,6 +5136,343 @@ function resetStats() {
   saveStats();
 }
 
+// ==================================================================
+// 対話インテーク（チャット形式の入り口・v5-1 / Issue #37）
+//   最初の問いは「案件名を教えてください。」。LLM不要のルールベース質問ツリー。
+//   回答は series（title / intakeLog）へ保存し、まとめから既存ヘルパへプリフィルする。
+// ==================================================================
+// 例外理由7種（v4 #26 の案件トリアージと同一）
+const INTAKE_EXCEPTIONS = [
+  '判断が必要', '関係者間に認識差がある', '不確実性が高い', '緊急性が高い',
+  '判断が不可逆', '部門横断の調整が必要', '決定権者の判断が必要'
+];
+const INTAKE_WANT_LABEL = {
+  past: '① 過去の結果・経緯を伝えたい',
+  present: '② いま起きていることを知らせたい',
+  future: '③ これから何かを決めたい・相談したい'
+};
+const INTAKE_ROLE_LABEL = { opinion: '意見を出す人', info: '情報を持っている人', listener: '聞くだけ（レポート送付）' };
+
+let intake = null;
+
+function newIntakeState() {
+  return {
+    state: 'askName', seriesId: null, title: '', tense: null,
+    exceptions: [], factsReady: null, decisionQuestion: '', decider: '',
+    participants: [], pendingName: '', log: []
+  };
+}
+
+// 対話を最初からやり直す（案件の下書きは残す）。ページ初期化からも呼ばれる。
+function intakeStart() {
+  intake = newIntakeState();
+  renderIntake();
+  intakeAskName();
+}
+
+function renderIntake() {
+  const msgs = document.getElementById('intake-messages');
+  if (!msgs || !intake) return;
+  msgs.innerHTML = '';
+  intake.log.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'intake-msg intake-' + m.role;
+    div.textContent = m.text;
+    msgs.appendChild(div);
+  });
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// 発話をログに積む。案件が既にあれば intakeLog へ永続化する。
+function intakeSay(role, text) {
+  intake.log.push({ role: role, text: text, at: Date.now() });
+  persistIntakeLog();
+  renderIntake();
+}
+function persistIntakeLog() {
+  if (!intake.seriesId) return;
+  const list = loadSeries();
+  const s = list.find(x => x.id === intake.seriesId);
+  if (s) { s.intakeLog = intake.log.slice(); saveSeries(list); }
+}
+
+// 選択肢ボタン群を差し替える。choices: [{label, onClick}]
+function setIntakeChoices(choices) {
+  const box = document.getElementById('intake-choices');
+  if (!box) return;
+  box.innerHTML = '';
+  (choices || []).forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'ghost intake-choice';
+    b.textContent = c.label;
+    b.onclick = c.onClick;
+    box.appendChild(b);
+  });
+}
+function setIntakeInput(show, placeholder) {
+  const row = document.getElementById('intake-input-row');
+  const inp = document.getElementById('intake-input');
+  if (row) row.style.display = show ? '' : 'none';
+  if (inp && show) { inp.placeholder = placeholder || ''; inp.value = ''; inp.focus(); }
+}
+
+function intakeSubmitText() {
+  const inp = document.getElementById('intake-input');
+  const v = (inp && inp.value || '').trim();
+  if (!v) return;
+  intakeSay('user', v);
+  if (inp) inp.value = '';
+  intakeHandleText(v);
+}
+function intakeHandleText(v) {
+  switch (intake.state) {
+    case 'askName': intakeSetName(v); break;
+    case 'askDecisionQ': intake.decisionQuestion = v; intakeAskDecider(); break;
+    case 'askDecider': intake.decider = v; intakeAskParticipants(); break;
+    case 'askParticipants': intake.pendingName = v; intakeAskParticipantRole(); break;
+    default: break;
+  }
+}
+
+// 1. 案件名 → 案件（A3）を下書き作成
+function intakeAskName() {
+  intake.state = 'askName';
+  setIntakeChoices([]);
+  setIntakeInput(true, '案件名を入力…');
+  intakeSay('system', '案件名を教えてください。');
+}
+function intakeSetName(v) {
+  intake.title = v;
+  const s = createSeries(v, '');
+  intake.seriesId = s.id;
+  persistIntakeLog();
+  renderA3();
+  intakeSay('system', '案件「' + v + '」を下書きとして作成しました。');
+  intakeAskWant();
+}
+
+// 2. いま一番したいこと（時制トリアージ）
+function intakeAskWant() {
+  intake.state = 'askWant';
+  setIntakeInput(false);
+  setIntakeChoices([
+    { label: INTAKE_WANT_LABEL.past, onClick: function () { intakeWant('past'); } },
+    { label: INTAKE_WANT_LABEL.present, onClick: function () { intakeWant('present'); } },
+    { label: INTAKE_WANT_LABEL.future, onClick: function () { intakeWant('future'); } }
+  ]);
+  intakeSay('system', 'この件で、いま一番したいことは何ですか？');
+}
+function intakeWant(tense) {
+  intake.tense = tense;
+  intakeSay('user', INTAKE_WANT_LABEL[tense]);
+  if (tense === 'future') intakeAskFacts();
+  else intakeAskException();
+}
+
+// 3. ①②の場合: 例外理由7種を複数選択で確認
+function intakeAskException() {
+  intake.state = 'askException';
+  intake.exceptions = [];
+  setIntakeInput(false);
+  intakeRenderExceptionChoices();
+  intakeSay('system', '以下に当てはまるものはありますか？（当てはまるものを選び「これで確定」を押してください。無ければ「該当なし」）');
+}
+function intakeRenderExceptionChoices() {
+  const choices = INTAKE_EXCEPTIONS.map(function (r) {
+    return {
+      label: (intake.exceptions.indexOf(r) >= 0 ? '☑ ' : '☐ ') + r,
+      onClick: function () {
+        const i = intake.exceptions.indexOf(r);
+        if (i >= 0) intake.exceptions.splice(i, 1); else intake.exceptions.push(r);
+        intakeRenderExceptionChoices();
+      }
+    };
+  });
+  choices.push({ label: '該当なし（会議は不要）', onClick: intakeNoException });
+  choices.push({ label: 'これで確定', onClick: intakeConfirmException });
+  setIntakeChoices(choices);
+}
+function intakeConfirmException() {
+  if (intake.exceptions.length === 0) { intakeNoException(); return; }
+  intakeSay('user', '該当あり：' + intake.exceptions.join('・'));
+  intakeSay('system', '例外条件に該当します。会議（判断セッション）が必要か、事実の観点で確認しましょう。');
+  intakeAskFacts();
+}
+function intakeNoException() {
+  intakeSay('user', '該当なし');
+  intakeConcludeNoMeeting();
+}
+
+// 会議不要ルートの終話（案件は下書きのまま残す）
+function intakeConcludeNoMeeting() {
+  intake.state = 'doneNoMeeting';
+  setIntakeInput(false);
+  const kindLabel = intake.tense === 'present' ? 'チャット' : 'レポート';
+  intakeSay('system', '会議は不要です。' + kindLabel + 'で済ませましょう。テンプレートを用意し、開かずに済んだ会議の回避コストも記録できます。案件は下書きとして残しています。');
+  setIntakeChoices([
+    { label: kindLabel + 'テンプレートを開く', onClick: intakeGoTemplate },
+    { label: '会議回避コストを記録する', onClick: intakeGoAvoided },
+    { label: '対話をやり直す', onClick: intakeStart }
+  ]);
+}
+function intakeGoTemplate() {
+  showScreen('triage');
+  triage(intake.tense === 'present' ? 'present' : 'past');
+  const t = document.getElementById('triage-topic');
+  if (t) { t.value = intake.title; renderTemplate(); }
+}
+function intakeGoAvoided() {
+  intakeGoTemplate();
+  const el = document.getElementById('triage-result');
+  if (el) el.scrollIntoView({ behavior: 'smooth' });
+}
+
+// 4. 事実は揃っているか
+function intakeAskFacts() {
+  intake.state = 'askFacts';
+  setIntakeInput(false);
+  setIntakeChoices([
+    { label: '揃っている', onClick: function () { intakeFacts('yes'); } },
+    { label: '揃っていない', onClick: function () { intakeFacts('no'); } },
+    { label: 'わからない', onClick: function () { intakeFacts('unknown'); } }
+  ]);
+  intakeSay('system', '決めるために、事実（数字・現状・原因）は揃っていますか？');
+}
+function intakeFacts(v) {
+  intake.factsReady = v;
+  intakeSay('user', { yes: '揃っている', no: '揃っていない', unknown: 'わからない' }[v]);
+  if (v === 'yes') intakeAskDecisionQ();
+  else intakeFactsNotReady();
+}
+function intakeFactsNotReady() {
+  intake.state = 'factsNotReady';
+  setIntakeInput(false);
+  intakeSay('system', '先に現状把握レポート（Step2）で事実を共有しましょう。会議はそれからでも遅くありません。');
+  setIntakeChoices([
+    { label: '現状把握レポート（Step2）を開く', onClick: intakeGoStep2Report },
+    { label: 'それでも今すぐ会議が必要', onClick: intakeAskDecisionQ }
+  ]);
+}
+function intakeGoStep2Report() {
+  if (!intake.seriesId) return;
+  openStepEditor(intake.seriesId, 2, 'report');
+}
+
+// 5. 何を決めるか（1つの問い）
+function intakeAskDecisionQ() {
+  intake.state = 'askDecisionQ';
+  setIntakeChoices([]);
+  setIntakeInput(true, '例）発売日をいつにするか？');
+  intakeSay('system', '何を決めますか？ 1つの問いにしてください。');
+}
+// 6. 決裁者
+function intakeAskDecider() {
+  intake.state = 'askDecider';
+  setIntakeChoices([]);
+  setIntakeInput(true, '決裁者の名前を入力…');
+  intakeSay('system', 'それを決められる人（決裁者）は誰ですか？');
+}
+// 7. 意見・情報が必要な人（聞くだけはレポート送付へ）
+function intakeAskParticipants() {
+  intake.state = 'askParticipants';
+  intake.pendingName = '';
+  setIntakeInput(true, '名前を入力（意見・情報が必要な人）');
+  setIntakeChoices([{ label: '完了（まとめへ）', onClick: intakeSummary }]);
+  intakeSay('system', '意見や情報が必要な人はいますか？ 名前を入力し役割を選んでください。聞くだけの人は招集せず、レポート送付に回します。いなければ「完了」を押してください。');
+}
+function intakeAskParticipantRole() {
+  intake.state = 'partRole';
+  setIntakeInput(false);
+  setIntakeChoices([
+    { label: '意見を出す人', onClick: function () { intakeAddParticipant('opinion'); } },
+    { label: '情報を持っている人', onClick: function () { intakeAddParticipant('info'); } },
+    { label: '聞くだけ（レポート送付）', onClick: function () { intakeAddParticipant('listener'); } }
+  ]);
+  intakeSay('system', '「' + intake.pendingName + '」さんの役割を選んでください。');
+}
+function intakeAddParticipant(role) {
+  const name = intake.pendingName;
+  intake.participants.push({ name: name, role: role });
+  intakeSay('user', INTAKE_ROLE_LABEL[role]);
+  const note = role === 'listener'
+    ? '「' + name + '」さんは会議に招集せず、レポート送付先に回します。'
+    : '「' + name + '」さんを' + INTAKE_ROLE_LABEL[role] + 'として追加しました。';
+  intake.pendingName = '';
+  intakeSay('system', note);
+  intakeAskParticipants();
+}
+
+// 対話の要約（背景プリフィル・まとめ表示に使う）
+function intakeSummaryText() {
+  const L = [];
+  L.push('案件：' + (intake.title || '（無題）'));
+  if (intake.tense) L.push('入口：' + { past: '報告（過去）', present: '連絡（現在）', future: '相談（未来）' }[intake.tense]);
+  if (intake.exceptions.length) L.push('例外条件：' + intake.exceptions.join('・'));
+  if (intake.factsReady) L.push('事実の状況：' + { yes: '揃っている', no: '揃っていない', unknown: 'わからない' }[intake.factsReady]);
+  if (intake.decisionQuestion) L.push('決めること：' + intake.decisionQuestion);
+  if (intake.decider) L.push('決裁者：' + intake.decider);
+  const active = intake.participants.filter(function (p) { return p.role !== 'listener'; });
+  const listeners = intake.participants.filter(function (p) { return p.role === 'listener'; });
+  if (active.length) L.push('招集：' + active.map(function (p) { return p.name + '（' + INTAKE_ROLE_LABEL[p.role] + '）'; }).join('、'));
+  if (listeners.length) L.push('レポート送付（招集しない）：' + listeners.map(function (p) { return p.name; }).join('、'));
+  return L.join('\n');
+}
+
+// 8. まとめ: 会議要否・最小メンバー・値札見込み
+function intakeSummary() {
+  intake.state = 'summary';
+  setIntakeInput(false);
+  const needMeeting = (intake.tense === 'future') || intake.exceptions.length > 0;
+  const deciderN = intake.decider ? 1 : 0;
+  const active = intake.participants.filter(function (p) { return p.role !== 'listener'; });
+  const listeners = intake.participants.filter(function (p) { return p.role === 'listener'; });
+  const memberCount = deciderN + active.length;
+  const rate = loadRate();
+  const est = Math.round(memberCount * 30 * rate / 60);
+  const L = [];
+  L.push('【まとめ】');
+  L.push('会議要否：' + (needMeeting ? '判断セッション（会議）を推奨' : '会議は不要（レポート／チャットで完了）'));
+  L.push('最小メンバー：' + (memberCount ? (memberCount + '人（決裁者' + deciderN + '＋意見/情報' + active.length + '）') : '未設定'));
+  if (listeners.length) L.push('レポート送付のみ：' + listeners.length + '人（招集せず節約）');
+  L.push('値札見込み：¥' + est.toLocaleString() + '（' + memberCount + '人 × 30分）');
+  intakeSay('system', L.join('\n'));
+  setIntakeChoices([
+    { label: '判断セッション設計へ進む', onClick: intakeToDesign },
+    { label: '会議なしで進める', onClick: intakeConcludeNoMeetingFromSummary }
+  ]);
+}
+
+// まとめ → 判断セッション設計へプリフィル（判断する問い・背景=要約・参加者・案件紐づけ）
+function intakeToDesign() {
+  const sid = intake.seriesId;
+  if (!sid) return;
+  goToStepDesign(sid, 1);
+  const dq = document.getElementById('mtg-decision-question');
+  if (dq) dq.value = intake.decisionQuestion || '';
+  const bg = document.getElementById('mtg-bg');
+  if (bg) bg.value = intakeSummaryText();
+  members = [];
+  recipients = [];
+  if (intake.decider) members.push({ name: intake.decider, role: 'decider', prep: '' });
+  intake.participants.forEach(function (p) {
+    if (p.role === 'listener') recipients.push({ name: p.name });
+    else members.push({ name: p.name, role: p.role, prep: '' });
+  });
+  renderDesign();
+  renderPricetag();
+  renderInvite();
+}
+function intakeConcludeNoMeetingFromSummary() {
+  intake.state = 'doneNoMeeting';
+  setIntakeInput(false);
+  intakeSay('system', '会議なしで進めます。決まったことは会議外Decisionとして登録するか、レポート（Step2）で共有しましょう。案件は下書きとして残しています。');
+  setIntakeChoices([
+    { label: '現状把握レポート（Step2）を開く', onClick: intakeGoStep2Report },
+    { label: 'キャンバスで案件を見る', onClick: function () { showScreen('a3'); renderA3(); } },
+    { label: '対話をやり直す', onClick: intakeStart }
+  ]);
+}
+
 // ---------- 初期化 ----------
 document.getElementById('avoid-rate').value = loadRate();
 document.getElementById('mtg-rate').value = loadRate();
@@ -5119,6 +5480,7 @@ renderSeriesOptions();
 renderDesign();
 renderDash();
 renderA3();
+intakeStart();
 renderLlmSettings();
 renderAiRouterCard();
 renderAgendaAssist();
