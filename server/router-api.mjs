@@ -29,11 +29,14 @@ const ROUTES = {
   // R1 報連相仕分け
   'route': {
     model: HAIKU, maxTokens: 512,
-    system: 'あなたは日本の職場の「報連相」仕分け係です。入力メッセージを report(報告)/chat(相談・雑談)/meeting(要会議) のいずれかに分類し、理由と整形済み本文を返します。必ず次のJSONのみを出力: {"kind":"report|chat|meeting","reason":"日本語の短い理由","formatted":"整形済み本文"}',
+    // フロントのレーン(報告=過去/連絡=現在/相談=未来)と整合させる。
+    // report=報告(すでに済んだ過去の事実), chat=連絡(いま知らせたい現在の共有), meeting=相談(これから決めたい未来の要決定=要会議)。
+    system: 'あなたは日本の職場の「報連相」仕分け係です。入力メッセージを report(報告=すでに済んだ過去の事実や結果の報告)/chat(連絡=いま知らせたい現在の共有・連絡事項)/meeting(相談=これから決めたい未来の要決定事項＝要会議) のいずれかに分類し、理由と整形済み本文を返します。必ず次のJSONのみを出力: {"kind":"report|chat|meeting","reason":"日本語の短い理由","formatted":"整形済み本文"}',
     mock(input) {
+      // report=報告(過去) / chat=連絡(現在の共有) / meeting=相談(未来の要決定)。相談・意見・疑問は「相談」=meeting へ寄せる。
       let kind = 'report';
-      if (/[?？]|相談|どう思|意見/.test(input)) kind = 'chat';
-      if (/会議|議題|打ち合わせ|ミーティング|集まって/.test(input)) kind = 'meeting';
+      if (/連絡|お知らせ|周知|展開|通知/.test(input)) kind = 'chat';
+      if (/[?？]|相談|どう思|意見|会議|議題|打ち合わせ|ミーティング|集まって|決めた/.test(input)) kind = 'meeting';
       return {
         kind,
         reason: `キーワードから ${kind} と判定しました（${input.length}字）`,

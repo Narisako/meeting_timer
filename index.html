@@ -576,6 +576,8 @@
         <li><b>「ごっこ」のムダ</b> 事前に練ったシナリオどおりの"シャンシャン"会議をしていませんか？ 決めようとせず、その周辺ばかりをつつくことで議論した気になっていませんか？</li>
       </ol>
     </details>
+    <!-- R7 ムダ診断（AIアシスト）: LLM ON時のみボタンを注入。OFF時はDOMに残さない。 -->
+    <div id="muda-diagnose" class="hidden" style="margin-top:14px"></div>
   </div>
 
   <div class="card">
@@ -715,6 +717,7 @@ function saveLlmFromUI() {
   if (st) st.textContent = '保存しました（' + (saved.enabled ? 'ON' : 'OFF') + '）';
   renderAiRouterCard(); // 保存で即座にAI仕分けカードの表示/非表示を反映
   renderAgendaAssist(); // R2 議題添削ボタンの表示/非表示も即反映
+  renderMudaDiagnose(); // R7 ムダ診断ボタンの表示/非表示も即反映
 }
 
 function llmUrl(endpoint, kind) {
@@ -3302,7 +3305,93 @@ function renderDashMetrics() {
   document.getElementById('dash-stagnant-actions').textContent = fmtCount(dm.stagnantActionCount);
   document.getElementById('dash-mannerism-series').textContent = fmtCount(dm.mannerismSeriesCount);
   document.getElementById('dash-dissent-zero-rate').textContent = fmtPct(dm.dissentZeroMeetingRate);
+  renderMudaDiagnose(); // R7: LLM ON時のみ「AIにムダ診断してもらう」ボタンを注入
 }
+
+// ---------- R7 ムダ診断（ダッシュボードAIアシスト） ----------
+// #15踏襲: OFF時はボタンごとDOMに残さない。既存の数値表示はそのまま、AIは「診断コメント」だけを担う。
+const MUDA_DIAGNOSE_HTML =
+  '<button class="ghost small" id="muda-diagnose-btn" onclick="aiDiagnoseMuda()">AIにムダ診断してもらう</button>' +
+  '<span id="muda-diagnose-status" class="note" style="margin-left:8px"></span>' +
+  '<div id="muda-diagnose-result" class="alert ok hidden" style="margin-top:8px"></div>';
+
+function renderMudaDiagnose() {
+  const box = document.getElementById('muda-diagnose');
+  if (!box) return;
+  if (loadLlm().enabled) {
+    if (!document.getElementById('muda-diagnose-btn')) box.innerHTML = MUDA_DIAGNOSE_HTML;
+    box.classList.remove('hidden');
+  } else {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+}
+
+// 速さの指標＋ムダ検知の現在値をテキスト化して diagnose に渡す入力を作る。
+function buildDiagnoseInput() {
+  const dm = dashMetrics();
+  const lines = [
+    '# 速さの指標',
+    'アクション完了率: ' + fmtPct(dm.actionCompletionRate),
+    '期限内完了率: ' + fmtPct(dm.onTimeCompletionRate),
+    '議題の持ち越し率: ' + fmtPct(dm.carriedAgendaRate),
+    '会議の延長率: ' + fmtPct(dm.extensionRate),
+    '30分以内終了率: ' + fmtPct(dm.within30MinRate),
+    '決着したA3案件数: ' + fmtCount(dm.closedSeriesCount),
+    '案件リードタイム: ' + fmtLeadDays(dm.avgLeadTimeDays),
+    '期限超過アクション件数: ' + fmtCount(dm.overdueOpenCount),
+    '持ち越し原因トップ: ' + fmtTopCause(dm.topCarryCause),
+    '# ムダ検知',
+    '決定ゼロ会議数: ' + fmtCount(dm.decisionZeroMeetingCount),
+    'A3・1枚超過レポート数: ' + fmtCount(dm.overLengthReportCount),
+    '停滞アクション: ' + fmtCount(dm.stagnantActionCount),
+    'マンネリ疑い案件数: ' + fmtCount(dm.mannerismSeriesCount),
+    '異論ゼロ会議率: ' + fmtPct(dm.dissentZeroMeetingRate)
+  ];
+  return lines.join('\n');
+}
+
+// 現在の指標を diagnose に投げ、{advice} を1段落で表示。
+async function aiDiagnoseMuda() {
+  const status = document.getElementById('muda-diagnose-status');
+  const resultBox = document.getElementById('muda-diagnose-result');
+  if (!resultBox) return; // OFF時はDOMが無い
+  const input = buildDiagnoseInput();
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  status.textContent = '診断中…';
+
+  let resp = null;
+  try { resp = await llmAssist('diagnose', { input }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（数値表示は残るので機能劣化なし）。
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || typeof r.advice !== 'string' || !r.advice.trim()) {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' 上の指標を手がかりに、続ける理由を問い直してください。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+  renderMudaAdvice(r.advice);
+}
+
+function renderMudaAdvice(advice) {
+  const resultBox = document.getElementById('muda-diagnose-result');
+  resultBox.className = 'alert ok';
+  resultBox.innerHTML = '';
+  const title = document.createElement('div');
+  const tb = document.createElement('b'); tb.textContent = 'AIムダ診断';
+  title.appendChild(tb);
+  title.appendChild(document.createTextNode('（現在の指標にもとづく改善提案です）'));
+  const p = document.createElement('p');
+  p.id = 'muda-diagnose-advice';
+  p.style.margin = '6px 0 0';
+  p.textContent = advice;
+  resultBox.append(title, p);
+  resultBox.classList.remove('hidden');
+}
+
 function resetStats() {
   if (!confirm('累計統計をリセットしますか？')) return;
   stats = { totalSaved:0, avoidedCount:0, avoidedCost:0, heldCount:0, shortenCost:0, savedMin:0, spared:0, decisions:0 };
