@@ -215,6 +215,43 @@
   .a3-block.done .st { color: var(--ok); font-weight: 700; }
   .a3-block.doing { background: var(--gold-soft); border-color: #e8d98a; }
   .a3-block.doing .st { color: var(--gold); font-weight: 700; }
+  /* v4-5: 状態7値の色分け（キャンバス俯瞰グリッド） */
+  .a3-block.draft { background: #f3f4f6; border-color: #d7dbe0; }
+  .a3-block.review { background: var(--gold-soft); border-color: #e8d98a; }
+  .a3-block.review .st { color: var(--gold); font-weight: 700; }
+  .a3-block.ready { background: var(--accent-soft); border-color: #bcd3f2; }
+  .a3-block.ready .st { color: var(--accent); font-weight: 700; }
+  .a3-block.reinvestigate { background: #fff2e0; border-color: #f0cf9a; }
+  .a3-block.reinvestigate .st { color: #b5651d; font-weight: 700; }
+  .a3-block.reopened { background: #fde8e8; border-color: #f0b6b6; }
+  .a3-block.reopened .st { color: var(--bad); font-weight: 700; }
+  /* 状態バッジ（Step詳細） */
+  .badge.st-todo { background: #eceef1; color: var(--sub); }
+  .badge.st-draft { background: #e9ebef; color: #556; }
+  .badge.st-review { background: var(--gold-soft); color: var(--gold); }
+  .badge.st-ready { background: var(--accent-soft); color: var(--accent); }
+  .badge.st-done { background: var(--ok-soft); color: var(--ok); }
+  .badge.st-reinvestigate { background: #fff2e0; color: #b5651d; }
+  .badge.st-reopened { background: #fde8e8; color: var(--bad); }
+  .badge.rec { background: var(--gold-soft); color: var(--gold); }
+  /* v4-5: Step詳細（成果物・状態・履歴） */
+  .a3-steps { margin: 10px 0 4px; }
+  .a3-step-detail { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; background: #fff; }
+  .a3-step-detail-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .a3-step-detail-head b { font-size: 13px; }
+  .a3-step-ctrl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .a3-step-ctrl label { font-size: 12px; color: var(--sub); }
+  .a3-step-ctrl select { font-size: 12px; padding: 3px 6px; }
+  .a3-artifacts { list-style: none; padding: 0; margin: 8px 0 0; }
+  .a3-artifacts li { display: flex; gap: 8px; align-items: baseline; font-size: 12px; padding: 3px 0; border-top: 1px dashed var(--line); }
+  .a3-artifacts li:first-child { border-top: 0; }
+  .a3-artifacts .empty { color: var(--sub); }
+  .a3-art-add { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .a3-art-add button { font-size: 12px; }
+  .a3-step-history { margin-top: 8px; }
+  .a3-step-history summary { font-size: 12px; cursor: pointer; color: var(--sub); }
+  .a3-step-history ul { list-style: none; padding: 0; margin: 6px 0 0; }
+  .a3-step-history li { font-size: 12px; padding: 2px 0; color: var(--sub); }
   .a3-nav { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; margin: 8px 0; font-size: 13px; }
   .a3-nav .lead { margin: 0 0 6px; }
   .a3-hist li { justify-content: flex-start; gap: 8px; }
@@ -1820,13 +1857,18 @@ const HARD_LIMIT_MIN = 30; // トヨタ式30分ハードブロック
 // A3（8ステップ）のステップ名
 const A3_STEPS = {
   1: '背景', 2: '現状把握', 3: '目標設定', 4: '要因解析',
-  5: '対策立案', 6: '実行計画', 7: '効果確認', 8: '標準化'
+  5: '対策立案', 6: '対策実行・進捗共有', 7: '効果確認', 8: '標準化'
 };
-// 各Stepを埋める手段（報連相ルーター）: meeting=🤝会議 / report=📄レポート / chat=💬チャット
+// 各Stepの推奨手段（報連相ナビが案内し続ける）: meeting=🤝会議 / report=📄レポート / chat=💬チャット
+// v4-5: 手段は固定ではなく「推奨」。どのStepにもレポート・チャット・会議・Actionを追加できる。
 const STEP_MEANS = { 1: 'meeting', 2: 'report', 3: 'meeting', 4: 'report', 5: 'meeting', 6: 'chat', 7: 'report', 8: 'meeting' };
-const MEANS_BADGE = { report: '📄', chat: '💬', meeting: '🤝' };
-const MEANS_LABEL = { report: 'レポート', chat: 'チャット', meeting: '会議' };
-const STATUS_LABEL = { todo: '未着手', doing: '作成中', done: '完了' };
+const MEANS_BADGE = { report: '📄', chat: '💬', meeting: '🤝', action: '✅' };
+const MEANS_LABEL = { report: 'レポート', chat: 'チャット', meeting: '会議', action: 'アクション' };
+// Step状態7値の表示ラベル（doing は v2 互換のため残置）。
+const STATUS_LABEL = {
+  todo: '未着手', draft: '下書き', review: 'レビュー待ち', ready: '判断可能',
+  done: '完了', reinvestigate: '再調査', reopened: '再オープン', doing: '作成中'
+};
 // Step特化レポートの表題
 const STEP_REPORT_TITLE = { 2: '現状把握レポート', 4: 'なぜなぜ分析レポート', 7: '効果確認レポート' };
 // 事実ゲート: 判断Step ← 直前の事実Step
@@ -3674,8 +3716,8 @@ function buildCaseCard(s, meetings, actions, todayStr) {
     const means = STEP_MEANS[next];
     const lead = document.createElement('p');
     lead.className = 'lead';
-    lead.innerHTML = '次に埋めるべき: <b>Step' + next + '（' + A3_STEPS[next] + '）</b> — ' +
-      MEANS_BADGE[means] + ' ' + MEANS_LABEL[means] + 'で埋めます';
+    lead.innerHTML = '次に埋めるべき: <b>Step' + next + '（' + A3_STEPS[next] + '）</b> — 推奨手段は ' +
+      MEANS_BADGE[means] + ' ' + MEANS_LABEL[means] + '（下のStep詳細から他の手段も追加できます）';
     nav.appendChild(lead);
     const btn = document.createElement('button');
     btn.className = 'primary small';
@@ -3693,6 +3735,9 @@ function buildCaseCard(s, meetings, actions, todayStr) {
     nav.appendChild(btn);
   }
   card.appendChild(nav);
+
+  // v4-5: Step詳細（推奨手段・複数成果物・状態変更・再オープン/前Step戻り・変更履歴）
+  card.appendChild(buildStepsDetail(s, meetings, actions));
 
   // 会議履歴
   const hist = meetings.filter(m => m.seriesId === s.id);
@@ -3756,10 +3801,224 @@ function buildCaseCard(s, meetings, actions, todayStr) {
   return card;
 }
 
+// ---------- v4-5: Step詳細（推奨手段・複数成果物・状態変更・再オープン/前Step戻り・変更履歴） ----------
+function buildStepsDetail(s, meetings, actions) {
+  const wrap = document.createElement('div');
+  wrap.className = 'a3-steps';
+  wrap.id = 'a3-steps-' + s.id;
+  const h3 = document.createElement('h3');
+  h3.textContent = 'Step詳細（推奨手段・成果物・状態・履歴）';
+  wrap.appendChild(h3);
+  for (let i = 1; i <= 8; i++) {
+    wrap.appendChild(buildStepDetail(s, i, meetings, actions));
+  }
+  return wrap;
+}
+
+function buildStepDetail(s, i, meetings, actions) {
+  const st = (s.steps && s.steps[String(i)]) || { status: 'todo', artifacts: [], history: [] };
+  const status = st.status || 'todo';
+  const box = document.createElement('div');
+  box.className = 'a3-step-detail';
+  box.id = 'a3-step-detail-' + s.id + '-' + i;
+  box.dataset.step = String(i);
+
+  // ヘッダ: Step名 + 推奨手段バッジ + 状態バッジ
+  const head = document.createElement('div');
+  head.className = 'a3-step-detail-head';
+  const title = document.createElement('b');
+  title.textContent = 'Step' + i + ' ' + A3_STEPS[i];
+  head.appendChild(title);
+  const rm = STEP_MEANS[i];
+  const rec = document.createElement('span');
+  rec.className = 'badge rec';
+  rec.textContent = '推奨: ' + MEANS_BADGE[rm] + ' ' + MEANS_LABEL[rm];
+  head.appendChild(rec);
+  const sb = document.createElement('span');
+  sb.className = 'badge st-' + status;
+  sb.dataset.statusBadge = '1';
+  sb.textContent = STATUS_LABEL[status] || status;
+  head.appendChild(sb);
+  box.appendChild(head);
+
+  // 状態変更（手動・7値）＋ 再オープン / 前のStepに戻る
+  const ctrl = document.createElement('div');
+  ctrl.className = 'a3-step-ctrl';
+  const lbl = document.createElement('label');
+  lbl.textContent = '状態:';
+  ctrl.appendChild(lbl);
+  const sel = document.createElement('select');
+  sel.className = 'a3-status-select';
+  sel.dataset.step = String(i);
+  STEP_STATUSES.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = STATUS_LABEL[v];
+    if (v === status) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.onchange = () => onStepStatusChange(s.id, i, sel.value);
+  ctrl.appendChild(sel);
+  if (status === 'done') {
+    const rb = document.createElement('button');
+    rb.className = 'ghost small a3-reopen-btn';
+    rb.dataset.step = String(i);
+    rb.textContent = '再オープン';
+    rb.onclick = () => reopenStep(s.id, i);
+    ctrl.appendChild(rb);
+  } else if (status !== 'todo' && i > 1) {
+    const bb = document.createElement('button');
+    bb.className = 'ghost small a3-back-btn';
+    bb.dataset.step = String(i);
+    bb.textContent = '前のStepに戻る';
+    bb.onclick = () => backToPrevStep(s.id, i);
+    ctrl.appendChild(bb);
+  }
+  box.appendChild(ctrl);
+
+  // 成果物一覧（複数紐づけ）
+  const aul = document.createElement('ul');
+  aul.className = 'a3-artifacts';
+  aul.id = 'a3-artifacts-' + s.id + '-' + i;
+  const arts = Array.isArray(st.artifacts) ? st.artifacts : [];
+  if (arts.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = '（成果物はまだありません）';
+    aul.appendChild(li);
+  } else {
+    arts.forEach(a => {
+      const li = document.createElement('li');
+      const kind = document.createElement('span');
+      kind.textContent = (MEANS_BADGE[a.type] || '•') + ' ' + (MEANS_LABEL[a.type] || a.type);
+      const detail = document.createElement('span');
+      detail.className = 'grow';
+      if (a.type === 'action' && a.refId) {
+        const act = actions.find(x => x.id === a.refId);
+        if (act) detail.textContent = '：' + act.what + '（' + act.owner + '）';
+      } else if (a.type === 'meeting' && a.refId) {
+        const m = meetings.find(x => x.id === a.refId);
+        if (m) detail.textContent = '：' + (m.title || (m.seq ? '第' + m.seq + '回' : '会議'));
+      }
+      const dt = document.createElement('span');
+      dt.style.color = 'var(--sub)';
+      dt.textContent = a.at ? new Date(a.at).toLocaleDateString('ja-JP') : '';
+      li.append(kind, detail, dt);
+      aul.appendChild(li);
+    });
+  }
+  box.appendChild(aul);
+
+  // 成果物の追加（どのStepでも4手段を追加できる）
+  const add = document.createElement('div');
+  add.className = 'a3-art-add';
+  const mkAdd = (txt, cls, fn) => {
+    const b = document.createElement('button');
+    b.className = 'ghost small ' + cls;
+    b.dataset.step = String(i);
+    b.textContent = txt;
+    b.onclick = fn;
+    return b;
+  };
+  add.appendChild(mkAdd('📄 レポート追加', 'a3-add-report', () => openStepEditor(s.id, i, 'report')));
+  add.appendChild(mkAdd('💬 チャット追加', 'a3-add-chat', () => openStepEditor(s.id, i, 'chat')));
+  add.appendChild(mkAdd('🤝 会議を設計', 'a3-add-meeting', () => goToStepDesign(s.id, i)));
+  add.appendChild(mkAdd('✅ Action追加', 'a3-add-action', () => addStepActionUI(s.id, i)));
+  box.appendChild(add);
+
+  // 変更履歴（折りたたみ: いつ・どの状態から・なぜ）
+  const hist = Array.isArray(st.history) ? st.history : [];
+  const det = document.createElement('details');
+  det.className = 'a3-step-history';
+  const sum = document.createElement('summary');
+  sum.textContent = '変更履歴（' + hist.length + '件）';
+  det.appendChild(sum);
+  const hul = document.createElement('ul');
+  if (hist.length === 0) {
+    const li = document.createElement('li');
+    li.textContent = '（履歴はありません）';
+    hul.appendChild(li);
+  } else {
+    hist.slice().reverse().forEach(h => {
+      const li = document.createElement('li');
+      const dt = h.at ? new Date(h.at).toLocaleString('ja-JP') : '';
+      const from = STATUS_LABEL[h.fromStatus] || h.fromStatus || '—';
+      const to = STATUS_LABEL[h.toStatus] || h.toStatus || '—';
+      const reason = h.reason ? ('｜理由: ' + h.reason) : '';
+      li.textContent = dt + '｜' + from + ' → ' + to + reason;
+      hul.appendChild(li);
+    });
+  }
+  det.appendChild(hul);
+  box.appendChild(det);
+
+  return box;
+}
+
+// 状態を手動変更（7値）。理由は任意だが history には必ず記録する。
+function onStepStatusChange(sid, stepNo, toStatus) {
+  const s = getSeries(sid);
+  const cur = s && s.steps && s.steps[String(stepNo)];
+  if (!cur) return;
+  if ((cur.status || 'todo') === toStatus) return;
+  const reason = window.prompt(
+    'Step' + stepNo + ' の状態を「' + (STATUS_LABEL[cur.status] || cur.status) + '」から「' +
+    STATUS_LABEL[toStatus] + '」へ変更します。変更理由（任意）:', '');
+  if (reason === null) { renderA3(); return; } // キャンセル → セレクトを元に戻す
+  setStepStatus(sid, stepNo, toStatus, (reason && reason.trim()) ? reason.trim() : '手動変更');
+  renderA3();
+}
+
+// 完了Stepの再オープン（理由必須）。成果確定済み案件は再オープンで解除する。
+function reopenStep(sid, stepNo) {
+  const reason = window.prompt('Step' + stepNo + '（' + A3_STEPS[stepNo] + '）を再オープンします。変更理由（必須）:', '');
+  if (reason === null) return;
+  if (!reason.trim()) { window.alert('再オープンには理由の入力が必要です。'); return; }
+  setStepStatus(sid, stepNo, 'reopened', reason.trim());
+  const s = getSeries(sid);
+  if (s && s.status === 'closed') reopenSeries(sid, reason.trim());
+  renderA3();
+}
+
+// 進行中Stepから前のStepへ戻る（差し戻し・理由必須）。前Stepを reopened にして履歴へ記録。
+function backToPrevStep(sid, stepNo) {
+  if (stepNo <= 1) return;
+  const prev = stepNo - 1;
+  const reason = window.prompt(
+    'Step' + stepNo + ' から前のStep' + prev + '（' + A3_STEPS[prev] + '）に戻ります。変更理由（必須）:', '');
+  if (reason === null) return;
+  if (!reason.trim()) { window.alert('前のStepに戻るには理由の入力が必要です。'); return; }
+  setStepStatus(sid, prev, 'reopened', 'Step' + stepNo + 'から差し戻し: ' + reason.trim());
+  renderA3();
+}
+
+// どのStepにもアクションを追加できる（成果物 type=action として紐づけ）。
+function addStepActionUI(sid, stepNo) {
+  const what = window.prompt('Step' + stepNo + '（' + A3_STEPS[stepNo] + '）に紐づけるアクション内容:', '');
+  if (what === null || !what.trim()) return;
+  const owner = (window.prompt('担当者:', '') || '').trim();
+  const dueRaw = (window.prompt('期限（YYYY-MM-DD、任意）:', '') || '').trim();
+  const a = addAction({ seriesId: sid, what: what.trim(), owner, due: dueRaw || null, stepNo });
+  addStepArtifact(sid, stepNo, 'action', a.id);
+  renderA3();
+}
+
+// 成果確定（クローズ）の解除。理由をEvent Logへ記録する。
+function reopenSeries(id, reason) {
+  const list = loadSeries();
+  const s = list.find(x => x.id === id);
+  if (!s) return null;
+  s.status = 'active';
+  s.closedAt = null;
+  saveSeries(list);
+  logEvent('series', id, 'reopened', { reason: reason || '' });
+  return s;
+}
+
 // --- Step特化レポート／チャットテンプレの編集 ---
 function stepTemplate(stepNo, mode) {
   if (mode === 'chat') {
-    return '【進捗連絡】（Step6 実行）\n\n・対策 No / 内容:\n・進捗（%・完了/未完了）:\n・障害・遅延の有無:\n・支援してほしいこと:\n\n※確認したら 👍 リアクションをお願いします（会議は不要です）';
+    return '【進捗連絡】（対策実行・進捗共有）\n\n・対策 No / 内容:\n・進捗（%・完了/未完了）:\n・障害・遅延の有無:\n・支援してほしいこと:\n\n※確認したら 👍 リアクションをお願いします（会議は不要です）';
   }
   if (stepNo === 2) {
     return '【現状把握レポート】（Step2）\n\n■ 何が・どこで・いつ起きているか（事実の層別）\n・\n\n■ 数字（実績・件数・率・金額）\n・\n\n■ あるべき姿とのギャップ\n・\n\n■ 一次情報の出所\n・\n\n※事実のみ。原因・対策・意見は書かない。';
