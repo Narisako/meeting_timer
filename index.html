@@ -1296,7 +1296,7 @@ function renderDataMgmt() {
 //             以後はワンクリック送信。毎回確認したい人向けに alwaysConfirm オプションを残す。
 const LLM_KEY = 'sekisho.llm';
 const LLM_DEFAULT_ENDPOINT = 'http://localhost:8787';
-const LLM_TIMEOUT_MS = 10000;
+const LLM_TIMEOUT_MS = 30000;
 const LLM_UNAVAILABLE_MSG = 'AIアシストは利用できません。手動で続行してください。';
 // v5-3: 初回のみの軽量通知（1度だけ表示し、以後はこのフラグで抑止する）
 const LLM_NOTICE_KEY = 'sekisho.llm.firstNoticeShown';
