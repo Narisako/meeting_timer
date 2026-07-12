@@ -62,6 +62,8 @@
   .triage-card .tense { font-size: 12px; color: var(--sub); }
   .triage-card .kind { font-size: 20px; font-weight: 700; margin: 2px 0; }
   .triage-card .dest { font-size: 13px; }
+  .triage-exc-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 16px; }
+  .triage-exc-list label { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
   .badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; font-weight: 700; }
   .badge.report { background: var(--ok-soft); color: var(--ok); }
   .badge.chat { background: var(--gold-soft); color: var(--gold); }
@@ -278,6 +280,26 @@
     <div class="row" style="margin-top:8px">
       <div><button class="ghost" onclick="copyText('triage-template', this)">テンプレートをコピー</button></div>
     </div>
+
+    <div id="triage-exception" style="margin-top:16px; border-top:1px solid var(--line); padding-top:14px">
+      <h3 style="margin-top:0">ただし、以下に当てはまる場合は判断セッションが必要かもしれません</h3>
+      <p class="note">「過去＝報告／現在＝連絡」は基本ルールですが、時制にかかわらず判断が必要になることがあります。当てはまるものを選んでください（複数選択可）。</p>
+      <div id="triage-exc-list" class="triage-exc-list">
+        <label><input type="checkbox" class="triage-exc" value="判断が必要" onchange="renderTriageException()"> 判断が必要</label>
+        <label><input type="checkbox" class="triage-exc" value="関係者間に認識差がある" onchange="renderTriageException()"> 関係者間に認識差がある</label>
+        <label><input type="checkbox" class="triage-exc" value="不確実性が高い" onchange="renderTriageException()"> 不確実性が高い</label>
+        <label><input type="checkbox" class="triage-exc" value="緊急性が高い" onchange="renderTriageException()"> 緊急性が高い</label>
+        <label><input type="checkbox" class="triage-exc" value="判断が不可逆" onchange="renderTriageException()"> 判断が不可逆</label>
+        <label><input type="checkbox" class="triage-exc" value="部門横断の調整が必要" onchange="renderTriageException()"> 部門横断の調整が必要</label>
+        <label><input type="checkbox" class="triage-exc" value="決定権者の判断が必要" onchange="renderTriageException()"> 決定権者の判断が必要</label>
+      </div>
+      <div id="triage-exception-reco" class="alert warn hidden" style="margin-top:12px">
+        <div>例外条件に該当します。判断セッション（会議）の設計へ進むことを推奨します。</div>
+        <button class="primary" style="margin-top:8px" onclick="startExceptionConsult()">判断セッション設計へ進む</button>
+        <p class="note" style="margin-bottom:0">※ 強制ではありません。レポート／チャットで済ませることもできます。</p>
+      </div>
+    </div>
+
     <h3>この件、従来なら会議を開いていましたか？</h3>
     <p class="note">開いていたはずの会議の規模を入力すると、「回避コスト」として節約実績に記録されます。</p>
     <div class="row">
@@ -316,6 +338,28 @@
       <button class="primary" onclick="startAsA3Case()">トヨタA3案件として始める（Step1 判断セッション設計へ）</button>
     </div>
   </div>
+
+  <details id="triage-scope" class="card">
+    <summary style="cursor:pointer; font-weight:700">本システムの対象／対象外</summary>
+    <div style="margin-top:12px">
+      <p style="margin:0 0 4px"><strong>対象</strong>（このシステムで扱う会議・案件）</p>
+      <ul style="margin-top:0">
+        <li>部門横断の問題解決</li>
+        <li>複数回にわたるA3案件</li>
+        <li>事実に基づく意思決定</li>
+        <li>対策実行と効果確認を伴う案件</li>
+      </ul>
+      <p style="margin:0 0 4px"><strong>対象外</strong>（このシステムの守備範囲ではない場）</p>
+      <ul style="margin-top:0; margin-bottom:0">
+        <li>1on1</li>
+        <li>朝会</li>
+        <li>研修・講演</li>
+        <li>緊急インシデント指揮</li>
+        <li>発散型ワークショップ</li>
+        <li>高度な機密案件</li>
+      </ul>
+    </div>
+  </details>
 </section>
 
 <!-- ===================== 判断セッション設計 ===================== -->
@@ -1607,9 +1651,38 @@ function triage(kind) {
     title.innerHTML = '連絡 → <span class="badge chat">チャットで済みます</span>';
     note.textContent = 'いま知らせたいことは、スピードが命。チャットに貼れば全員に同時に届き、記録も残ります。';
   }
+  document.querySelectorAll('.triage-exc').forEach(cb => { cb.checked = false; });
+  renderTriageException();
   renderTemplate();
   renderAvoided();
   result.scrollIntoView({ behavior: 'smooth' });
+}
+
+// 例外理由の選択状態を取得（チェック済みの value 配列）
+function getTriageExceptionReasons() {
+  return Array.from(document.querySelectorAll('.triage-exc:checked')).map(cb => cb.value);
+}
+
+// 例外理由チェックの変化に応じて「判断セッション推奨」導線の表示を切り替える
+function renderTriageException() {
+  const reco = document.getElementById('triage-exception-reco');
+  if (!reco) return;
+  const any = getTriageExceptionReasons().length > 0;
+  reco.classList.toggle('hidden', !any);
+}
+
+// 例外理由を引き継いで判断セッション設計へ進む（背景に例外理由を自動記載）
+function startExceptionConsult() {
+  const reasons = getTriageExceptionReasons();
+  const topic = document.getElementById('triage-topic').value.trim();
+  startSingleConsult();
+  const bgEl = document.getElementById('mtg-bg');
+  if (bgEl && reasons.length) {
+    const origin = triageKind === 'present' ? '連絡' : '報告';
+    const head = topic ? `「${topic}」について、` : '';
+    bgEl.value = `${head}当初は${origin}で済ませる想定でしたが、次の例外条件に該当するため判断セッションが必要と判断しました：\n・` + reasons.join('\n・');
+    renderInvite();
+  }
 }
 
 function renderTemplate() {
