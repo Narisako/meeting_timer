@@ -136,19 +136,34 @@ const ROUTES = {
     model: MODEL, maxTokens: 1024, chat: true,
     system: [
       'あなたは「会議招集の前に」という報連相トリアージ・システムの対話ガイドです。',
+      'ユーザーとの短い対話で「会議招集の文面に足る情報」を最短で集めることがゴールです。',
       '思想を厳守してください:',
       '(1) 報連相を仕分け、原則はメール/チャット/レポートで済ませ、例外理由があるときだけ会議を開く。',
       '(2) 決めるための事実（数字・現状・原因）が揃うまで会議は開かない。先に現状把握レポートで事実を共有する。',
       '(3) 会議は最小メンバー（決裁者＋意見・情報を持つ人）に絞る。',
       '(4) 「聞くだけ」の人は招集せず、レポート送付に回す。',
-      '(5) 最初の問いは必ず「案件名を教えてください。」。',
+      '【5問設計】最初の5問で会議招集文面の骨格が揃うよう、次の優先順位で1問ずつ質問してください:',
+      '  ① 案件名（最初の問いは必ず「案件名を教えてください。」）',
+      '  ② 何を決めたいか・その背景',
+      '  ③ 決めるための事実は揃っているか（足りない報告・連絡は何か）',
+      '  ④ 決裁者は誰か・最小メンバー（意見／情報を持つ人）は誰か',
+      '  ⑤ 選択肢・判断基準や、今日の会議の終了条件',
+      '6問目以降は任意の深掘りです（続けるかはユーザー次第）。深掘りでも常に「次の一問」を1つだけ返してください。',
       'ユーザーの自由入力を理解し、トヨタA3の8ステップ（背景/現状/目標/要因/対策/計画/実施/評価）を埋めるのに必要なことを対話で深掘りし、会議要否と最小メンバーを見極めます。',
-      '常に「次の一問」を1つだけ返し、構造化された actions を添えてください。',
+      '常に「次の一問」を1つだけ返し、構造化された actions と extract を添えてください。',
       'actions の各タイプのフィールド仕様（厳守）:',
       '- add_member: {"type":"add_member","name":"氏名","role":"decider|opinion|info|listener"}。name は必ず1人のフルネームのみ。複数人を招集する場合は add_member を人数分だけ繰り返す（1 action = 1人）。1つの name に「成迫,森,広瀬」のように複数名を詰め込んではならない。role は必ず decider / opinion / info / listener のいずれか一つ。決裁者は role を必ず "decider" とし、最低1人は含めること。',
       '- set_question: {"type":"set_question","question":"決める問い"}。question にはあなた自身の質問文（例「何を決めますか？」）を入れてはならない。ユーザーが実際に答えた「決めること」の要約（1つの問い）だけを入れる。',
       '- propose_meeting: {"type":"propose_meeting","question":"決める問い"}。question は set_question と同様、あなたの質問文ではなくユーザーが答えた決定事項の要約を入れる。',
-      '必ず次のJSONのみを出力: {"reply":"次の一問（日本語）","choices":["選択肢",...],"actions":[{"type":"set_title|set_route|fill_step|set_question|add_member|propose_meeting|suggest_report",...}],"state":{"phase":"次の局面",...}}'
+      '【構造化抽出 extract】対話から分かった範囲だけで、裏側のトヨタA3・7つのムダ・報連相の3フレームワークへ反映するための抽出を返してください。分かった範囲だけでよく、完璧を期す必要はありません（分からなければ空でよい）。形式:',
+      '  "extract": {',
+      '    "a3": { "該当ステップ番号(1〜8の文字列)": "その断片（1=背景/2=現状/3=目標/4=要因/5=対策/6=計画/7=実施/8=評価）" },',
+      '    "horenso": [ { "kind":"report|chat|meeting", "text":"内容の要約", "presend": true|false } ],',
+      '    "muda": { "ムダ番号(1〜7の文字列)": { "status":"ok|warn", "note":"根拠の一言" } }',
+      '  }',
+      '  ・presend は「会議までに事前送付すべき資料（例: 現状把握レポート）」のとき true。',
+      '  ・a3/muda のキーは文字列の番号。分かった項目だけ入れ、埋まらない項目は省略してよい。',
+      '必ず次のJSONのみを出力: {"reply":"次の一問（日本語）","choices":["選択肢",...],"actions":[{"type":"set_title|set_route|fill_step|set_question|add_member|propose_meeting|suggest_report",...}],"extract":{"a3":{},"horenso":[],"muda":{}},"state":{"phase":"次の局面",...}}'
     ].join('\n'),
     // MOCK: v5-1 の質問ツリーを決定的になぞる。state.phase で局面を進める。
     mock(messages, state) {
@@ -165,6 +180,7 @@ const ROUTES = {
             reply: `案件「${title}」を下書きとして作成しました。この件で、いま一番したいことは何ですか？`,
             choices: ['過去の結果・経緯を伝えたい', 'いま起きていることを知らせたい', 'これから何かを決めたい・相談したい'],
             actions: [{ type: 'set_title', title }],
+            extract: { a3: { '1': `背景: ${title}` }, horenso: [], muda: {} },
             state: next({ phase: 'want', title })
           };
         }
@@ -177,6 +193,7 @@ const ROUTES = {
               reply: '決めるために、事実（数字・現状・原因）は揃っていますか？',
               choices: ['揃っている', '揃っていない', 'わからない'],
               actions: [{ type: 'set_route', route: 'meeting', tense }],
+              extract: { a3: {}, horenso: [{ kind: 'meeting', text: st.title || '', presend: false }], muda: {} },
               state: next({ phase: 'facts', tense })
             };
           }
@@ -184,6 +201,7 @@ const ROUTES = {
             reply: '会議が必要になりやすい例外条件に当てはまるものはありますか？無ければ「該当なし」を選んでください。',
             choices: EXC.concat(['該当なし']),
             actions: [{ type: 'set_route', route: tense === 'present' ? 'chat' : 'report', tense }],
+            extract: { a3: {}, horenso: [{ kind: tense === 'present' ? 'chat' : 'report', text: st.title || '', presend: false }], muda: {} },
             state: next({ phase: 'exception', tense })
           };
         }
@@ -210,6 +228,7 @@ const ROUTES = {
               reply: 'では、この会議で何を決めますか？1つの問いにしてください。',
               choices: [],
               actions: [],
+              extract: { a3: { '2': '判断に必要な事実は揃っている' }, horenso: [], muda: { '3': { status: 'ok', note: '事実が揃っており報告のためだけの資料作りを避けられる' } } },
               state: next({ phase: 'decisionQ' })
             };
           }
@@ -217,6 +236,7 @@ const ROUTES = {
             reply: '先に現状把握レポート（Step2）で事実を共有しましょう。会議はそれからでも遅くありません。',
             choices: ['現状把握レポート（Step2）を開く', 'それでも今すぐ会議が必要'],
             actions: [{ type: 'suggest_report', kind: 'report', step: 2 }],
+            extract: { a3: { '2': '判断に必要な事実が未収集。現状把握レポートで先に共有する' }, horenso: [{ kind: 'report', text: '現状把握レポート（Step2）', presend: true }], muda: {} },
             state: next({ phase: 'factsNotReady' })
           };
         }
@@ -242,6 +262,7 @@ const ROUTES = {
             reply: 'それを決められる人（決裁者）は誰ですか？',
             choices: [],
             actions: [{ type: 'set_question', question: q }],
+            extract: { a3: { '3': `決める問い（目標）: ${q}` }, horenso: [], muda: {} },
             state: next({ phase: 'decider', decisionQuestion: q })
           };
         }
@@ -251,6 +272,7 @@ const ROUTES = {
             reply: '意見や情報が必要な人はいますか？名前を入力してください。「聞くだけ」の人は招集せずレポート送付に回します。いなければ「まとめへ」を選んでください。',
             choices: ['まとめへ'],
             actions: [{ type: 'add_member', name, role: 'decider' }],
+            extract: { a3: {}, horenso: [], muda: { '1': { status: 'ok', note: `決める人が明確（${name}）` } } },
             state: next({ phase: 'participants', decider: name })
           };
         }
@@ -301,6 +323,7 @@ const ROUTES = {
       return r && typeof r.reply === 'string' &&
         (r.choices === undefined || Array.isArray(r.choices)) &&
         (r.actions === undefined || Array.isArray(r.actions)) &&
+        (r.extract === undefined || (r.extract && typeof r.extract === 'object' && !Array.isArray(r.extract))) &&
         (r.state === undefined || (r.state && typeof r.state === 'object'));
     }
   }

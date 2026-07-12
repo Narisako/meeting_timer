@@ -5340,6 +5340,9 @@ function newIntakeState() {
     participants: [], pendingName: '', log: [],
     // v6-1: ユーザーの応答回数。5回以上（=6問目以降）で「会議招集まとめ」ボタンを常設表示する。
     userTurns: 0,
+    // v6-3: AI応答の extract（a3/horenso/muda）を対話をまたいで累積する器。裏タブ反映で
+    //   ルールベースのヒューリスティック反映と共存させる（intakeSyncSeriesData で統合）。
+    aiExtract: { a3: {}, horenso: [], muda: {} },
     // v5-2 AIモード: aiMode は 'ai'|'rule'。aiState はサーバへ毎回送る局面。
     aiMode: 'rule', aiState: null, aiBusy: false
   };
@@ -5783,6 +5786,15 @@ function intakePresendItems() {
     const who = intake.decider || '決裁者または情報を持っている人';
     items.push('現状把握レポート（Step2）を会議前に事前送付してください（担当: ' + who + '）');
   }
+  // v6-3: AI対話由来の presend=true の報連相（事前送付すべき資料）も事前送付セクションへ反映。
+  const ax = (intake && intake.aiExtract && Array.isArray(intake.aiExtract.horenso)) ? intake.aiExtract.horenso : [];
+  ax.forEach(function (h) {
+    if (!h || !h.presend || !h.text) return;
+    const who = intake.decider || '決裁者または情報を持っている人';
+    const line = h.text + 'を会議前に事前送付してください（担当: ' + who + '）';
+    // 既存項目と実質重複しないときだけ追加（現状把握レポートは上で既出になり得る）。
+    if (!items.some(function (x) { return x.indexOf(h.text) >= 0; })) items.push(line);
+  });
   return items;
 }
 
@@ -5874,6 +5886,46 @@ function intakeSaveInviteArtifact(text) {
   saveSeries(list);
 }
 
+// v6-3: AI応答の extract（{a3,horenso,muda}）を intake.aiExtract に累積する。
+//   ルールベース反映と「同じ器」（horenso/mudaChecks/steps）へ統合するため、ここでは器へ溜め、
+//   実際の series 反映は intakeSyncSeriesData 側でルールベース分と合流させる。best-effort・完璧を期さない。
+function intakeMergeExtract(extract) {
+  if (!intake || !extract || typeof extract !== 'object' || Array.isArray(extract)) return;
+  const acc = intake.aiExtract || (intake.aiExtract = { a3: {}, horenso: [], muda: {} });
+  if (!acc.a3) acc.a3 = {}; if (!Array.isArray(acc.horenso)) acc.horenso = []; if (!acc.muda) acc.muda = {};
+  // a3: ステップ番号(1-8の文字列)→断片。後着で上書き（最新の抽出を優先）。
+  if (extract.a3 && typeof extract.a3 === 'object') {
+    Object.keys(extract.a3).forEach(function (k) {
+      const n = String(k).trim();
+      const v = extract.a3[k];
+      if (/^[1-8]$/.test(n) && typeof v === 'string' && v.trim()) acc.a3[n] = v.trim();
+    });
+  }
+  // horenso: {kind,text,presend} を kind+text の重複を避けて追加。
+  if (Array.isArray(extract.horenso)) {
+    extract.horenso.forEach(function (h) {
+      if (!h || typeof h !== 'object') return;
+      const kind = ['report', 'chat', 'meeting'].indexOf(h.kind) >= 0 ? h.kind : null;
+      const text = typeof h.text === 'string' ? h.text.trim() : '';
+      if (!kind || !text) return;
+      if (acc.horenso.some(function (x) { return x.kind === kind && x.text === text; })) return;
+      acc.horenso.push({ kind: kind, text: text, presend: !!h.presend });
+    });
+  }
+  // muda: ムダ番号(1-7の文字列)→{status,note}。後着で上書き。
+  if (extract.muda && typeof extract.muda === 'object') {
+    Object.keys(extract.muda).forEach(function (k) {
+      const n = String(k).trim();
+      const m = extract.muda[k];
+      if (!/^[1-7]$/.test(n) || !m || typeof m !== 'object') return;
+      const status = (m.status === 'ok' || m.status === 'warn') ? m.status : null;
+      if (!status) return;
+      acc.muda[n] = { status: status, note: typeof m.note === 'string' ? m.note : '' };
+    });
+  }
+  intakeSyncSeriesData();
+}
+
 // v6-1: 対話から裏タブ用データ（horenso / mudaChecks）へ best-effort 反映。
 //   スキーマbump不要の追加フィールド。読み側はデフォルト補完する前提。
 function intakeSyncSeriesData() {
@@ -5888,6 +5940,15 @@ function intakeSyncSeriesData() {
   else if (intake.tense === 'future') horenso.push({ kind: 'meeting', text: intake.decisionQuestion || intake.title || '', presend: false });
   const factsNotReady = (intake.factsReady === 'no' || intake.factsReady === 'unknown');
   if (factsNotReady) horenso.push({ kind: 'report', text: '現状把握レポート（Step2）', presend: true });
+  // v6-3: AI抽出の報連相を、ルールベース分と重複を避けて合流させる（同じ器に共存）。
+  const ax = (intake && intake.aiExtract && typeof intake.aiExtract === 'object') ? intake.aiExtract : null;
+  if (ax && Array.isArray(ax.horenso)) {
+    ax.horenso.forEach(function (h) {
+      if (!h || !h.text) return;
+      if (horenso.some(function (x) { return x.kind === h.kind && x.text === h.text; })) return;
+      horenso.push({ kind: h.kind, text: h.text, presend: !!h.presend });
+    });
+  }
   s.horenso = horenso;
   // 7つのムダの兆候（best-effort。すべて埋める必要はない）。良好な兆候は✅、疑わしければ⚠️で残す。
   const muda = (s.mudaChecks && typeof s.mudaChecks === 'object') ? s.mudaChecks : {};
@@ -5905,6 +5966,15 @@ function intakeSyncSeriesData() {
     if (opinionCount === 0) muda['7'] = { status: 'warn', note: '異論を出す役がいない（選択肢・異論の検討なしで結論ありきの疑い）' };
     else muda['7'] = { status: 'ok', note: '意見を出す役がいる（結論ありきを回避）' };
   }
+  // v6-3: AI抽出の7つのムダ兆候を合流（後着で上書き。ルールベース分と共存）。
+  if (ax && ax.muda && typeof ax.muda === 'object') {
+    Object.keys(ax.muda).forEach(function (k) {
+      const m = ax.muda[k];
+      if (/^[1-7]$/.test(String(k)) && m && (m.status === 'ok' || m.status === 'warn')) {
+        muda[k] = { status: m.status, note: typeof m.note === 'string' ? m.note : '' };
+      }
+    });
+  }
   s.mudaChecks = muda;
   // v6-2: 参照ビュー（A3タブ）用に対話由来の構造化サマリを永続化（追加フィールド）。
   //   打ち切っても後から参照できるよう series に残す。編集キャンバスの steps.content とは別枠。
@@ -5916,8 +5986,21 @@ function intakeSyncSeriesData() {
     decider: intake.decider || '',
     members: active.map(function (p) { return { name: p.name, role: p.role }; }),
     background: intakeSummaryText(),
+    // v6-3: AIが対話から抽出したA3各ステップの断片（参照ビューで表示。canvas本文とは別枠）。
+    a3: (ax && ax.a3 && typeof ax.a3 === 'object') ? Object.assign({}, ax.a3) : {},
     updatedAt: Date.now()
   };
+  // v6-3: AI抽出のA3断片を、未記入（todo・空・手段未確定）のステップ本文へ best-effort でマージ。
+  //   ユーザー/会議が既に埋めたステップは上書きしない（共存）。
+  if (ax && ax.a3 && s.steps && typeof s.steps === 'object') {
+    Object.keys(ax.a3).forEach(function (n) {
+      if (!/^[1-8]$/.test(String(n))) return;
+      const st = s.steps[n];
+      if (st && !st.filledBy && (!st.content || !String(st.content).trim()) && (!st.status || st.status === 'todo')) {
+        st.content = ax.a3[n];
+      }
+    });
+  }
   saveSeries(list);
   renderRefViews();
 }
@@ -5989,6 +6072,9 @@ function a3RefStepText(s, i) {
   }
   const st = (s.steps && s.steps[String(i)]) || {};
   if (st.content) parts.push(st.content);
+  // v6-3: AIが対話から抽出したA3断片も表示（本文に既出でなければ追記。best-effort）。
+  const ax3 = (r.a3 && typeof r.a3 === 'object') ? r.a3[String(i)] : '';
+  if (ax3 && parts.join('\n').indexOf(ax3) < 0) parts.push(ax3);
   return parts.join('\n');
 }
 function renderA3Ref() {
@@ -6235,6 +6321,8 @@ async function intakeAiTurn() {
       try { if (intakeApplyAction(r.actions[i], r.reply)) { handedOff = true; break; } } catch (e) {}
     }
   }
+  // v6-3: AI応答の extract を裏タブ用データ（A3/ムダ/報連相）へ best-effort でマージ。
+  try { intakeMergeExtract(r.extract); } catch (e) {}
   intake.aiState = (r.state && typeof r.state === 'object') ? r.state : intake.aiState;
   if (!handedOff) intakeRenderAiChoices(r.choices);
 }
