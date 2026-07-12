@@ -408,6 +408,23 @@
     <input type="text" id="mtg-title" placeholder="例）新製品の価格をどう設定するか" oninput="renderInvite()">
     <label for="mtg-bg">背景（なぜ今この判断が必要か）</label>
     <textarea id="mtg-bg" rows="2" placeholder="例）競合が値下げを発表。次期見積提出まで残り2週間で価格方針を固める必要がある。" oninput="renderInvite()"></textarea>
+    <label for="mtg-decision-question">判断する問い（このセッションで何を決めるか・必須）</label>
+    <p class="note">セッション全体で「何を決めるのか」を1つの問いにします。空のままでは開始できません。<strong>30分は判断セッションの標準です。</strong></p>
+    <input type="text" id="mtg-decision-question" placeholder="例）新製品の発売日をいつにするか？" oninput="renderPricetag()">
+    <details id="design-scope" class="card" style="margin-top:12px">
+      <summary style="cursor:pointer; font-weight:700">このツールが対象としない会議</summary>
+      <div style="margin-top:12px">
+        <p class="note" style="margin-top:0">下記は判断セッションの守備範囲外です。別の場を使ってください。</p>
+        <ul style="margin-top:0; margin-bottom:0">
+          <li>1on1</li>
+          <li>研修・講演</li>
+          <li>朝会</li>
+          <li>緊急インシデント対応</li>
+          <li>発散型ワークショップ</li>
+          <li>高度な機密案件</li>
+        </ul>
+      </div>
+    </details>
     <h3>議題（未来の問い）と「今日決めること」</h3>
     <p class="note">議題はテーマ（〜について／〜の件）ではなく「会議終了時に決まっているべき問い」で。各議題に、終了時に決まっているべき状態＝「今日決めること」を必ず添えてください。</p>
     <div class="row">
@@ -462,6 +479,24 @@
     <h3>会議に呼ばず、レポートを送る人</h3>
     <p class="note">「聞くだけ」の人は自動でこちらに回ります。会議終了後のレポートの送付先になります。</p>
     <ul class="plain" id="recipient-list"></ul>
+    <h3>判断の材料（任意 — 入力すると会議案内に反映されます）</h3>
+    <p class="note">判断を早く・良くするための材料です。すべて任意ですが、埋めるほど会議は短く濃くなります。</p>
+    <label for="option-input">選択肢（複数登録できます）</label>
+    <div class="row">
+      <div style="flex:3">
+        <input type="text" id="option-input" placeholder="例）6月発売案" onkeydown="if(event.key==='Enter')addOption()">
+      </div>
+      <div style="flex:0"><button class="ghost" onclick="addOption()">追加</button></div>
+    </div>
+    <ul class="plain" id="option-list"></ul>
+    <label for="mtg-recommendation">推奨案（どれを推すか＋一言）</label>
+    <input type="text" id="mtg-recommendation" placeholder="例）6月発売案を推す。競合に先行できるため" oninput="renderInvite()">
+    <label for="mtg-criteria">判断基準（何で選ぶか）</label>
+    <input type="text" id="mtg-criteria" placeholder="例）初年度の粗利と競合先行の両立で選ぶ" oninput="renderInvite()">
+    <label for="mtg-no-decision-impact">決めなかった場合の影響</label>
+    <input type="text" id="mtg-no-decision-impact" placeholder="例）見積提出に間に合わず失注リスクが高まる" oninput="renderInvite()">
+    <label for="mtg-end-condition">今日の終了条件（何が決まれば終わりか）</label>
+    <input type="text" id="mtg-end-condition" placeholder="例）発売日・担当・次回レビュー日が確定したら終了" oninput="renderInvite()">
     <h3>案件（A3）との紐づけ（任意）</h3>
     <p class="note">この会議がどの案件のどのステップを前進させるのかを紐づけると、会議案内に節目として明記されます。</p>
     <div class="row">
@@ -1841,6 +1876,7 @@ function recordAvoided() {
 let agendas = [];   // {q, min, goal}
 let members = [];   // {name, role, prep}
 let recipients = []; // {name}
+let decisionOptions = []; // 判断の選択肢（文字列の配列・任意入力）
 let mtgSeq = 1;     // この案件（series）における会議の連番。プリフィル/表示用。
 function computeSeq(seriesId) {
   if (!seriesId) return 1;
@@ -2053,6 +2089,22 @@ function demoteMember(i) {
 }
 function removeRecipient(i) { recipients.splice(i, 1); renderDesign(); }
 
+// --- 判断の選択肢（任意・複数登録） ---
+function addOption() {
+  const el = document.getElementById('option-input');
+  const v = el.value.trim();
+  if (!v) return;
+  decisionOptions.push(v);
+  el.value = '';
+  renderDesign();
+}
+function removeOption(i) { decisionOptions.splice(i, 1); renderDesign(); }
+// 判断する問い・判断の材料フィールドを初期化（設計フローへ入り直すとき用）
+function clearDecisionMaterials() {
+  ['mtg-decision-question', 'mtg-recommendation', 'mtg-criteria', 'mtg-no-decision-impact', 'mtg-end-condition', 'option-input']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+}
+
 function totalPlannedMin() { return agendas.reduce((s, a) => s + a.min, 0); }
 function currentRate() { return Number(document.getElementById('mtg-rate').value) || 0; }
 function plannedBudget() { return Math.round(members.length * totalPlannedMin() * currentRate() / 60); }
@@ -2126,6 +2178,23 @@ function renderDesign() {
     rl.appendChild(li);
   });
 
+  const ol = document.getElementById('option-list');
+  if (ol) {
+    ol.innerHTML = '';
+    decisionOptions.forEach((opt, i) => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.className = 'grow';
+      span.textContent = `${i + 1}. ${opt}`;
+      const del = document.createElement('button');
+      del.className = 'ghost small';
+      del.textContent = '削除';
+      del.onclick = () => removeOption(i);
+      li.append(span, del);
+      ol.appendChild(li);
+    });
+  }
+
   renderPricetag();
 }
 
@@ -2154,12 +2223,23 @@ function renderPricetag() {
     overflowBox.classList.add('hidden');
   }
 
+  const decisionQ = (document.getElementById('mtg-decision-question').value || '').trim();
+  const hasDecider = members.some(m => m.role === 'decider');
+
   const warnings = [];
+  const blockers = [];
+  if (decisionQ === '') blockers.push('「判断する問い」が未入力です。このセッションで何を決めるのかを1つの問いにしてください（未入力では開始できません）。');
+  if (n > 0 && !hasDecider) blockers.push('「決める人（決裁者）」が1人もいません。決裁者のいない相談は決定できず、もう一度会議をやり直すことになります。開始するには決める人を追加してください。');
   if (n > 5) warnings.push(`参加者 ${n}人 は多すぎます。意思決定に6人以上は不要なことがほとんどです。「情報提供」の人は事前レポートで代替できませんか？`);
-  if (agendas.length > 0 && n > 0 && !members.some(m => m.role === 'decider')) warnings.push('「決める人」がいません。決裁者のいない相談は決定できず、もう一度会議をやり直すことになります。');
   if (n > 0 && members.every(m => !m.prep)) warnings.push('主催者が全資料を用意する会議になっています。参加者は判断材料を持ち寄る当事者です。各参加者に「期待する準備」を割り当ててください。');
   const w = document.getElementById('design-warnings');
   w.innerHTML = '';
+  blockers.forEach(t => {
+    const d = document.createElement('div');
+    d.className = 'alert bad';
+    d.textContent = t;
+    w.appendChild(d);
+  });
   warnings.forEach(t => {
     const d = document.createElement('div');
     d.className = 'alert warn';
@@ -2167,7 +2247,8 @@ function renderPricetag() {
     w.appendChild(d);
   });
 
-  document.getElementById('btn-start').disabled = !(agendas.length > 0 && n > 0 && currentRate() > 0 && !over);
+  document.getElementById('btn-start').disabled =
+    !(agendas.length > 0 && n > 0 && currentRate() > 0 && !over && decisionQ !== '' && hasDecider);
   renderInvite();
 }
 
@@ -2273,6 +2354,11 @@ function renderFactGate() {
 function buildInvite() {
   const title = document.getElementById('mtg-title').value.trim() || '（無題の相談）';
   const bg = document.getElementById('mtg-bg').value.trim();
+  const decisionQ = (document.getElementById('mtg-decision-question').value || '').trim();
+  const recommendation = (document.getElementById('mtg-recommendation').value || '').trim();
+  const criteria = (document.getElementById('mtg-criteria').value || '').trim();
+  const noDecisionImpact = (document.getElementById('mtg-no-decision-impact').value || '').trim();
+  const endCondition = (document.getElementById('mtg-end-condition').value || '').trim();
   const min = totalPlannedMin();
   const n = members.length;
   const rate = currentRate();
@@ -2282,6 +2368,9 @@ function buildInvite() {
   L.push('');
   L.push('■ 背景');
   L.push(bg || '（背景を記入してください）');
+  L.push('');
+  L.push('■ 判断する問い');
+  L.push(decisionQ || '（判断する問いを記入してください）');
   L.push('');
   L.push(`■ 議題と「今日決めること」（合計 ${min}分）`);
   if (agendas.length) {
@@ -2302,6 +2391,32 @@ function buildInvite() {
       L.push('■ 位置づけ');
       L.push(`本会議はA3のStep ${stepVal}（${A3_STEPS[Number(stepVal)]}）を前進させる節目です。`);
     }
+  }
+
+  if (decisionOptions.length) {
+    L.push('');
+    L.push('■ 選択肢');
+    decisionOptions.forEach((opt, i) => L.push(`${i + 1}. ${opt}`));
+  }
+  if (recommendation) {
+    L.push('');
+    L.push('■ 推奨案');
+    L.push(recommendation);
+  }
+  if (criteria) {
+    L.push('');
+    L.push('■ 判断基準');
+    L.push(criteria);
+  }
+  if (noDecisionImpact) {
+    L.push('');
+    L.push('■ 決めなかった場合の影響');
+    L.push(noDecisionImpact);
+  }
+  if (endCondition) {
+    L.push('');
+    L.push('■ 今日の終了条件');
+    L.push(endCondition);
   }
 
   L.push('');
@@ -2367,6 +2482,12 @@ function startMeeting() {
     stepNo: document.getElementById('series-step').value ? Number(document.getElementById('series-step').value) : null,
     seq: mtgSeq,
     title: document.getElementById('mtg-title').value.trim() || '（無題の相談）',
+    decisionQuestion: (document.getElementById('mtg-decision-question').value || '').trim(),
+    options: decisionOptions.slice(),
+    recommendation: (document.getElementById('mtg-recommendation').value || '').trim(),
+    criteria: (document.getElementById('mtg-criteria').value || '').trim(),
+    noDecisionImpact: (document.getElementById('mtg-no-decision-impact').value || '').trim(),
+    endCondition: (document.getElementById('mtg-end-condition').value || '').trim(),
     agendas: agendas.map(a => ({
       q: a.q, min: a.min, goal: a.goal || '',
       decision: null, dissent: '', actions: [], spentSec: 0,
@@ -2993,6 +3114,12 @@ function persistMeeting() {
     stepNo: mtg.stepNo,
     seq: mtg.seq,
     title: mtg.title,
+    decisionQuestion: mtg.decisionQuestion || '',
+    options: (mtg.options || []).slice(),
+    recommendation: mtg.recommendation || '',
+    criteria: mtg.criteria || '',
+    noDecisionImpact: mtg.noDecisionImpact || '',
+    endCondition: mtg.endCondition || '',
     startMs: mtg.startMs,
     endMs: mtg.endMs,
     plannedMin: mtg.plannedMin,
@@ -3476,9 +3603,15 @@ function flashCopied(btn) {
 
 function resetFlow() {
   document.getElementById('modal-overlay').classList.add('hidden');
-  agendas = []; members = []; recipients = []; mtg = null; triageKind = null;
+  agendas = []; members = []; recipients = []; decisionOptions = []; mtg = null; triageKind = null;
   document.getElementById('mtg-title').value = '';
   document.getElementById('mtg-bg').value = '';
+  document.getElementById('mtg-decision-question').value = '';
+  document.getElementById('mtg-recommendation').value = '';
+  document.getElementById('mtg-criteria').value = '';
+  document.getElementById('mtg-no-decision-impact').value = '';
+  document.getElementById('mtg-end-condition').value = '';
+  document.getElementById('option-input').value = '';
   document.getElementById('agenda-goal').value = '';
   document.getElementById('member-prep').value = '';
   document.getElementById('agenda-error').classList.add('hidden');
@@ -3537,8 +3670,9 @@ function startAsA3Case() {
 function goToStepDesign(seriesId, stepNo) {
   if (mtg && mtg.timer) clearInterval(mtg.timer);
   mtg = null;
-  agendas = []; members = []; recipients = []; mtgSeq = 1;
+  agendas = []; members = []; recipients = []; decisionOptions = []; mtgSeq = 1;
   document.getElementById('mtg-bg').value = '';
+  clearDecisionMaterials();
   document.getElementById('agenda-goal').value = '';
   document.getElementById('member-prep').value = '';
   document.getElementById('agenda-error').classList.add('hidden');
@@ -3561,9 +3695,10 @@ function goToStepDesign(seriesId, stepNo) {
 function goToEscalationDesign(seriesId) {
   if (mtg && mtg.timer) clearInterval(mtg.timer);
   mtg = null;
-  agendas = []; members = []; recipients = []; mtgSeq = 1;
+  agendas = []; members = []; recipients = []; decisionOptions = []; mtgSeq = 1;
   document.getElementById('mtg-bg').value =
     '本件は実務調整で停滞しています（2回持ち越し／期限超過7日超）。担当レベルで頑張り続けるのではなく、上位判断を仰ぐためのエスカレーション会議です。';
+  clearDecisionMaterials();
   document.getElementById('agenda-input').value = '';
   document.getElementById('agenda-goal').value = '';
   document.getElementById('member-prep').value = '';
