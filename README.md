@@ -294,7 +294,9 @@
 
 | 変数 | 既定 | 意味 |
 |------|------|------|
-| `ANTHROPIC_API_KEY` | （空） | Claude API キー。未設定かつ非モックだと AI アシストは 503。 |
+| `OPENAI_BASE_URL` | **（なし・必須）** | OpenAI 互換 API のベース URL。**デフォルト値なしの必須環境変数**。宛先は運用者が明示的に指定すること。未設定かつ非モックだと AI アシストは `503 llm_unavailable`（SSRF 対策）。 |
+| `OPENAI_API_KEY` | （空） | OpenAI 互換 API キー。設定時のみ `Authorization: Bearer` を付与（任意）。 |
+| `OPENAI_MODEL` | `gpt-4o` | 使用モデル。 |
 | `PORT` | `8787` | 待受ポート。 |
 | `DAILY_LIMIT` | `1000` | 1日あたりの LLM 呼び出し上限。 |
 | `MOCK_LLM` | （空） | `1` で外部送信せず決定的モック応答。 |

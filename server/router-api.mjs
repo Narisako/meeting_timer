@@ -1,7 +1,9 @@
 // 会議招集の前に ステートレスAPIバックエンド骨格 (v3-2 / Issue #14)
 // - Node 18+ 標準ライブラリ + 組み込み fetch のみ。npm 依存ゼロ。
 // - ゼロリテンション: DB・ファイル書き込み一切なし。ログはメタデータのみ（入力本文・LLM応答本文は出さない）。
-// - LLMアシスト専用。MOCK_LLM=1 で決定的モック、ANTHROPIC_API_KEY で Claude API。
+// - LLMアシスト専用。MOCK_LLM=1 で決定的モック、OpenAI API (gpt-4o) で実行。
+// - OPENAI_BASE_URL は必須の環境変数（デフォルト値なし）。宛先は運用者が明示的に指定すること。
+//   未設定（空文字）の場合、非MOCK時のLLM呼び出しは 503 llm_unavailable を返す（SSRF対策）。
 // - 静的配信: GET / → index.html、GET /privacy → privacy.html（ゼロリテンション方針は不変。本文は保持・記録しない）。
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -13,22 +15,23 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const PORT = Number(process.env.PORT || 8787);
 const MOCK = process.env.MOCK_LLM === '1';
-const API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+// SSRF対策: デフォルト値なし。運用者が明示的に指定する必須環境変数。未設定なら非MOCK時 503。
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || '';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 const DAILY_LIMIT = Number(process.env.DAILY_LIMIT || 1000);
 
 const MAX_BODY = 32 * 1024;         // 32KB
 const RATE_PER_MIN = 30;            // IPごと 30req/分
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_VERSION = '2023-06-01';
 
-const HAIKU = 'claude-haiku-4-5';
-const SONNET = 'claude-sonnet-5';
+// 全ルートで同一モデルを使用（環境変数で切替）
+const MODEL = OPENAI_MODEL;
 
 // ---- エンドポイント定義 (path -> {model, maxTokens, system, mock, validate}) ----
 const ROUTES = {
   // R1 報連相仕分け
   'route': {
-    model: HAIKU, maxTokens: 512,
+    model: MODEL, maxTokens: 512,
     // フロントのレーン(報告=過去/連絡=現在/相談=未来)と整合させる。
     // report=報告(すでに済んだ過去の事実), chat=連絡(いま知らせたい現在の共有), meeting=相談(これから決めたい未来の要決定=要会議)。
     system: 'あなたは日本の職場の「報連相」仕分け係です。入力メッセージを report(報告=すでに済んだ過去の事実や結果の報告)/chat(連絡=いま知らせたい現在の共有・連絡事項)/meeting(相談=これから決めたい未来の要決定事項＝要会議) のいずれかに分類し、理由と整形済み本文を返します。必ず次のJSONのみを出力: {"kind":"report|chat|meeting","reason":"日本語の短い理由","formatted":"整形済み本文"}',
@@ -50,7 +53,7 @@ const ROUTES = {
   },
   // R2 議題添削
   'refine-agenda': {
-    model: HAIKU, maxTokens: 512,
+    model: MODEL, maxTokens: 512,
     system: 'あなたは会議の議題を添削する専門家です。曖昧な議題を「問い」の形に磨き、達成ゴールと一言コメントを返します。必ず次のJSONのみを出力: {"question":"問いの形にした議題","goal":"この議題で決めるべきゴール","comment":"改善の一言"}',
     mock(input) {
       const t = input.trim();
@@ -67,7 +70,7 @@ const ROUTES = {
   },
   // R3 曖昧アクション具体化
   'concretize-action': {
-    model: HAIKU, maxTokens: 768,
+    model: MODEL, maxTokens: 768,
     system: 'あなたは曖昧なアクションを「誰が・何を・いつまで」に具体化する係です。入力から候補を抽出し配列で返します。必ず次のJSONのみを出力: {"candidates":[{"what":"具体的な作業","ownerHint":"担当の目安","dueHint":"期限の目安"}]}',
     mock(input) {
       const lines = input.split(/[\n、。]/).map(s => s.trim()).filter(Boolean).slice(0, 3);
@@ -88,7 +91,7 @@ const ROUTES = {
   },
   // R4 3行要約
   'summarize-handoff': {
-    model: SONNET, maxTokens: 512,
+    model: MODEL, maxTokens: 512,
     system: 'あなたは引き継ぎ要約の専門家です。入力を3行以内の要約にまとめます。必ず次のJSONのみを出力: {"summary":"3行以内の要約（改行区切り）"}',
     mock(input) {
       const t = input.replace(/\s+/g, ' ').trim();
@@ -99,7 +102,7 @@ const ROUTES = {
   },
   // R5 A3・1枚圧縮 (1500字以内)
   'compile-a3': {
-    model: SONNET, maxTokens: 2048,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたはA3一枚仕事術の編集者です。入力を1500字以内のA3ドラフト（背景/現状/目標/対策/計画）に圧縮します。必ず次のJSONのみを出力: {"a3":"1500字以内のA3本文"}',
     mock(input) {
       let a3 = `【背景】${input.trim()}\n【現状】入力${input.length}字を整理\n【目標】論点を1枚に集約\n【対策】要点を構造化\n【計画】担当と期限を割当`;
@@ -110,7 +113,7 @@ const ROUTES = {
   },
   // R6 なぜなぜ候補
   'five-whys': {
-    model: SONNET, maxTokens: 768,
+    model: MODEL, maxTokens: 768,
     system: 'あなたは「なぜなぜ分析」のファシリテーターです。入力の事象に対し「なぜ」を掘り下げる候補を返します。必ず次のJSONのみを出力: {"whys":["なぜ1","なぜ2","なぜ3","なぜ4","なぜ5"]}',
     mock(input) {
       const t = input.trim();
@@ -120,7 +123,7 @@ const ROUTES = {
   },
   // R7 指標からの改善提案
   'diagnose': {
-    model: SONNET, maxTokens: 768,
+    model: MODEL, maxTokens: 768,
     system: 'あなたは会議指標のアナリストです。入力の指標データから改善提案を返します。必ず次のJSONのみを出力: {"advice":"具体的な改善提案の文章"}',
     mock(input) {
       return { advice: `指標（${input.length}字）を診断: 停滞の兆候があれば担当と期限を明確化し、決定ゼロ会議を減らす一手を打ちましょう。` };
@@ -130,7 +133,7 @@ const ROUTES = {
   // v5-2 AIインテーク（ステートレス対話）。他ルートと異なり {messages, state} を受け、
   //   {reply, choices?, actions?, state?} を返す。chat:true でハンドラ側の分岐を切り替える。
   'intake': {
-    model: SONNET, maxTokens: 1024, chat: true,
+    model: MODEL, maxTokens: 1024, chat: true,
     system: [
       'あなたは「会議招集の前に」という報連相トリアージ・システムの対話ガイドです。',
       '思想を厳守してください:',
@@ -388,36 +391,92 @@ function extractJson(text) {
   return JSON.parse(s);
 }
 
-// ---- 実LLM呼び出し ----
+// ---- Codex モデル判定 ----
+function isCodexModel(model) {
+  return model.toLowerCase().includes('codex');
+}
+
+// ---- OpenAI 呼び出し共通ヘルパー (Chat Completions / Responses API) ----
+// system: system prompt 文字列。messages: [{role:'user'|'assistant', content}] の会話配列。
+// Codex モデルは Responses API、それ以外は Chat Completions API を使う。応答テキストを返す。
+async function openaiComplete({ model, maxTokens, system, messages }) {
+  const headers = { 'content-type': 'application/json' };
+  if (OPENAI_API_KEY) headers['authorization'] = `Bearer ${OPENAI_API_KEY}`;
+
+  if (isCodexModel(model)) {
+    // Responses API for codex models（system は instructions、会話は input に連結）
+    const input = messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
+    const url = `${OPENAI_BASE_URL}/responses`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        instructions: system,
+        input,
+        stream: false
+      })
+    });
+    if (!res.ok) throw new apiError(res.status, await res.text());
+    const data = await res.json();
+    // Extract text from output[].type=="message" -> content[].type=="output_text"
+    let text = '';
+    if (Array.isArray(data.output)) {
+      for (const out of data.output) {
+        if (out.type === 'message' && Array.isArray(out.content)) {
+          for (const c of out.content) {
+            if (c.type === 'output_text') text += c.text;
+          }
+        }
+      }
+    }
+    return text;
+  }
+
+  // Chat Completions API
+  const url = `${OPENAI_BASE_URL}/chat/completions`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: 'system', content: system }, ...messages]
+    })
+  });
+  if (!res.ok) throw new apiError(res.status, await res.text());
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+// ---- 実LLM呼び出し (OpenAI Chat Completions / Responses API) ----
 async function callLlm(route, input, context) {
   const userContent = context && Object.keys(context).length
     ? `${input}\n\n# context\n${JSON.stringify(context)}`
     : input;
-  const res = await fetch(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': API_KEY,
-      'anthropic-version': ANTHROPIC_VERSION
-    },
-    body: JSON.stringify({
-      model: route.model,
-      max_tokens: route.maxTokens,
-      system: route.system,
-      messages: [{ role: 'user', content: userContent }]
-    })
+  const text = await openaiComplete({
+    model: route.model,
+    maxTokens: route.maxTokens,
+    system: route.system,
+    messages: [{ role: 'user', content: userContent }]
   });
-  if (!res.ok) throw new Error('anthropic_status_' + res.status);
-  const data = await res.json();
-  const text = Array.isArray(data.content)
-    ? data.content.filter(p => p.type === 'text').map(p => p.text).join('')
-    : '';
   const parsed = extractJson(text);
   if (!route.validate(parsed)) throw new Error('invalid_llm_shape');
   return parsed;
 }
 
+// ---- apiError 型 ----
+class apiError extends Error {
+  constructor(statusCode, body) {
+    super(`openai_status_${statusCode}`);
+    this.statusCode = statusCode;
+    this.body = body;
+  }
+}
+
 // ---- 実LLM呼び出し（対話ルート: messages + state → {reply, choices?, actions?, state?}） ----
+// v5 対話インテーク特有の要件（会話履歴を {role,content} に変換し、system prompt に現在の状態を
+// JSON 埋め込みする）を維持しつつ、HTTP 呼び出しは OpenAI 共通ヘルパー（openaiComplete）に委譲する。
 async function callLlmChat(route, messages, state) {
   const convo = messages.map(m => ({
     role: m && m.role === 'assistant' ? 'assistant' : 'user',
@@ -425,25 +484,12 @@ async function callLlmChat(route, messages, state) {
   }));
   if (!convo.length) convo.push({ role: 'user', content: '（開始）' });
   const system = route.system + '\n\n# 現在の状態\n' + JSON.stringify(state || {});
-  const res = await fetch(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': API_KEY,
-      'anthropic-version': ANTHROPIC_VERSION
-    },
-    body: JSON.stringify({
-      model: route.model,
-      max_tokens: route.maxTokens,
-      system,
-      messages: convo
-    })
+  const text = await openaiComplete({
+    model: route.model,
+    maxTokens: route.maxTokens,
+    system,
+    messages: convo
   });
-  if (!res.ok) throw new Error('anthropic_status_' + res.status);
-  const data = await res.json();
-  const text = Array.isArray(data.content)
-    ? data.content.filter(p => p.type === 'text').map(p => p.text).join('')
-    : '';
   const parsed = extractJson(text);
   if (!route.validate(parsed)) throw new Error('invalid_llm_shape');
   return parsed;
@@ -518,7 +564,8 @@ const server = http.createServer(async (req, res) => {
         inputChars = messages.reduce((n, m) => n + m.text.length, 0);
         if (MOCK) {
           result = route.mock(messages, state);
-        } else if (!API_KEY) {
+        } else if (!OPENAI_BASE_URL) {
+          // SSRF対策: OPENAI_BASE_URL は必須。未設定なら実LLM呼び出しを行わず 503。
           status = 503; sendJson(res, 503, { ok: false, error: 'llm_unavailable' }); return;
         } else {
           try {
@@ -538,7 +585,8 @@ const server = http.createServer(async (req, res) => {
         // LLM 実行
         if (MOCK) {
           result = route.mock(input, context);
-        } else if (!API_KEY) {
+        } else if (!OPENAI_BASE_URL) {
+          // SSRF対策: OPENAI_BASE_URL は必須。未設定なら実LLM呼び出しを行わず 503。
           status = 503; sendJson(res, 503, { ok: false, error: 'llm_unavailable' }); return;
         } else {
           try {
