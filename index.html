@@ -276,12 +276,20 @@
   .basic-flow .flow-step small { font-weight: 400; }
   /* 対話インテーク（チャット形式の入り口） */
   #intake-card { border: 1px solid var(--accent); }
+  /* v6-1: チャットは専用タブとして全画面高さのUIに拡張 */
+  #screen-chat.active { display: flex; }
+  #screen-chat #intake-card { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  #screen-chat .intake-messages { flex: 1; max-height: none; min-height: 240px; }
   .intake-messages { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; padding: 8px; background: var(--accent-soft); border-radius: 8px; margin: 8px 0; }
   .intake-msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
   .intake-system { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-top-left-radius: 2px; }
   .intake-user { align-self: flex-end; background: var(--accent); color: #fff; border-top-right-radius: 2px; }
   .intake-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
   .intake-choices .intake-choice { text-align: left; }
+  #intake-invite-btn { font-weight: 700; }
+  /* v6-1: チャット内の会議招集文面ブロック（コピー可能な pre） */
+  .intake-invite-block { align-self: stretch; max-width: 100%; background: #fff; border: 1px solid var(--accent); border-radius: 12px; padding: 10px 12px; }
+  .intake-invite-pre { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.5; margin: 0 0 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   @media (max-width: 560px) { .a3-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
@@ -292,9 +300,12 @@
   <span class="tagline">ちょっと待って。その会議、必要ですか？</span>
 </header>
 <nav>
-  <button id="tab-a3" class="active" onclick="showScreen('a3')">トヨタA3 8ステップ・キャンバス</button>
-  <button id="tab-triage" onclick="showScreen('triage')">案件トリアージ</button>
-  <button id="tab-dash" onclick="showScreen('dash')">フローダッシュボード</button>
+  <button id="tab-chat" class="active" onclick="showScreen('chat')">💬 チャット</button>
+  <button id="tab-a3" onclick="showScreen('a3')">トヨタA3 8ステップ・キャンバス</button>
+  <button id="tab-muda" onclick="showScreen('muda')">7つのムダ チェックリスト</button>
+  <button id="tab-horenso" onclick="showScreen('horenso')">報連相 仕分けリスト</button>
+  <!-- v6-1: 案件トリアージ／フローダッシュボードはタブバーから外す（機能は温存）。
+       到達導線は「トヨタA3 8ステップ」タブ内の「詳細ツール」ボタン、または showScreen() から。 -->
 </nav>
 
 <main>
@@ -631,10 +642,11 @@
 </section>
 
 <!-- ===================== トヨタA3 8ステップ・キャンバス ===================== -->
-<section id="screen-a3" class="screen active">
+<!-- ===================== 💬 チャット（主役・初期表示） ===================== -->
+<section id="screen-chat" class="screen active">
   <div class="card" id="intake-card">
-    <h2>💬 対話で始める</h2>
-    <p class="note">AIの質問に答えながら、レポート・チャット・会議のどれが必要かを一緒に見極めます。会議は必要最小限のメンバー・招集に絞ります。（AI設定がONなら自由対話、OFF・サーバー不達時はルールベースで動きます）</p>
+    <h2>💬 チャットで進める</h2>
+    <p class="note">AIの質問に答えながら、レポート・チャット・会議のどれが必要かを一緒に見極めます。会議になる場合は、この画面のまま会議招集の文面まで作れます。5往復以上やりとりすると「📋 会議招集まとめ」ボタンが出て、いつでも打ち切って文面を作れます。（AI設定がONなら自由対話、OFF・サーバー不達時はルールベースで動きます）</p>
     <div id="intake-ai-note" class="note" style="background:var(--accent-soft);border-radius:8px;padding:6px 10px;margin:6px 0;"></div>
     <div id="intake-messages" class="intake-messages" aria-live="polite"></div>
     <div id="intake-choices" class="intake-choices"></div>
@@ -646,7 +658,18 @@
     </div>
     <div style="margin-top:8px">
       <button class="ghost" id="intake-restart" onclick="intakeStart()">対話をやり直す</button>
-      <span class="note" style="margin-left:8px">従来の作り方は「案件トリアージ」タブからも使えます。</span>
+      <span class="note" style="margin-left:8px">従来の作り方は「トヨタA3 8ステップ」タブ内の「詳細ツール」からも使えます。</span>
+    </div>
+  </div>
+</section>
+
+<section id="screen-a3" class="screen">
+  <div class="card" id="a3-tools">
+    <h2>詳細ツール（従来機能）</h2>
+    <p class="note">通常はチャットタブだけで案件入力から会議招集まで完結します。従来の個別ツールを直接使いたいときはこちらから。</p>
+    <div class="row" style="flex-wrap:wrap; gap:8px">
+      <button class="ghost" onclick="showScreen('triage')">案件トリアージを開く</button>
+      <button class="ghost" onclick="showScreen('dash')">フローダッシュボードを開く</button>
     </div>
   </div>
   <div class="card" id="a3-basic-flow">
@@ -799,6 +822,24 @@
     </div>
     <div id="data-mgmt-error" class="alert bad hidden"></div>
     <div id="data-mgmt-status" class="note" style="margin-top:8px"></div>
+  </div>
+</section>
+
+<!-- ===================== 7つのムダ チェックリスト（v6-2で実装。本Issueは枠のみ） ===================== -->
+<section id="screen-muda" class="screen">
+  <div class="card">
+    <h2>7つのムダ チェックリスト</h2>
+    <p class="note">チャットのやりとりから「事技系職場の7つのムダ」の兆候を自動でチェックします。反映ビューは次のアップデート（v6-2）で実装予定です。</p>
+    <div id="muda-checklist" class="note">（チャットで案件を進めると、ここに検知結果が表示されます）</div>
+  </div>
+</section>
+
+<!-- ===================== 報連相 仕分けリスト（v6-2で実装。本Issueは枠のみ） ===================== -->
+<section id="screen-horenso" class="screen">
+  <div class="card">
+    <h2>報連相 仕分けリスト</h2>
+    <p class="note">チャットのやりとりを「報告／連絡／相談（会議）」に仕分けし、事前送付が必要なものを一覧にします。反映ビューは次のアップデート（v6-2）で実装予定です。</p>
+    <div id="horenso-list" class="note">（チャットで案件を進めると、ここに仕分け結果が表示されます）</div>
   </div>
 </section>
 
@@ -1826,7 +1867,7 @@ function dashMetrics() {
 migrateSchema();
 
 // ---------- 画面制御 ----------
-const SCREENS = ['triage', 'design', 'cockpit', 'report', 'a3', 'dash'];
+const SCREENS = ['chat', 'triage', 'design', 'cockpit', 'report', 'a3', 'dash', 'muda', 'horenso'];
 function showScreen(name) {
   const tab = document.getElementById('tab-' + name);
   // タブから外した画面（design/cockpit/report）はタブ要素を持たない＝案件カード/トリアージから直接activateする
@@ -5250,6 +5291,8 @@ function newIntakeState() {
     state: 'askName', seriesId: null, title: '', tense: null,
     exceptions: [], factsReady: null, decisionQuestion: '', decider: '',
     participants: [], pendingName: '', log: [],
+    // v6-1: ユーザーの応答回数。5回以上（=6問目以降）で「会議招集まとめ」ボタンを常設表示する。
+    userTurns: 0,
     // v5-2 AIモード: aiMode は 'ai'|'rule'。aiState はサーバへ毎回送る局面。
     aiMode: 'rule', aiState: null, aiBusy: false
   };
@@ -5295,6 +5338,21 @@ function renderIntake() {
   if (!msgs || !intake) return;
   msgs.innerHTML = '';
   intake.log.forEach(m => {
+    if (m.kind === 'invite') {
+      const wrap = document.createElement('div');
+      wrap.className = 'intake-msg intake-system intake-invite-block';
+      const pre = document.createElement('pre');
+      pre.className = 'intake-invite-pre';
+      pre.textContent = m.text;
+      wrap.appendChild(pre);
+      const btn = document.createElement('button');
+      btn.className = 'ghost small';
+      btn.textContent = 'この文面をコピー';
+      btn.onclick = function () { intakeCopyInvite(pre, btn); };
+      wrap.appendChild(btn);
+      msgs.appendChild(wrap);
+      return;
+    }
     const div = document.createElement('div');
     div.className = 'intake-msg intake-' + m.role;
     div.textContent = m.text;
@@ -5305,7 +5363,17 @@ function renderIntake() {
 
 // 発話をログに積む。案件が既にあれば intakeLog へ永続化する。
 function intakeSay(role, text) {
+  // v6-1: ユーザーの応答回数をカウント（最低5回の対話を担保するための基準）。
+  if (role === 'user') intake.userTurns = (intake.userTurns || 0) + 1;
   intake.log.push({ role: role, text: text, at: Date.now() });
+  persistIntakeLog();
+  // v6-1: 対話の各回答から裏タブ用データ（horenso/mudaChecks）を best-effort で更新する。
+  if (intake.seriesId) intakeSyncSeriesData();
+  renderIntake();
+}
+// v6-1: 会議招集の文面ブロック（コピー可能な pre）をチャットに積む。
+function intakeSayInvite(text) {
+  intake.log.push({ role: 'system', kind: 'invite', text: text, at: Date.now() });
   persistIntakeLog();
   renderIntake();
 }
@@ -5328,6 +5396,22 @@ function setIntakeChoices(choices) {
     b.onclick = c.onClick;
     box.appendChild(b);
   });
+  // v6-1: 対話5往復以上（=6問目以降）は「会議招集まとめ」ボタンを常設。
+  //   押すと対話を打ち切り、その時点の情報で会議招集文面をチャット内に出力する。
+  if (intakeShouldShowInviteButton()) {
+    const b = document.createElement('button');
+    b.className = 'primary intake-choice';
+    b.id = 'intake-invite-btn';
+    b.textContent = '📋 会議招集まとめ';
+    b.onclick = intakeMeetingInvite;
+    box.appendChild(b);
+  }
+}
+// v6-1: まとめボタンを出す条件。最低5回の応答を担保し、終話系の局面では出さない。
+function intakeShouldShowInviteButton() {
+  if (!intake) return false;
+  if ((intake.userTurns || 0) < 5) return false;
+  return ['summary', 'doneNoMeeting', 'inviteDone'].indexOf(intake.state) < 0;
 }
 function setIntakeInput(show, placeholder) {
   const row = document.getElementById('intake-input-row');
@@ -5635,6 +5719,141 @@ function intakeConcludeNoMeetingFromSummary() {
     { label: 'キャンバスで案件を見る', onClick: function () { showScreen('a3'); renderA3(); } },
     { label: '対話をやり直す', onClick: intakeStart }
   ]);
+}
+
+// ==================================================================
+// v6-1 チャット内での会議招集文面出力（クライアント側の決定的ロジック）。
+//   ・埋まっていない項目は省略し、完璧を期さない。
+//   ・成果物として series に保存（artifacts type:'meeting-invite'）。
+//   ・「事実が揃っていない/わからない」と判明していれば【会議までに事前送付のお願い】を付す。
+// ==================================================================
+
+// 会議前に事前送付を依頼すべき資料の列挙（該当がなければ空配列＝セクション省略）。
+function intakePresendItems() {
+  const items = [];
+  const factsNotReady = (intake.factsReady === 'no' || intake.factsReady === 'unknown');
+  if (factsNotReady) {
+    const who = intake.decider || '決裁者または情報を持っている人';
+    items.push('現状把握レポート（Step2）を会議前に事前送付してください（担当: ' + who + '）');
+  }
+  return items;
+}
+
+// 会議招集の文面を決定的に組み立てる（LLMに任せない）。
+function intakeBuildInviteText() {
+  const rate = loadRate();
+  const active = intake.participants.filter(function (p) { return p.role !== 'listener'; });
+  const listeners = intake.participants.filter(function (p) { return p.role === 'listener'; });
+  const memberCount = (intake.decider ? 1 : 0) + active.length;
+  const perPerson = Math.round(30 * rate / 60);
+  const est = memberCount * perPerson;
+  const L = [];
+  L.push('【会議招集】' + (intake.title || '（無題の相談）'));
+  L.push('');
+  L.push('■ 背景');
+  L.push(intakeSummaryText());
+  if (intake.decisionQuestion) {
+    L.push('');
+    L.push('■ 判断する問い');
+    L.push(intake.decisionQuestion);
+    L.push('');
+    L.push('■ 議題と今日決めること（合計 10分）');
+    L.push('1. ' + intake.decisionQuestion + '（10分）');
+    L.push('   今日決めること: この問いに結論を出し、担当と期限まで決める');
+  }
+  L.push('');
+  L.push('■ 招集メンバー（役割つき・最小）');
+  if (memberCount) {
+    if (intake.decider) L.push('・' + intake.decider + '（決める人）');
+    active.forEach(function (p) { L.push('・' + p.name + '（' + INTAKE_ROLE_LABEL[p.role] + '）'); });
+  } else {
+    L.push('（招集メンバーは未設定です。決める人・意見・情報の役割で最小限に絞ってください）');
+  }
+  if (listeners.length) {
+    L.push('');
+    L.push('■ レポート送付（会議には呼びません／聞くだけの人）');
+    L.push(listeners.map(function (p) { return p.name; }).join('、'));
+  }
+  L.push('');
+  L.push('■ この会議の値札（見込み）');
+  L.push('¥' + est.toLocaleString() + '（' + memberCount + '人 × 30分 × 人時単価 ¥' + rate.toLocaleString() + '）');
+  const presend = intakePresendItems();
+  if (presend.length) {
+    L.push('');
+    L.push('■ 【会議までに事前送付のお願い】');
+    presend.forEach(function (item) { L.push('・' + item); });
+  }
+  L.push('');
+  L.push('■ 運用ルール');
+  L.push('・事前の個別回り（根回し）は不要です。判断材料は会議に持ち寄ってください');
+  L.push('・説明は本案内と事前資料で完了。会議は判断と合意に使います');
+  L.push('・前後30分はバッファを空けてください');
+  L.push('・結論から話す。事実と意見を分ける');
+  return L.join('\n');
+}
+
+// 「📋 会議招集まとめ」押下: 文面を生成し、チャット内に出力・成果物保存・裏タブ用データ反映。
+function intakeMeetingInvite() {
+  intake.state = 'inviteDone';
+  setIntakeInput(false);
+  const text = intakeBuildInviteText();
+  intakeSyncSeriesData();
+  intakeSaveInviteArtifact(text);
+  intakeSay('system', '会議招集の文面を作成しました。以下をコピーして送付してください。（不足項目は省いています）');
+  intakeSayInvite(text);
+  setIntakeChoices([
+    { label: '対話を続けて修正する', onClick: intakeResumeAfterInvite },
+    { label: '新しい案件を始める', onClick: intakeStart }
+  ]);
+}
+// まとめ出力後に対話を続ける（招集メンバーを調整し、再度まとめボタンで文面を再生成できる）。
+function intakeResumeAfterInvite() {
+  intakeAskParticipants();
+}
+function intakeCopyInvite(pre, btn) {
+  const txt = pre.textContent;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function () { flashCopied(btn); }).catch(function () {});
+  }
+}
+// series に成果物として会議招集文面を保存（既存 artifacts 機構に倣い series 直下へ）。
+function intakeSaveInviteArtifact(text) {
+  if (!intake.seriesId) return;
+  const list = loadSeries();
+  const s = list.find(function (x) { return x.id === intake.seriesId; });
+  if (!s) return;
+  if (!Array.isArray(s.artifacts)) s.artifacts = [];
+  s.artifacts.push({ type: 'meeting-invite', text: text, at: Date.now() });
+  saveSeries(list);
+}
+
+// v6-1: 対話から裏タブ用データ（horenso / mudaChecks）へ best-effort 反映。
+//   スキーマbump不要の追加フィールド。読み側はデフォルト補完する前提。
+function intakeSyncSeriesData() {
+  if (!intake || !intake.seriesId) return;
+  const list = loadSeries();
+  const s = list.find(function (x) { return x.id === intake.seriesId; });
+  if (!s) return;
+  // 報連相の仕分け（時制回答→1件追加、事実未準備→事前送付レポートを追加）
+  const horenso = [];
+  if (intake.tense === 'past') horenso.push({ kind: 'report', text: intake.title || '', presend: false });
+  else if (intake.tense === 'present') horenso.push({ kind: 'chat', text: intake.title || '', presend: false });
+  else if (intake.tense === 'future') horenso.push({ kind: 'meeting', text: intake.decisionQuestion || intake.title || '', presend: false });
+  const factsNotReady = (intake.factsReady === 'no' || intake.factsReady === 'unknown');
+  if (factsNotReady) horenso.push({ kind: 'report', text: '現状把握レポート（Step2）', presend: true });
+  s.horenso = horenso;
+  // 7つのムダの兆候（best-effort。すべて埋める必要はない）
+  const muda = (s.mudaChecks && typeof s.mudaChecks === 'object') ? s.mudaChecks : {};
+  const wantMeeting = (intake.tense === 'future') || intake.exceptions.length > 0;
+  const active = intake.participants.filter(function (p) { return p.role !== 'listener'; });
+  const memberCount = (intake.decider ? 1 : 0) + active.length;
+  const opinionCount = active.filter(function (p) { return p.role === 'opinion'; }).length;
+  if (wantMeeting && !intake.decider) muda['1'] = { status: 'warn', note: '決裁者が未定のまま会議を検討している' };
+  if (memberCount >= 6) muda['2'] = { status: 'warn', note: '招集メンバーが6人以上（根回し・過招集の疑い）' };
+  if (/定例|レギュラー|毎週|毎月|恒例/.test(intake.title || '')) muda['6'] = { status: 'warn', note: '「定例」の気配（マンネリ会議の疑い）' };
+  if (wantMeeting && intake.decisionQuestion && opinionCount === 0) muda['7'] = { status: 'warn', note: '異論を出す役がいない（選択肢・異論の検討なしで結論ありきの疑い）' };
+  s.mudaChecks = muda;
+  saveSeries(list);
 }
 
 // ==================================================================
