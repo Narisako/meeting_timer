@@ -460,6 +460,8 @@
     <div class="row">
       <div><button class="ghost" onclick="copyReport(this)">申し送りをコピー</button></div>
     </div>
+    <!-- R4 申し送り3行要約: LLM ON時のみ JS で中身を注入（OFF時はDOMに残さない） -->
+    <div id="handoff-assist" class="hidden" style="margin-top:8px"></div>
   </div>
 
   <div class="card" id="next-connect-card">
@@ -481,6 +483,8 @@
     <p class="note">8ブロックすべてを1枚に整形しました。標準化（横展開）の共有にお使いください。</p>
     <pre class="report" id="a3-onepager-body"></pre>
     <div class="row"><div><button class="ghost" onclick="copyTextContent('a3-onepager-body', this)">A3レポートをコピー</button></div></div>
+    <!-- R5 A3・1枚コンパイラ: LLM ON時のみ JS で中身を注入（OFF時はDOMに残さない） -->
+    <div id="a3-compile-assist" class="hidden" style="margin-top:8px"></div>
   </div>
 
   <div class="card">
@@ -505,6 +509,8 @@
       <span id="a3-char-count"></span>
     </div>
     <div id="a3-char-warn" class="alert warn hidden">A3・1枚を超えています。判断に必要な情報だけに絞ってください</div>
+    <!-- R6 なぜなぜ深掘り(Step4のみ): LLM ON時のみ JS で中身を注入（OFF時はDOMに残さない） -->
+    <div id="step4-whys-assist" class="hidden" style="margin-top:8px"></div>
     <div class="row" style="margin-top:10px">
       <div style="flex:0"><button class="primary" id="a3-editor-save" onclick="saveStepEditor()">このStepを埋めて保存</button></div>
       <div style="flex:0"><button class="ghost" onclick="closeStepEditor()">閉じる</button></div>
@@ -2477,6 +2483,75 @@ function buildReport(elapsedSec, actualCost, saved) {
     rec.textContent = '送付先（会議に呼ばなかった人）: ' + mtg.recipients.map(r => r.name).join('、');
     sum.appendChild(rec);
   }
+  renderHandoffAssist(); // R4: LLM ON時のみ「AIで3行要約」ボタンを注入
+}
+
+// ---------- R4 申し送り3行要約（AIアシスト） ----------
+// #15踏襲: OFF時はボタンごとDOMに残さない。要約は既存の申し送り生成を一切変えず、追加提案のみ担う。
+const HANDOFF_ASSIST_HTML =
+  '<button class="ghost small" id="handoff-summary-btn" onclick="aiSummarizeHandoff()">AIで3行要約</button>' +
+  '<span id="handoff-summary-status" class="note" style="margin-left:8px"></span>' +
+  '<div id="handoff-summary-result" class="alert ok hidden" style="margin-top:8px"></div>';
+
+function renderHandoffAssist() {
+  const box = document.getElementById('handoff-assist');
+  if (!box) return;
+  if (loadLlm().enabled) {
+    if (!document.getElementById('handoff-summary-btn')) box.innerHTML = HANDOFF_ASSIST_HTML;
+    box.classList.remove('hidden');
+  } else {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+}
+
+// 申し送り全文を summarize-handoff に投げ、{summary}（3行以内）をチャット貼り付け用に表示・コピー可に。
+async function aiSummarizeHandoff() {
+  const status = document.getElementById('handoff-summary-status');
+  const resultBox = document.getElementById('handoff-summary-result');
+  if (!resultBox) return; // OFF時はDOMが無い
+  const input = (document.getElementById('report-body').textContent || '').trim();
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  if (!input) { status.textContent = '要約する申し送りがありません。'; return; }
+  status.textContent = '要約中…';
+
+  let resp = null;
+  try { resp = await llmAssist('summarize-handoff', { input }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（機能劣化なし＝手動コピーで続行）。
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || typeof r.summary !== 'string') {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' 申し送り全文を手動でコピーしてください。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+  renderHandoffSummary(r.summary);
+}
+
+function renderHandoffSummary(summary) {
+  const resultBox = document.getElementById('handoff-summary-result');
+  resultBox.className = 'alert ok';
+  resultBox.innerHTML = '';
+  const title = document.createElement('div');
+  const tb = document.createElement('b'); tb.textContent = '3行要約';
+  title.appendChild(tb);
+  title.appendChild(document.createTextNode('（チャット貼り付け用にコピーできます）'));
+  const pre = document.createElement('pre');
+  pre.className = 'report';
+  pre.id = 'handoff-summary-body';
+  pre.style.marginTop = '6px';
+  pre.textContent = summary;
+  const copy = document.createElement('button');
+  copy.className = 'ghost small';
+  copy.id = 'handoff-summary-copy';
+  copy.style.marginTop = '6px';
+  copy.textContent = '要約をコピー';
+  copy.onclick = () => copyTextContent('handoff-summary-body', copy);
+  resultBox.append(title, pre, copy);
+  resultBox.classList.remove('hidden');
 }
 
 // --- 次回への接続UI ---
@@ -2560,6 +2635,81 @@ function buildA3OnePager(sid) {
   }
   document.getElementById('a3-onepager-body').textContent = L.join('\n').trim();
   document.getElementById('a3-onepager-card').classList.remove('hidden');
+  renderA3CompileAssist(); // R5: LLM ON時のみ「AIで1枚に圧縮」ボタンを注入
+}
+
+// ---------- R5 A3・1枚コンパイラ（AIアシスト） ----------
+// #15踏襲: OFF時はボタンごとDOMに残さない。既存のルールベース生成(v2)はそのまま残し、AI版は代替案として並記。
+const A3_COMPILE_ASSIST_HTML =
+  '<button class="ghost small" id="a3-compile-btn" onclick="aiCompileA3()">AIで1枚に圧縮</button>' +
+  '<span id="a3-compile-status" class="note" style="margin-left:8px"></span>' +
+  '<div id="a3-compile-result" class="alert ok hidden" style="margin-top:8px"></div>';
+
+function renderA3CompileAssist() {
+  const box = document.getElementById('a3-compile-assist');
+  if (!box) return;
+  if (loadLlm().enabled) {
+    if (!document.getElementById('a3-compile-btn')) box.innerHTML = A3_COMPILE_ASSIST_HTML;
+    box.classList.remove('hidden');
+  } else {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+}
+
+// 8ブロック全文を compile-a3 に投げ、{a3}（1,500字以内に圧縮）を代替案として表示・コピー可＋文字数表示。
+async function aiCompileA3() {
+  const status = document.getElementById('a3-compile-status');
+  const resultBox = document.getElementById('a3-compile-result');
+  if (!resultBox) return; // OFF時はDOMが無い
+  const input = (document.getElementById('a3-onepager-body').textContent || '').trim();
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  if (!input) { status.textContent = '圧縮するA3・1枚がありません。'; return; }
+  status.textContent = '圧縮中…';
+
+  let resp = null;
+  try { resp = await llmAssist('compile-a3', { input }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（既存のルールベース生成が残るので機能劣化なし）。
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || typeof r.a3 !== 'string') {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' 上のルールベースのA3・1枚をそのままお使いください。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+  renderA3Compiled(r.a3);
+}
+
+function renderA3Compiled(a3) {
+  const resultBox = document.getElementById('a3-compile-result');
+  resultBox.className = 'alert ok';
+  resultBox.innerHTML = '';
+  const title = document.createElement('div');
+  const tb = document.createElement('b'); tb.textContent = 'AI圧縮版（代替案）';
+  title.appendChild(tb);
+  title.appendChild(document.createTextNode('（ルールベース版はそのまま残ります）'));
+  const pre = document.createElement('pre');
+  pre.className = 'report';
+  pre.id = 'a3-compile-body';
+  pre.style.marginTop = '6px';
+  pre.textContent = a3;
+  // A3・1枚メーター連動: 圧縮後の文字数を表示
+  const count = document.createElement('div');
+  count.className = 'note';
+  count.id = 'a3-compile-count';
+  const over = a3.length > A3_CHAR_LIMIT;
+  count.innerHTML = '文字数 <b>' + a3.length + '</b> / 目安 ' + A3_CHAR_LIMIT + '字' + (over ? '（超過）' : '');
+  const copy = document.createElement('button');
+  copy.className = 'ghost small';
+  copy.id = 'a3-compile-copy';
+  copy.style.marginTop = '6px';
+  copy.textContent = 'AI圧縮版をコピー';
+  copy.onclick = () => copyTextContent('a3-compile-body', copy);
+  resultBox.append(title, pre, count, copy);
+  resultBox.classList.remove('hidden');
 }
 
 // 次回会議設計へ遷移し、series.nextDraft から議題をプリフィル（seqは+1）
@@ -2991,7 +3141,93 @@ function openStepEditor(seriesId, stepNo, mode) {
   document.getElementById('a3-editor-body').value = existing || stepTemplate(stepNo, mode);
   editor.classList.remove('hidden');
   updateA3CharMeter();
+  renderStep4WhysAssist(); // R6: Step4(要因解析)レポート時のみ「なぜ？を深掘り」ボタンを注入
   editor.scrollIntoView({ behavior: 'smooth' });
+}
+
+// ---------- R6 なぜなぜ深掘り（Step4 AIアシスト） ----------
+// #15踏襲: OFF時・Step4以外・チャットモード時はボタンごとDOMに残さない。テンプレ記入は既存のまま、追記候補のみ担う。
+const STEP4_WHYS_ASSIST_HTML =
+  '<button class="ghost small" id="step4-whys-btn" onclick="aiFiveWhys()">AIに「なぜ？」を深掘りしてもらう</button>' +
+  '<span id="step4-whys-status" class="note" style="margin-left:8px"></span>' +
+  '<div id="step4-whys-result" class="alert ok hidden" style="margin-top:8px"></div>';
+
+function renderStep4WhysAssist() {
+  const box = document.getElementById('step4-whys-assist');
+  if (!box) return;
+  const show = loadLlm().enabled && a3Editing && a3Editing.stepNo === 4 && a3Editing.mode !== 'chat';
+  if (show) {
+    if (!document.getElementById('step4-whys-btn')) box.innerHTML = STEP4_WHYS_ASSIST_HTML;
+    box.classList.remove('hidden');
+  } else {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+}
+
+// 現在の記入内容を five-whys に投げ、{whys:[...]} を候補として表示。クリックでテンプレ末尾へ追記（編集可）。
+async function aiFiveWhys() {
+  const status = document.getElementById('step4-whys-status');
+  const resultBox = document.getElementById('step4-whys-result');
+  if (!resultBox) return; // 非表示時はDOMが無い
+  const input = (document.getElementById('a3-editor-body').value || '').trim();
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  if (!input) { status.textContent = '深掘りしたい事象を記入してください。'; return; }
+  status.textContent = '深掘り中…';
+
+  let resp = null;
+  try { resp = await llmAssist('five-whys', { input }); } catch (e) { resp = null; }
+  status.textContent = '';
+
+  // OFF・失敗・不同意・不正応答はすべてフォールバック（手動記入で続行＝機能劣化なし）。
+  const r = resp && resp.ok && resp.result ? resp.result : null;
+  if (!r || !Array.isArray(r.whys) || !r.whys.length) {
+    resultBox.className = 'alert bad';
+    resultBox.textContent = LLM_UNAVAILABLE_MSG + ' テンプレに手動で「なぜ」を記入してください。';
+    resultBox.classList.remove('hidden');
+    return;
+  }
+  renderFiveWhysCandidates(r.whys);
+}
+
+function renderFiveWhysCandidates(whys) {
+  const resultBox = document.getElementById('step4-whys-result');
+  resultBox.className = 'alert ok';
+  resultBox.innerHTML = '';
+  const title = document.createElement('div');
+  const tb = document.createElement('b'); tb.textContent = '「なぜ？」候補';
+  title.appendChild(tb);
+  title.appendChild(document.createTextNode('（クリックでテンプレ末尾に追記。追記後も自由に編集できます）'));
+  resultBox.appendChild(title);
+  const ul = document.createElement('ul');
+  ul.className = 'plain';
+  ul.id = 'step4-whys-list';
+  whys.forEach((w) => {
+    const li = document.createElement('li');
+    li.style.margin = '6px 0';
+    const txt = document.createElement('span');
+    txt.className = 'grow';
+    txt.textContent = w;
+    const use = document.createElement('button');
+    use.className = 'ghost small step4-whys-use';
+    use.style.marginLeft = '8px';
+    use.textContent = 'テンプレに追記';
+    use.onclick = () => appendWhyToTemplate(w);
+    li.append(txt, use);
+    ul.appendChild(li);
+  });
+  resultBox.appendChild(ul);
+  resultBox.classList.remove('hidden');
+}
+
+function appendWhyToTemplate(w) {
+  const body = document.getElementById('a3-editor-body');
+  if (!body) return;
+  const cur = body.value.replace(/\s+$/, '');
+  body.value = cur + '\n' + w;
+  updateA3CharMeter();
+  body.focus();
 }
 function closeStepEditor() {
   a3Editing = null;
