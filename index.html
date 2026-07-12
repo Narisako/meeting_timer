@@ -290,7 +290,42 @@
   /* v6-1: チャット内の会議招集文面ブロック（コピー可能な pre） */
   .intake-invite-block { align-self: stretch; max-width: 100%; background: #fff; border: 1px solid var(--accent); border-radius: 12px; padding: 10px 12px; }
   .intake-invite-pre { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.5; margin: 0 0 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  @media (max-width: 560px) { .a3-grid { grid-template-columns: repeat(2, 1fr); } }
+  /* v6-2: 参照専用3タブ（A3・ムダ・報連相の自動反映ビュー） */
+  .ref-note { background: var(--accent-soft); border-radius: 8px; padding: 6px 10px; margin: 6px 0 10px; font-size: 13px; color: var(--ink); }
+  .ref-selector { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
+  .ref-case-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+  .ref-empty { color: var(--sub); font-size: 13px; }
+  .ref-step { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; background: #fff; }
+  .ref-step-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ref-step-head .sn { font-size: 11px; font-weight: 700; color: var(--sub); }
+  .ref-step-head .nm { font-size: 14px; font-weight: 700; }
+  .ref-step-body { font-size: 13px; line-height: 1.6; margin-top: 6px; white-space: pre-wrap; word-break: break-word; }
+  .ref-step-body.empty { color: var(--sub); font-style: italic; opacity: .7; }
+  .ref-artifact { margin-top: 8px; }
+  .ref-artifact summary { font-size: 12px; cursor: pointer; color: var(--accent); }
+  .ref-artifact pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.5; margin: 6px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--paper, #f7f7f4); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .muda-ref-row { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; background: #fff; }
+  .muda-ref-mark { font-size: 18px; flex: 0 0 auto; line-height: 1.4; }
+  .muda-ref-main { flex: 1; }
+  .muda-ref-main .label { font-size: 14px; font-weight: 700; }
+  .muda-ref-main .label b { color: var(--bad); }
+  .muda-ref-main .q { font-size: 13px; color: var(--sub); margin-top: 2px; }
+  .muda-ref-status { font-size: 13px; margin-top: 4px; font-weight: 700; }
+  .muda-ref-status.ok { color: var(--ok); }
+  .muda-ref-status.warn { color: var(--warn); }
+  .muda-ref-status.none { color: var(--sub); font-weight: 400; }
+  .muda-ref-note { font-size: 12px; color: var(--sub); font-weight: 400; margin-top: 2px; }
+  .horenso-lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px; }
+  .horenso-lane { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; }
+  .horenso-lane h3 { margin: 0 0 2px; font-size: 14px; color: var(--ink); }
+  .horenso-lane .lane-desc { font-size: 12px; color: var(--sub); margin: 0 0 8px; }
+  .horenso-item { border-top: 1px dashed var(--line); padding: 8px 0; font-size: 13px; }
+  .horenso-item:first-of-type { border-top: 0; }
+  .horenso-item .presend { margin-left: 6px; }
+  .horenso-lane .lane-empty { font-size: 12px; color: var(--sub); }
+  .horenso-lane .invite-link { display: inline-block; margin-top: 8px; font-size: 12px; }
+  .badge.presend { background: var(--warn-soft); color: var(--warn); }
+  @media (max-width: 560px) { .a3-grid { grid-template-columns: repeat(2, 1fr); } .horenso-lanes { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -648,6 +683,7 @@
     <h2>💬 チャットで進める</h2>
     <p class="note">AIの質問に答えながら、レポート・チャット・会議のどれが必要かを一緒に見極めます。会議になる場合は、この画面のまま会議招集の文面まで作れます。5往復以上やりとりすると「📋 会議招集まとめ」ボタンが出て、いつでも打ち切って文面を作れます。（AI設定がONなら自由対話、OFF・サーバー不達時はルールベースで動きます）</p>
     <div id="intake-ai-note" class="note" style="background:var(--accent-soft);border-radius:8px;padding:6px 10px;margin:6px 0;"></div>
+    <div class="ref-note" id="intake-reftabs-note">🗂️ 裏側で <b>トヨタA3 8ステップ</b>・<b>7つのムダ</b>・<b>報連相 仕分け</b> の3つの整理が自動で進んでいます（上のタブからいつでも参照できます）。</div>
     <div id="intake-messages" class="intake-messages" aria-live="polite"></div>
     <div id="intake-choices" class="intake-choices"></div>
     <div class="row" id="intake-input-row">
@@ -664,9 +700,16 @@
 </section>
 
 <section id="screen-a3" class="screen">
+  <!-- v6-2: 参照専用ビュー（チャット内容の自動反映）。編集は下部「詳細ツール」の従来キャンバスで行う。 -->
+  <div class="card" id="a3-ref">
+    <h2>トヨタA3 8ステップ（参照ビュー）</h2>
+    <p class="note">チャットのやりとりが自動で反映されます。読むだけのビューです。埋まっていないStepは「—（未記入）」と薄く表示します（<b>未完で正常です</b>。すべてを埋める必要はありません）。編集は下の「詳細ツール（従来の編集機能）」から行えます。</p>
+    <div id="a3-ref-selector" class="ref-selector"></div>
+    <div id="a3-ref-body"></div>
+  </div>
   <div class="card" id="a3-tools">
-    <h2>詳細ツール（従来機能）</h2>
-    <p class="note">通常はチャットタブだけで案件入力から会議招集まで完結します。従来の個別ツールを直接使いたいときはこちらから。</p>
+    <h2>詳細ツール（従来の編集機能）</h2>
+    <p class="note">通常はチャットタブだけで案件入力から会議招集まで完結します。Step編集・状態変更・決定登録など従来の個別ツールを直接使いたいときはこちらから。</p>
     <div class="row" style="flex-wrap:wrap; gap:8px">
       <button class="ghost" onclick="showScreen('triage')">案件トリアージを開く</button>
       <button class="ghost" onclick="showScreen('dash')">フローダッシュボードを開く</button>
@@ -825,21 +868,23 @@
   </div>
 </section>
 
-<!-- ===================== 7つのムダ チェックリスト（v6-2で実装。本Issueは枠のみ） ===================== -->
+<!-- ===================== 7つのムダ チェックリスト（参照ビュー・v6-2） ===================== -->
 <section id="screen-muda" class="screen">
-  <div class="card">
-    <h2>7つのムダ チェックリスト</h2>
-    <p class="note">チャットのやりとりから「事技系職場の7つのムダ」の兆候を自動でチェックします。反映ビューは次のアップデート（v6-2）で実装予定です。</p>
-    <div id="muda-checklist" class="note">（チャットで案件を進めると、ここに検知結果が表示されます）</div>
+  <div class="card" id="muda-ref">
+    <h2>7つのムダ チェックリスト（参照ビュー）</h2>
+    <p class="note">チャットのやりとりから「事技系職場の7つのムダ」の兆候を自動でチェックします。読むだけのビューです。対話が浅いうちは「— 未確認」で構いません（すべてを埋める必要はありません）。</p>
+    <div id="muda-ref-selector" class="ref-selector"></div>
+    <div id="muda-ref-body"></div>
   </div>
 </section>
 
-<!-- ===================== 報連相 仕分けリスト（v6-2で実装。本Issueは枠のみ） ===================== -->
+<!-- ===================== 報連相 仕分けリスト（参照ビュー・v6-2） ===================== -->
 <section id="screen-horenso" class="screen">
-  <div class="card">
-    <h2>報連相 仕分けリスト</h2>
-    <p class="note">チャットのやりとりを「報告／連絡／相談（会議）」に仕分けし、事前送付が必要なものを一覧にします。反映ビューは次のアップデート（v6-2）で実装予定です。</p>
-    <div id="horenso-list" class="note">（チャットで案件を進めると、ここに仕分け結果が表示されます）</div>
+  <div class="card" id="horenso-ref">
+    <h2>報連相 仕分けリスト（参照ビュー）</h2>
+    <p class="note">チャットのやりとりを「報告（過去）／連絡（現在）／相談（未来）」の3レーンに自動で仕分けします。読むだけのビューです。会議前に事前送付すべきものには「会議前に事前送付」バッジが付きます。</p>
+    <div id="horenso-ref-selector" class="ref-selector"></div>
+    <div id="horenso-ref-body"></div>
   </div>
 </section>
 
@@ -1877,7 +1922,9 @@ function showScreen(name) {
     const t = document.getElementById('tab-' + s);
     if (t) t.classList.toggle('active', s === name);
   });
-  if (name === 'a3') renderA3();
+  if (name === 'a3') { renderA3(); renderA3Ref(); }
+  if (name === 'muda') renderMudaRef();
+  if (name === 'horenso') renderHorensoRef();
   if (name === 'triage') renderAiRouterCard();
   if (name === 'design') renderAgendaAssist();
 }
@@ -5842,18 +5889,292 @@ function intakeSyncSeriesData() {
   const factsNotReady = (intake.factsReady === 'no' || intake.factsReady === 'unknown');
   if (factsNotReady) horenso.push({ kind: 'report', text: '現状把握レポート（Step2）', presend: true });
   s.horenso = horenso;
-  // 7つのムダの兆候（best-effort。すべて埋める必要はない）
+  // 7つのムダの兆候（best-effort。すべて埋める必要はない）。良好な兆候は✅、疑わしければ⚠️で残す。
   const muda = (s.mudaChecks && typeof s.mudaChecks === 'object') ? s.mudaChecks : {};
   const wantMeeting = (intake.tense === 'future') || intake.exceptions.length > 0;
   const active = intake.participants.filter(function (p) { return p.role !== 'listener'; });
   const memberCount = (intake.decider ? 1 : 0) + active.length;
   const opinionCount = active.filter(function (p) { return p.role === 'opinion'; }).length;
-  if (wantMeeting && !intake.decider) muda['1'] = { status: 'warn', note: '決裁者が未定のまま会議を検討している' };
+  if (wantMeeting) {
+    if (!intake.decider) muda['1'] = { status: 'warn', note: '決裁者が未定のまま会議を検討している' };
+    else muda['1'] = { status: 'ok', note: '決める人が明確（' + intake.decider + '）' };
+  }
   if (memberCount >= 6) muda['2'] = { status: 'warn', note: '招集メンバーが6人以上（根回し・過招集の疑い）' };
   if (/定例|レギュラー|毎週|毎月|恒例/.test(intake.title || '')) muda['6'] = { status: 'warn', note: '「定例」の気配（マンネリ会議の疑い）' };
-  if (wantMeeting && intake.decisionQuestion && opinionCount === 0) muda['7'] = { status: 'warn', note: '異論を出す役がいない（選択肢・異論の検討なしで結論ありきの疑い）' };
+  if (wantMeeting && intake.decisionQuestion) {
+    if (opinionCount === 0) muda['7'] = { status: 'warn', note: '異論を出す役がいない（選択肢・異論の検討なしで結論ありきの疑い）' };
+    else muda['7'] = { status: 'ok', note: '意見を出す役がいる（結論ありきを回避）' };
+  }
   s.mudaChecks = muda;
+  // v6-2: 参照ビュー（A3タブ）用に対話由来の構造化サマリを永続化（追加フィールド）。
+  //   打ち切っても後から参照できるよう series に残す。編集キャンバスの steps.content とは別枠。
+  s.reflection = {
+    title: intake.title || '',
+    tense: intake.tense || null,
+    factsReady: intake.factsReady || null,
+    decisionQuestion: intake.decisionQuestion || '',
+    decider: intake.decider || '',
+    members: active.map(function (p) { return { name: p.name, role: p.role }; }),
+    background: intakeSummaryText(),
+    updatedAt: Date.now()
+  };
   saveSeries(list);
+  renderRefViews();
+}
+
+// ==================================================================
+// v6-2 参照専用3タブ: A3 8ステップ／7つのムダ／報連相 の自動反映ビュー。
+//   すべて読み取り専用（入力UIを置かない）。対話が進むたびに renderRefViews() で再描画。
+//   案件が複数ある場合のみ案件セレクタ（ナビ用ボタン）を表示する。
+// ==================================================================
+
+// 7つのムダ（ポスターの問いかけ文つき）。mudaChecks のキー '1'〜'7' に対応。
+const MUDA_ITEMS = [
+  { key: '1', label: '会議のムダ', q: '「決まらない会議」「決めない人も出る会議」を開催していませんか？' },
+  { key: '2', label: '根回しのムダ', q: '自分の安心のために、"全員"に事前回りをしていませんか？' },
+  { key: '3', label: '資料のムダ', q: '報告のためだけに資料を作っていませんか？ A4／A3一枚以上の資料を準備していませんか？' },
+  { key: '4', label: '調整のムダ', q: '実務で調整していても進まない案件を、「頑張って」調整しようとしていませんか？' },
+  { key: '5', label: '上司のプライドのムダ', q: '報告がなかったという理由だけで「私は聞いていない」と言っていませんか？' },
+  { key: '6', label: 'マンネリのムダ', q: '「今までやっているから」という理由だけで、続けている業務はありませんか？' },
+  { key: '7', label: '「ごっこ」のムダ', q: '事前に練ったシナリオどおりの"シャンシャン"会議をしていませんか？' }
+];
+const HORENSO_LANES = [
+  { key: 'report', title: '報告（過去）', desc: '集まらずレポートで共有します' },
+  { key: 'chat', title: '連絡（現在）', desc: 'チャットで即共有します' },
+  { key: 'meeting', title: '相談（未来）', desc: '会議で判断します' }
+];
+
+// 参照ビューで選択中の案件ID（3タブ共通）。未指定/無効なら対話中の案件→最新案件を既定にする。
+let refSelectedSeriesId = null;
+function refCurrentSeries() {
+  const list = loadSeries();
+  if (!list.length) return null;
+  let s = refSelectedSeriesId ? list.find(function (x) { return x.id === refSelectedSeriesId; }) : null;
+  if (!s && intake && intake.seriesId) s = list.find(function (x) { return x.id === intake.seriesId; });
+  if (!s) s = list[list.length - 1];
+  refSelectedSeriesId = s.id;
+  return s;
+}
+function refSelectSeries(id) { refSelectedSeriesId = id; renderRefViews(); }
+// 案件セレクタ（案件が2件以上あるときだけボタン群を描画。1件以下なら空にする）。
+function buildRefSelector(container, activeId) {
+  if (!container) return;
+  container.innerHTML = '';
+  const list = loadSeries();
+  if (list.length <= 1) return;
+  list.slice().reverse().forEach(function (s) {
+    const b = document.createElement('button');
+    b.className = 'ghost small ref-case-btn' + (s.id === activeId ? ' active' : '');
+    b.textContent = s.title || '（無題の案件）';
+    b.onclick = function () { refSelectSeries(s.id); };
+    container.appendChild(b);
+  });
+}
+function renderRefViews() {
+  try { renderA3Ref(); } catch (e) {}
+  try { renderMudaRef(); } catch (e) {}
+  try { renderHorensoRef(); } catch (e) {}
+}
+
+// ---------- タブ1: トヨタA3 8ステップ（参照ビュー） ----------
+// Stepごとに対話由来の反映内容（Step1=背景要約／Step2=事実の状況・判断する問い）と
+// 編集キャンバスの本文・成果物（会議招集文面含む）を読み取り専用で並べる。
+function a3RefStepText(s, i) {
+  const r = s.reflection || {};
+  const parts = [];
+  if (i === 1 && r.background) parts.push(r.background);
+  if (i === 2) {
+    if (r.factsReady) parts.push('事実の状況：' + ({ yes: '揃っている', no: '揃っていない', unknown: 'わからない' }[r.factsReady] || r.factsReady));
+    if (r.decisionQuestion) parts.push('判断する問い：' + r.decisionQuestion);
+  }
+  const st = (s.steps && s.steps[String(i)]) || {};
+  if (st.content) parts.push(st.content);
+  return parts.join('\n');
+}
+function renderA3Ref() {
+  const sel = document.getElementById('a3-ref-selector');
+  const body = document.getElementById('a3-ref-body');
+  if (!body) return;
+  const s = refCurrentSeries();
+  buildRefSelector(sel, s ? s.id : null);
+  body.innerHTML = '';
+  if (!s) {
+    const p = document.createElement('p');
+    p.className = 'ref-empty';
+    p.textContent = 'まだ案件がありません。チャットタブで対話を始めると、ここに8ステップが自動反映されます。';
+    body.appendChild(p);
+    return;
+  }
+  const title = document.createElement('h3');
+  title.textContent = '案件：' + (s.title || '（無題の案件）');
+  body.appendChild(title);
+  for (let i = 1; i <= 8; i++) {
+    const st = (s.steps && s.steps[String(i)]) || { status: 'todo', filledBy: null };
+    const wrap = document.createElement('div');
+    wrap.className = 'ref-step';
+    const head = document.createElement('div');
+    head.className = 'ref-step-head';
+    const sn = document.createElement('span');
+    sn.className = 'sn';
+    sn.textContent = 'Step ' + i;
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = A3_STEPS[i];
+    const means = STEP_MEANS[i];
+    const mb = document.createElement('span');
+    mb.className = 'badge ' + (means === 'meeting' ? 'meet' : means);
+    mb.textContent = MEANS_BADGE[means] + ' ' + MEANS_LABEL[means];
+    const stb = document.createElement('span');
+    stb.className = 'badge st-' + (st.status || 'todo');
+    stb.textContent = STATUS_LABEL[st.status || 'todo'];
+    head.append(sn, nm, mb, stb);
+    wrap.appendChild(head);
+    const txt = a3RefStepText(s, i);
+    const bodyDiv = document.createElement('div');
+    if (txt) {
+      bodyDiv.className = 'ref-step-body';
+      bodyDiv.textContent = txt;
+    } else {
+      bodyDiv.className = 'ref-step-body empty';
+      bodyDiv.textContent = '—（未記入）';
+    }
+    wrap.appendChild(bodyDiv);
+    body.appendChild(wrap);
+  }
+  // 成果物（会議招集文面含む）を読み取り専用で提示
+  const invites = (s.artifacts || []).filter(function (a) { return a && a.type === 'meeting-invite' && a.text; });
+  if (invites.length) {
+    const h = document.createElement('h3');
+    h.textContent = '成果物';
+    body.appendChild(h);
+    invites.slice().reverse().forEach(function (a) {
+      const det = document.createElement('details');
+      det.className = 'ref-artifact';
+      const sm = document.createElement('summary');
+      sm.textContent = '📋 会議招集文面（チャットで生成済み）';
+      const pre = document.createElement('pre');
+      pre.textContent = a.text;
+      det.append(sm, pre);
+      body.appendChild(det);
+    });
+  }
+}
+
+// ---------- タブ2: 7つのムダ チェックリスト（参照ビュー） ----------
+function renderMudaRef() {
+  const sel = document.getElementById('muda-ref-selector');
+  const body = document.getElementById('muda-ref-body');
+  if (!body) return;
+  const s = refCurrentSeries();
+  buildRefSelector(sel, s ? s.id : null);
+  body.innerHTML = '';
+  if (!s) {
+    const p = document.createElement('p');
+    p.className = 'ref-empty';
+    p.textContent = 'まだ案件がありません。チャットタブで対話を始めると、7つのムダの兆候が自動反映されます。';
+    body.appendChild(p);
+    return;
+  }
+  const checks = (s.mudaChecks && typeof s.mudaChecks === 'object') ? s.mudaChecks : {};
+  MUDA_ITEMS.forEach(function (item) {
+    const row = document.createElement('div');
+    row.className = 'muda-ref-row';
+    const c = checks[item.key];
+    const mark = document.createElement('div');
+    mark.className = 'muda-ref-mark';
+    const main = document.createElement('div');
+    main.className = 'muda-ref-main';
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.innerHTML = '<b>' + item.label + '</b>';
+    const q = document.createElement('div');
+    q.className = 'q';
+    q.textContent = item.q;
+    const status = document.createElement('div');
+    if (c && c.status === 'warn') {
+      mark.textContent = '⚠️';
+      status.className = 'muda-ref-status warn';
+      status.textContent = '注意';
+    } else if (c && c.status === 'ok') {
+      mark.textContent = '✅';
+      status.className = 'muda-ref-status ok';
+      status.textContent = '問題なし';
+    } else {
+      mark.textContent = '—';
+      status.className = 'muda-ref-status none';
+      status.textContent = '未確認';
+    }
+    main.append(label, q, status);
+    if (c && c.note) {
+      const note = document.createElement('div');
+      note.className = 'muda-ref-note';
+      note.textContent = c.note;
+      main.appendChild(note);
+    }
+    row.append(mark, main);
+    body.appendChild(row);
+  });
+}
+
+// ---------- タブ3: 報連相 仕分けリスト（参照ビュー） ----------
+function renderHorensoRef() {
+  const sel = document.getElementById('horenso-ref-selector');
+  const body = document.getElementById('horenso-ref-body');
+  if (!body) return;
+  const s = refCurrentSeries();
+  buildRefSelector(sel, s ? s.id : null);
+  body.innerHTML = '';
+  if (!s) {
+    const p = document.createElement('p');
+    p.className = 'ref-empty';
+    p.textContent = 'まだ案件がありません。チャットタブで対話を始めると、報告／連絡／相談に自動で仕分けされます。';
+    body.appendChild(p);
+    return;
+  }
+  const items = Array.isArray(s.horenso) ? s.horenso : [];
+  const hasInvite = (s.artifacts || []).some(function (a) { return a && a.type === 'meeting-invite'; });
+  const lanes = document.createElement('div');
+  lanes.className = 'horenso-lanes';
+  HORENSO_LANES.forEach(function (lane) {
+    const col = document.createElement('div');
+    col.className = 'horenso-lane';
+    const h = document.createElement('h3');
+    h.textContent = lane.title;
+    const desc = document.createElement('p');
+    desc.className = 'lane-desc';
+    desc.textContent = lane.desc;
+    col.append(h, desc);
+    const laneItems = items.filter(function (it) { return it.kind === lane.key; });
+    if (!laneItems.length) {
+      const e = document.createElement('div');
+      e.className = 'lane-empty';
+      e.textContent = '—（該当なし）';
+      col.appendChild(e);
+    } else {
+      laneItems.forEach(function (it) {
+        const row = document.createElement('div');
+        row.className = 'horenso-item';
+        row.textContent = it.text || '（無題）';
+        if (it.presend) {
+          const b = document.createElement('span');
+          b.className = 'badge presend';
+          b.textContent = '会議前に事前送付';
+          row.appendChild(b);
+        }
+        col.appendChild(row);
+      });
+    }
+    // 相談レーンには会議招集文面（チャットで生成済み）への参照リンクを添える
+    if (lane.key === 'meeting' && hasInvite) {
+      const a = document.createElement('button');
+      a.className = 'ghost small invite-link';
+      a.textContent = '→ 会議招集文面（チャットで生成済み）を見る';
+      a.onclick = function () { showScreen('chat'); };
+      col.appendChild(a);
+    }
+    lanes.appendChild(col);
+  });
+  body.appendChild(lanes);
 }
 
 // ==================================================================
@@ -6027,6 +6348,7 @@ renderSeriesOptions();
 renderDesign();
 renderDash();
 renderA3();
+renderRefViews();
 intakeStart();
 renderLlmSettings();
 renderAiRouterCard();
