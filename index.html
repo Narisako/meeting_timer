@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>会議ルーター — Meeting Router</title>
+<title>会議招集の前に — ちょっと待って。その会議、必要ですか？</title>
 <style>
   :root {
     --ink: #1a2333;
@@ -62,6 +62,8 @@
   .triage-card .tense { font-size: 12px; color: var(--sub); }
   .triage-card .kind { font-size: 20px; font-weight: 700; margin: 2px 0; }
   .triage-card .dest { font-size: 13px; }
+  .triage-exc-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 16px; }
+  .triage-exc-list label { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
   .badge { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; font-weight: 700; }
   .badge.report { background: var(--ok-soft); color: var(--ok); }
   .badge.chat { background: var(--gold-soft); color: var(--gold); }
@@ -213,33 +215,77 @@
   .a3-block.done .st { color: var(--ok); font-weight: 700; }
   .a3-block.doing { background: var(--gold-soft); border-color: #e8d98a; }
   .a3-block.doing .st { color: var(--gold); font-weight: 700; }
+  /* v4-5: 状態7値の色分け（キャンバス俯瞰グリッド） */
+  .a3-block.draft { background: #f3f4f6; border-color: #d7dbe0; }
+  .a3-block.review { background: var(--gold-soft); border-color: #e8d98a; }
+  .a3-block.review .st { color: var(--gold); font-weight: 700; }
+  .a3-block.ready { background: var(--accent-soft); border-color: #bcd3f2; }
+  .a3-block.ready .st { color: var(--accent); font-weight: 700; }
+  .a3-block.reinvestigate { background: #fff2e0; border-color: #f0cf9a; }
+  .a3-block.reinvestigate .st { color: #b5651d; font-weight: 700; }
+  .a3-block.reopened { background: #fde8e8; border-color: #f0b6b6; }
+  .a3-block.reopened .st { color: var(--bad); font-weight: 700; }
+  /* 状態バッジ（Step詳細） */
+  .badge.st-todo { background: #eceef1; color: var(--sub); }
+  .badge.st-draft { background: #e9ebef; color: #556; }
+  .badge.st-review { background: var(--gold-soft); color: var(--gold); }
+  .badge.st-ready { background: var(--accent-soft); color: var(--accent); }
+  .badge.st-done { background: var(--ok-soft); color: var(--ok); }
+  .badge.st-reinvestigate { background: #fff2e0; color: #b5651d; }
+  .badge.st-reopened { background: #fde8e8; color: var(--bad); }
+  .badge.rec { background: var(--gold-soft); color: var(--gold); }
+  /* v4-5: Step詳細（成果物・状態・履歴） */
+  .a3-steps { margin: 10px 0 4px; }
+  .a3-step-detail { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; background: #fff; }
+  .a3-step-detail-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .a3-step-detail-head b { font-size: 13px; }
+  .a3-step-ctrl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .a3-step-ctrl label { font-size: 12px; color: var(--sub); }
+  .a3-step-ctrl select { font-size: 12px; padding: 3px 6px; }
+  .a3-artifacts { list-style: none; padding: 0; margin: 8px 0 0; }
+  .a3-artifacts li { display: flex; gap: 8px; align-items: baseline; font-size: 12px; padding: 3px 0; border-top: 1px dashed var(--line); }
+  .a3-artifacts li:first-child { border-top: 0; }
+  .a3-artifacts .empty { color: var(--sub); }
+  .a3-art-add { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .a3-art-add button { font-size: 12px; }
+  .a3-step-history { margin-top: 8px; }
+  .a3-step-history summary { font-size: 12px; cursor: pointer; color: var(--sub); }
+  .a3-step-history ul { list-style: none; padding: 0; margin: 6px 0 0; }
+  .a3-step-history li { font-size: 12px; padding: 2px 0; color: var(--sub); }
   .a3-nav { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; margin: 8px 0; font-size: 13px; }
   .a3-nav .lead { margin: 0 0 6px; }
   .a3-hist li { justify-content: flex-start; gap: 8px; }
   .a3-hist .seq { font-weight: 700; }
+  .a3-dec-list { margin: 6px 0 0; }
+  .a3-dec-item { display: block; padding: 8px 0; border-top: 1px dashed var(--line); }
+  .a3-dec-item:first-child { border-top: 0; }
+  .notify-list { margin: 4px 0 6px; font-size: 13px; }
   .a3-overdue { color: var(--bad); font-weight: 700; }
+  .basic-flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+  .basic-flow .flow-step { background: var(--gold-soft); color: var(--gold); border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
+  .basic-flow .flow-step::after { content: '→'; margin-left: 6px; color: var(--sub); font-weight: 400; }
+  .basic-flow .flow-step:last-child::after { content: ''; margin-left: 0; }
+  .basic-flow .flow-step.is-todo { background: #eee; color: var(--sub); }
+  .basic-flow .flow-step small { font-weight: 400; }
   @media (max-width: 560px) { .a3-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>会議ルーター</h1>
-  <span class="tagline">伝えたいことを最適な宛先へ——レポート・チャット・会議。会議は1分でも短く、1人でも少なく。</span>
+  <h1>会議招集の前に</h1>
+  <span class="tagline">ちょっと待って。その会議、必要ですか？</span>
 </header>
 <nav>
-  <button id="tab-triage" class="active" onclick="showScreen('triage')">① ルーター（報連相仕分け）</button>
-  <button id="tab-design" onclick="showScreen('design')" disabled>② 会議設計</button>
-  <button id="tab-cockpit" onclick="showScreen('cockpit')" disabled>③ コックピット</button>
-  <button id="tab-report" onclick="showScreen('report')" disabled>④ 申し送り</button>
-  <button id="tab-a3" onclick="showScreen('a3')">A3案件</button>
-  <button id="tab-dash" onclick="showScreen('dash')">節約ダッシュボード</button>
+  <button id="tab-a3" class="active" onclick="showScreen('a3')">トヨタA3 8ステップ・キャンバス</button>
+  <button id="tab-triage" onclick="showScreen('triage')">案件トリアージ</button>
+  <button id="tab-dash" onclick="showScreen('dash')">フローダッシュボード</button>
 </nav>
 
 <main>
 
-<!-- ===================== ① ルーター（トリアージ） ===================== -->
-<section id="screen-triage" class="screen active">
+<!-- ===================== 案件トリアージ ===================== -->
+<section id="screen-triage" class="screen">
   <!-- AIオートルーター: sekisho.llm.enabled 時のみ JS で中身を注入（OFF時はDOMに残さない） -->
   <div id="ai-router-card" class="card hidden"></div>
 
@@ -275,6 +321,26 @@
     <div class="row" style="margin-top:8px">
       <div><button class="ghost" onclick="copyText('triage-template', this)">テンプレートをコピー</button></div>
     </div>
+
+    <div id="triage-exception" style="margin-top:16px; border-top:1px solid var(--line); padding-top:14px">
+      <h3 style="margin-top:0">ただし、以下に当てはまる場合は判断セッションが必要かもしれません</h3>
+      <p class="note">「過去＝報告／現在＝連絡」は基本ルールですが、時制にかかわらず判断が必要になることがあります。当てはまるものを選んでください（複数選択可）。</p>
+      <div id="triage-exc-list" class="triage-exc-list">
+        <label><input type="checkbox" class="triage-exc" value="判断が必要" onchange="renderTriageException()"> 判断が必要</label>
+        <label><input type="checkbox" class="triage-exc" value="関係者間に認識差がある" onchange="renderTriageException()"> 関係者間に認識差がある</label>
+        <label><input type="checkbox" class="triage-exc" value="不確実性が高い" onchange="renderTriageException()"> 不確実性が高い</label>
+        <label><input type="checkbox" class="triage-exc" value="緊急性が高い" onchange="renderTriageException()"> 緊急性が高い</label>
+        <label><input type="checkbox" class="triage-exc" value="判断が不可逆" onchange="renderTriageException()"> 判断が不可逆</label>
+        <label><input type="checkbox" class="triage-exc" value="部門横断の調整が必要" onchange="renderTriageException()"> 部門横断の調整が必要</label>
+        <label><input type="checkbox" class="triage-exc" value="決定権者の判断が必要" onchange="renderTriageException()"> 決定権者の判断が必要</label>
+      </div>
+      <div id="triage-exception-reco" class="alert warn hidden" style="margin-top:12px">
+        <div>例外条件に該当します。判断セッション（会議）の設計へ進むことを推奨します。</div>
+        <button class="primary" style="margin-top:8px" onclick="startExceptionConsult()">判断セッション設計へ進む</button>
+        <p class="note" style="margin-bottom:0">※ 強制ではありません。レポート／チャットで済ませることもできます。</p>
+      </div>
+    </div>
+
     <h3>この件、従来なら会議を開いていましたか？</h3>
     <p class="note">開いていたはずの会議の規模を入力すると、「回避コスト」として節約実績に記録されます。</p>
     <div class="row">
@@ -302,28 +368,67 @@
     <div style="margin-bottom:14px">
       <button class="ghost" onclick="startSingleConsult()">単発の相談として設計する（従来フロー）</button>
     </div>
-    <h3 style="margin-top:0">A3案件として始める</h3>
-    <p class="note">案件名とゴールを決め、8ステップで問題解決を進めます。まず Step1（背景・問題の明確化）の会議設計へ進みます。</p>
+    <h3 style="margin-top:0">トヨタA3案件として始める</h3>
+    <p class="note">案件名とゴールを決め、8ステップで問題解決を進めます。まず Step1（背景・問題の明確化）の判断セッション設計へ進みます。</p>
     <label for="new-series-title">案件名</label>
     <input type="text" id="new-series-title" placeholder="例）新製品ラインの不良率を下げる">
     <label for="new-series-goal">ゴール（あるべき姿・目標値）</label>
     <input type="text" id="new-series-goal" placeholder="例）不良率を 3% → 1.5% に半減する">
     <div id="new-series-error" class="alert bad hidden"></div>
     <div style="margin-top:10px">
-      <button class="primary" onclick="startAsA3Case()">A3案件として始める（Step1 会議設計へ）</button>
+      <button class="primary" onclick="startAsA3Case()">トヨタA3案件として始める（Step1 判断セッション設計へ）</button>
     </div>
   </div>
+
+  <details id="triage-scope" class="card">
+    <summary style="cursor:pointer; font-weight:700">本システムの対象／対象外</summary>
+    <div style="margin-top:12px">
+      <p style="margin:0 0 4px"><strong>対象</strong>（このシステムで扱う会議・案件）</p>
+      <ul style="margin-top:0">
+        <li>部門横断の問題解決</li>
+        <li>複数回にわたるA3案件</li>
+        <li>事実に基づく意思決定</li>
+        <li>対策実行と効果確認を伴う案件</li>
+      </ul>
+      <p style="margin:0 0 4px"><strong>対象外</strong>（このシステムの守備範囲ではない場）</p>
+      <ul style="margin-top:0; margin-bottom:0">
+        <li>1on1</li>
+        <li>朝会</li>
+        <li>研修・講演</li>
+        <li>緊急インシデント指揮</li>
+        <li>発散型ワークショップ</li>
+        <li>高度な機密案件</li>
+      </ul>
+    </div>
+  </details>
 </section>
 
-<!-- ===================== ② 会議設計 ===================== -->
+<!-- ===================== 判断セッション設計 ===================== -->
 <section id="screen-design" class="screen">
   <div class="card">
-    <h2>相談の設計 <span class="badge meet">ルーター通過</span> <span id="design-seq" class="badge" style="background:var(--gold-soft);color:var(--gold);display:none"></span></h2>
+    <h2>判断セッション設計 <span class="badge meet">トリアージ通過</span> <span id="design-seq" class="badge" style="background:var(--gold-soft);color:var(--gold);display:none"></span></h2>
     <p class="note">議題は「未来の問い（〜するか？〜すべきか？）」だけ。参加者は役割がある人だけ。値札を見てから開きます。</p>
     <label for="mtg-title">会議名</label>
     <input type="text" id="mtg-title" placeholder="例）新製品の価格をどう設定するか" oninput="renderInvite()">
     <label for="mtg-bg">背景（なぜ今この判断が必要か）</label>
     <textarea id="mtg-bg" rows="2" placeholder="例）競合が値下げを発表。次期見積提出まで残り2週間で価格方針を固める必要がある。" oninput="renderInvite()"></textarea>
+    <label for="mtg-decision-question">判断する問い（このセッションで何を決めるか・必須）</label>
+    <p class="note">セッション全体で「何を決めるのか」を1つの問いにします。空のままでは開始できません。<strong>30分は判断セッションの標準です。</strong></p>
+    <input type="text" id="mtg-decision-question" placeholder="例）新製品の発売日をいつにするか？" oninput="renderPricetag()">
+    <details id="design-scope" class="card" style="margin-top:12px">
+      <summary style="cursor:pointer; font-weight:700">このツールが対象としない会議</summary>
+      <div style="margin-top:12px">
+        <p class="note" style="margin-top:0">下記は判断セッションの守備範囲外です。別の場を使ってください。</p>
+        <ul style="margin-top:0; margin-bottom:0">
+          <li>1on1</li>
+          <li>研修・講演</li>
+          <li>朝会</li>
+          <li>緊急インシデント対応</li>
+          <li>発散型ワークショップ</li>
+          <li>高度な機密案件</li>
+        </ul>
+      </div>
+    </details>
     <h3>議題（未来の問い）と「今日決めること」</h3>
     <p class="note">議題はテーマ（〜について／〜の件）ではなく「会議終了時に決まっているべき問い」で。各議題に、終了時に決まっているべき状態＝「今日決めること」を必ず添えてください。</p>
     <div class="row">
@@ -378,6 +483,24 @@
     <h3>会議に呼ばず、レポートを送る人</h3>
     <p class="note">「聞くだけ」の人は自動でこちらに回ります。会議終了後のレポートの送付先になります。</p>
     <ul class="plain" id="recipient-list"></ul>
+    <h3>判断の材料（任意 — 入力すると会議案内に反映されます）</h3>
+    <p class="note">判断を早く・良くするための材料です。すべて任意ですが、埋めるほど会議は短く濃くなります。</p>
+    <label for="option-input">選択肢（複数登録できます）</label>
+    <div class="row">
+      <div style="flex:3">
+        <input type="text" id="option-input" placeholder="例）6月発売案" onkeydown="if(event.key==='Enter')addOption()">
+      </div>
+      <div style="flex:0"><button class="ghost" onclick="addOption()">追加</button></div>
+    </div>
+    <ul class="plain" id="option-list"></ul>
+    <label for="mtg-recommendation">推奨案（どれを推すか＋一言）</label>
+    <input type="text" id="mtg-recommendation" placeholder="例）6月発売案を推す。競合に先行できるため" oninput="renderInvite()">
+    <label for="mtg-criteria">判断基準（何で選ぶか）</label>
+    <input type="text" id="mtg-criteria" placeholder="例）初年度の粗利と競合先行の両立で選ぶ" oninput="renderInvite()">
+    <label for="mtg-no-decision-impact">決めなかった場合の影響</label>
+    <input type="text" id="mtg-no-decision-impact" placeholder="例）見積提出に間に合わず失注リスクが高まる" oninput="renderInvite()">
+    <label for="mtg-end-condition">今日の終了条件（何が決まれば終わりか）</label>
+    <input type="text" id="mtg-end-condition" placeholder="例）発売日・担当・次回レビュー日が確定したら終了" oninput="renderInvite()">
     <h3>案件（A3）との紐づけ（任意）</h3>
     <p class="note">この会議がどの案件のどのステップを前進させるのかを紐づけると、会議案内に節目として明記されます。</p>
     <div class="row">
@@ -420,7 +543,7 @@
   </div>
 </section>
 
-<!-- ===================== ③ コックピット ===================== -->
+<!-- ===================== 思考のコックピット ===================== -->
 <section id="screen-cockpit" class="screen">
   <div class="card">
     <h2 id="cockpit-title"></h2>
@@ -450,15 +573,15 @@
   </div>
 </section>
 
-<!-- ===================== ④ 申し送り ===================== -->
+<!-- ===================== 決定事項と申し送り事項 ===================== -->
 <section id="screen-report" class="screen">
   <div class="card">
-    <h2>申し送り（次の状態）</h2>
+    <h2>決定事項と申し送り事項（次の状態）</h2>
     <p class="note">議事録より必要なのは「次の状態」= Decision / Action / Owner / Due / Next の5点。呼ばなかった人へコピーして送付してください。</p>
     <div id="report-summary"></div>
     <pre class="report" id="report-body"></pre>
     <div class="row">
-      <div><button class="ghost" onclick="copyReport(this)">申し送りをコピー</button></div>
+      <div><button class="ghost" onclick="copyReport(this)">決定事項と申し送りをコピー</button></div>
     </div>
     <!-- R4 申し送り3行要約: LLM ON時のみ JS で中身を注入（OFF時はDOMに残さない） -->
     <div id="handoff-assist" class="hidden" style="margin-top:8px"></div>
@@ -473,13 +596,13 @@
     <div id="next-error" class="alert bad hidden"></div>
     <div class="row" style="margin-top:10px">
       <div style="flex:0"><button class="primary" onclick="reserveNextMeeting()">次回会議を予約</button></div>
-      <div style="flex:0"><button class="danger" id="btn-close-series" onclick="closeThisSeries()">この案件は決着</button></div>
+      <div style="flex:0"><button class="danger" id="btn-close-series" onclick="closeThisSeries()">この案件を成果確定</button></div>
     </div>
     <div id="next-status" class="alert ok hidden"></div>
   </div>
 
   <div class="card hidden" id="a3-onepager-card">
-    <h2>A3・1枚レポート（Step8 決着）</h2>
+    <h2>A3・1枚レポート（Step8 成果確定）</h2>
     <p class="note">8ブロックすべてを1枚に整形しました。標準化（横展開）の共有にお使いください。</p>
     <pre class="report" id="a3-onepager-body"></pre>
     <div class="row"><div><button class="ghost" onclick="copyTextContent('a3-onepager-body', this)">A3レポートをコピー</button></div></div>
@@ -488,15 +611,30 @@
   </div>
 
   <div class="card">
-    <div><button class="primary" onclick="resetFlow()">次の案件をルーターにかける</button></div>
+    <div><button class="primary" onclick="resetFlow()">次の案件をトリアージにかける</button></div>
   </div>
 </section>
 
-<!-- ===================== A3案件ビュー ===================== -->
-<section id="screen-a3" class="screen">
+<!-- ===================== トヨタA3 8ステップ・キャンバス ===================== -->
+<section id="screen-a3" class="screen active">
+  <div class="card" id="a3-basic-flow">
+    <h2>トヨタA3 8ステップ・キャンバス</h2>
+    <p class="note">すべての案件を1枚で俯瞰し、意思決定と実行を前へ進める一次情報源です。会議は必要なときだけ、各案件のステップから設計します。</p>
+    <div class="basic-flow" aria-label="基本フロー">
+      <span class="flow-step">案件登録</span>
+      <span class="flow-step">案件トリアージ</span>
+      <span class="flow-step">報連相ナビ</span>
+      <span class="flow-step">判断準備チェック</span>
+      <span class="flow-step">判断セッション設計</span>
+      <span class="flow-step">思考のコックピット</span>
+      <span class="flow-step">決定事項と申し送り</span>
+      <span class="flow-step">実行・効果確認</span>
+      <span class="flow-step">成果確定</span>
+    </div>
+  </div>
   <div class="card" id="a3-empty">
-    <h2>A3案件</h2>
-    <p class="note">継続的な問題解決（トヨタ8ステップ）を1枚で俯瞰する、誰でも見に行ける一次情報源です。案件はまだありません。① ルーターで「相談」を選び「A3案件として始める」から作成してください。</p>
+    <h2>案件はまだありません</h2>
+    <p class="note">継続的な問題解決（トヨタ8ステップ）を1枚で俯瞰する、誰でも見に行ける一次情報源です。「案件トリアージ」タブで「相談（未来のこと）」を選び「トヨタA3案件として始める」から作成してください。</p>
   </div>
   <div id="a3-case-list"></div>
 
@@ -518,18 +656,36 @@
   </div>
 </section>
 
-<!-- ===================== ダッシュボード ===================== -->
+<!-- ===================== フローダッシュボード ===================== -->
 <section id="screen-dash" class="screen">
   <div class="card">
-    <h2>節約ダッシュボード</h2>
-    <p class="note">使った額ではなく、取り返した時間とお金を数えます。</p>
+    <h2>フローダッシュボード</h2>
+    <p class="note">節約額ではなく、案件の流れ（意思決定と実行の速さ）と停滞を主役に見ます。データが無い指標は「—」で表示します。</p>
+    <h3 style="margin:14px 0 4px">案件の流れ</h3>
+    <p class="note">案件が「作成→判断→実行→成果」までどれだけ速く流れ、どこで停滞しているかを表します。</p>
     <div class="stat-grid">
-      <div class="stat gold"><div class="v" id="dash-total-saved">¥0</div><div class="k">累計節約額（回避＋短縮）</div></div>
+      <div class="stat"><div class="v" id="dash-lead-time">—</div><div class="k">案件リードタイム（作成→成果確定）</div></div>
+      <div class="stat"><div class="v" id="dash-decision-wait">—</div><div class="k">判断待ち時間（Step ready→Decision）</div></div>
+      <div class="stat"><div class="v" id="dash-decision-action-gap">—</div><div class="k">DecisionからAction開始まで</div></div>
+      <div class="stat"><div class="v" id="dash-original-due">—</div><div class="k">当初期限内完了率（当初期限基準）</div></div>
+      <div class="stat"><div class="v" id="dash-redecision-rate">—</div><div class="k">再判断率（再オープン後の再Decision）</div></div>
+      <div class="stat"><div class="v" id="dash-goal-achievement">—</div><div class="k">目標達成率（Step7の目標対実績）</div></div>
+      <div class="stat"><div class="v red" id="dash-stalled-series">0件</div><div class="k">停滞案件数</div></div>
+      <div class="stat"><div class="v red" id="dash-unprepared-decision">0件</div><div class="k">判断準備不足件数</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>会議削減効果（参考換算）</h2>
+    <p class="note">回避・短縮した会議を、解放した会議人時・業務時間と参考換算額で表します。<b>※参考換算額は実際の現金支出の削減額ではありません（社内レート×時間の目安です）。</b></p>
+    <div class="stat-grid">
+      <div class="stat gold"><div class="v" id="dash-total-saved">¥0</div><div class="k">参考換算額（累計・回避＋短縮）</div></div>
+      <div class="stat"><div class="v" id="dash-person-hours">0人時</div><div class="k">回避した会議人時（人×時間）</div></div>
+      <div class="stat"><div class="v" id="dash-saved-min">0分</div><div class="k">解放した業務時間（延べ）</div></div>
       <div class="stat"><div class="v" id="dash-avoided-count">0件</div><div class="k">開かずに済ませた会議</div></div>
-      <div class="stat"><div class="v" id="dash-avoided-cost">¥0</div><div class="k">会議回避による節約</div></div>
+      <div class="stat"><div class="v" id="dash-avoided-cost">¥0</div><div class="k">会議回避の参考換算額</div></div>
       <div class="stat"><div class="v" id="dash-held-count">0件</div><div class="k">開いた会議</div></div>
-      <div class="stat"><div class="v" id="dash-shorten-cost">¥0</div><div class="k">予定より早く終えた節約</div></div>
-      <div class="stat"><div class="v" id="dash-saved-min">0分</div><div class="k">取り返した延べ時間</div></div>
+      <div class="stat"><div class="v" id="dash-shorten-cost">¥0</div><div class="k">早期終了の参考換算額</div></div>
       <div class="stat"><div class="v" id="dash-spared">0人</div><div class="k">会議に呼ばずに済んだ人（延べ）</div></div>
       <div class="stat"><div class="v" id="dash-decisions">0件</div><div class="k">記録された決定</div></div>
     </div>
@@ -540,15 +696,14 @@
 
   <div class="card">
     <h2>速さの指標</h2>
-    <p class="note">評価は「会議時間の削減%」ではなく、意思決定と実行がどれだけ速くなったか。データが無い指標は「—」で表示します。</p>
+    <p class="note">意思決定と実行の速さ・質を会議単位で見る補助指標です。データが無い指標は「—」で表示します。</p>
     <div class="stat-grid">
       <div class="stat"><div class="v" id="dash-action-completion">—</div><div class="k">アクション完了率</div></div>
       <div class="stat"><div class="v" id="dash-ontime-completion">—</div><div class="k">期限内完了率</div></div>
       <div class="stat"><div class="v" id="dash-carried-rate">—</div><div class="k">議題の持ち越し率</div></div>
       <div class="stat"><div class="v" id="dash-extension-rate">—</div><div class="k">会議の延長率</div></div>
       <div class="stat"><div class="v" id="dash-within30-rate">—</div><div class="k">30分以内終了率</div></div>
-      <div class="stat"><div class="v" id="dash-closed-series">0件</div><div class="k">決着したA3案件数</div></div>
-      <div class="stat"><div class="v" id="dash-lead-time">—</div><div class="k">案件リードタイム（作成→決着）</div></div>
+      <div class="stat"><div class="v" id="dash-closed-series">0件</div><div class="k">成果確定したA3案件数</div></div>
       <div class="stat"><div class="v red" id="dash-overdue-actions">0件</div><div class="k">期限超過アクション件数</div></div>
       <div class="stat"><div class="v" id="dash-top-carry-cause">—</div><div class="k">持ち越し原因トップ</div></div>
     </div>
@@ -562,7 +717,14 @@
       <div class="stat"><div class="v red" id="dash-over-report">0件</div><div class="k">A3・1枚超過レポート数</div></div>
       <div class="stat"><div class="v red" id="dash-stagnant-actions">0件</div><div class="k">停滞アクション（エスカレ候補）</div></div>
       <div class="stat"><div class="v red" id="dash-mannerism-series">0件</div><div class="k">マンネリ疑い案件数</div></div>
-      <div class="stat"><div class="v red" id="dash-dissent-zero-rate">—</div><div class="k">異論ゼロ会議率（シャンシャン）</div></div>
+      <div class="stat"><div class="v red" id="dash-dec-no-alternatives">0件</div><div class="k">代替案未検討の決定数</div></div>
+      <div class="stat"><div class="v red" id="dash-dec-no-risk">0件</div><div class="k">リスク未確認の決定数</div></div>
+      <div class="stat"><div class="v red" id="dash-dec-no-basis">0件</div><div class="k">判断根拠不足の決定数</div></div>
+    </div>
+    <div id="dash-due-change-wrap" style="margin-top:14px">
+      <h3 style="margin:0 0 6px;font-size:15px">期限変更回数の多いアクション</h3>
+      <p class="note" style="margin:0 0 6px">期限を何度も動かしているアクションは、見積り前提の崩れや停滞の兆候です（変更理由つき）。</p>
+      <ul class="plain" id="dash-due-change-list"><li style="color:var(--sub)">（期限変更のあるアクションはありません）</li></ul>
     </div>
     <details class="muda-poster">
       <summary>事技系職場の7つのムダ（ポスター全文）</summary>
@@ -590,6 +752,20 @@
       <button class="primary small" onclick="saveLlmFromUI()">設定を保存</button>
       <span id="llm-save-status" class="note" style="margin-left:8px"></span>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>データ管理（エクスポート／インポート）</h2>
+    <p class="note">この端末のデータ（案件・会議・Decision・アクション・統計・設定）を1つのJSONに書き出し、別の端末やバックアップとして持ち運べます。インポートは<b>現在のデータを全て上書き</b>します。</p>
+    <div class="alert warn" style="margin-top:0">localStorage版は個人用デモです。複数人での共有には共有データストアが必要です。</div>
+    <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:10px; align-items:center">
+      <button class="primary small" onclick="exportAllData()">エクスポート（JSONダウンロード）</button>
+      <button class="ghost small" onclick="document.getElementById('data-import-file').click()">インポート（ファイルを選択）</button>
+      <input type="file" id="data-import-file" accept="application/json,.json" class="hidden" onchange="handleImportFile(this)">
+      <button class="ghost small" id="data-restore-btn" onclick="restoreLastBackup()" disabled>直前の状態に戻す</button>
+    </div>
+    <div id="data-mgmt-error" class="alert bad hidden"></div>
+    <div id="data-mgmt-status" class="note" style="margin-top:8px"></div>
   </div>
 </section>
 
@@ -632,29 +808,36 @@ function saveRate(r) { localStorage.setItem(RATE_KEY, String(r)); }
 
 let stats = loadStats();
 
-// ---------- 永続化v2（データ層: series / meetings / actions） ----------
-// v2スキーマ。案件（series）を主役に、会議（meetings）とアクション（actions）を紐付ける。
-// UI・既存挙動には影響させず、後続Issueが使うデータ層とCRUD/導出ヘルパのみを提供する。
+// ---------- 永続化v3（データ層: エンティティ分離） ----------
+// v3スキーマ。Decision を Meeting 属性から独立エンティティへ分離し、Evidence・Stakeholder・
+// Event Log を追加。Step 状態を7値へ拡張し、複数成果物（artifacts）と履歴（history）を持たせる。
+// UI・既存挙動には影響させず（外部挙動は不変）、データ層とCRUD/導出ヘルパのみを更新する。
 const SCHEMA_KEY = 'sekisho.schema';
 const SERIES_KEY = 'sekisho.series';
 const MEETINGS_KEY = 'sekisho.meetings';
 const ACTIONS_KEY = 'sekisho.actions';
-const SCHEMA_VERSION = '2';
+const DECISIONS_KEY = 'sekisho.decisions';       // v3新規: 独立Decision
+const EVIDENCE_KEY = 'sekisho.evidence';         // v3新規: 判断根拠となる事実
+const STAKEHOLDERS_KEY = 'sekisho.stakeholders'; // v3新規: 関係者
+const EVENTS_KEY = 'sekisho.events';             // v3新規: Event Log（追記型）
+const SCHEMA_VERSION = '3';
 const MEETINGS_LIMIT = 50; // 容量対策: meetings は直近50件でトリム
+const EVENTS_LIMIT = 500;  // 容量対策: events は直近500件でトリム
+
+// Step状態の7値。todo→draft→review→ready→done を基本フローとし、done後に
+// reinvestigate（再調査）/ reopened（再オープン）へ差し戻せる。
+const STEP_STATUSES = ['todo', 'draft', 'review', 'ready', 'done', 'reinvestigate', 'reopened'];
 
 // 衝突しにくい簡易ID
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-// マイグレーション: schema が無ければ v1 とみなし、series/meetings/actions を空配列で初期化。
-// 既存 sekisho.stats / sekisho.rate は一切変換せず維持する。
-function migrateSchema() {
-  if (localStorage.getItem(SCHEMA_KEY) === SCHEMA_VERSION) return;
-  if (localStorage.getItem(SERIES_KEY) === null) localStorage.setItem(SERIES_KEY, '[]');
-  if (localStorage.getItem(MEETINGS_KEY) === null) localStorage.setItem(MEETINGS_KEY, '[]');
-  if (localStorage.getItem(ACTIONS_KEY) === null) localStorage.setItem(ACTIONS_KEY, '[]');
-  localStorage.setItem(SCHEMA_KEY, SCHEMA_VERSION);
+// HTML特殊文字のエスケープ（innerHTMLに動的文字列を差し込む箇所で使用）
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function loadArray(key) {
@@ -672,6 +855,319 @@ function saveMeetings(list) {
 }
 function loadActions() { return loadArray(ACTIONS_KEY); }
 function saveActions(list) { localStorage.setItem(ACTIONS_KEY, JSON.stringify(list)); }
+function loadDecisions() { return loadArray(DECISIONS_KEY); }
+function saveDecisions(list) { localStorage.setItem(DECISIONS_KEY, JSON.stringify(list)); }
+function loadEvidence() { return loadArray(EVIDENCE_KEY); }
+function saveEvidence(list) { localStorage.setItem(EVIDENCE_KEY, JSON.stringify(list)); }
+function loadStakeholders() { return loadArray(STAKEHOLDERS_KEY); }
+function saveStakeholders(list) { localStorage.setItem(STAKEHOLDERS_KEY, JSON.stringify(list)); }
+function loadEvents() { return loadArray(EVENTS_KEY); }
+function saveEvents(list) {
+  const trimmed = list.slice(-EVENTS_LIMIT); // 直近500件のみ保持
+  localStorage.setItem(EVENTS_KEY, JSON.stringify(trimmed));
+}
+
+// Event Log: 主要な状態変化を追記型で記録する。save系ヘルパから自動発火する。
+function logEvent(entity, entityId, kind, detail) {
+  const list = loadEvents();
+  const ev = { id: genId(), at: Date.now(), entity, entityId, kind, detail: detail || {} };
+  list.push(ev);
+  saveEvents(list);
+  return ev;
+}
+
+// v2→v3 のStep状態変換: done→done / inprogress→draft / それ以外→todo
+function mapStepStatusV2toV3(old) {
+  if (old === 'done') return 'done';
+  if (old === 'inprogress') return 'draft';
+  if (STEP_STATUSES.indexOf(old) >= 0) return old; // 既にv3値ならそのまま
+  return 'todo';
+}
+
+// マイグレーション:
+//  - schema 未設定（v1）: series/meetings/actions を空配列で初期化（従来どおり）
+//  - schema !== "3": v2→v3 変換を実行（冪等）。
+//      * series.steps: status を7値へ、filledBy→artifacts へ、history 初期化
+//      * actions: dueOriginal=due 補完、dueChanges/startedAt 初期化
+//      * meetings.agendas[].decision → sekisho.decisions へ展開
+//      * evidence/stakeholders/events を空配列で用意
+//  - stats/rate/llm は一切変換せず維持する。
+function migrateSchema() {
+  // v2キー（未設定なら空配列）
+  if (localStorage.getItem(SERIES_KEY) === null) localStorage.setItem(SERIES_KEY, '[]');
+  if (localStorage.getItem(MEETINGS_KEY) === null) localStorage.setItem(MEETINGS_KEY, '[]');
+  if (localStorage.getItem(ACTIONS_KEY) === null) localStorage.setItem(ACTIONS_KEY, '[]');
+  if (localStorage.getItem(SCHEMA_KEY) === SCHEMA_VERSION) return; // 冪等: 既にv3なら何もしない
+
+  // v3新エンティティ（未設定なら空配列）
+  if (localStorage.getItem(DECISIONS_KEY) === null) localStorage.setItem(DECISIONS_KEY, '[]');
+  if (localStorage.getItem(EVIDENCE_KEY) === null) localStorage.setItem(EVIDENCE_KEY, '[]');
+  if (localStorage.getItem(STAKEHOLDERS_KEY) === null) localStorage.setItem(STAKEHOLDERS_KEY, '[]');
+  if (localStorage.getItem(EVENTS_KEY) === null) localStorage.setItem(EVENTS_KEY, '[]');
+
+  // --- series.steps を v3 形へ ---
+  const series = loadSeries();
+  series.forEach(s => {
+    if (!s || !s.steps) return;
+    Object.keys(s.steps).forEach(k => {
+      const st = s.steps[k];
+      if (!st || typeof st !== 'object') return;
+      st.status = mapStepStatusV2toV3(st.status);
+      if (!Array.isArray(st.artifacts)) {
+        st.artifacts = [];
+        if (st.filledBy) {
+          st.artifacts.push({ type: st.filledBy, refId: st.meetingId || null, at: st.updatedAt || null });
+        }
+      }
+      if (!Array.isArray(st.history)) st.history = [];
+    });
+  });
+  saveSeries(series);
+
+  // --- actions: 当初期限・期限変更履歴・着手時刻を補完 ---
+  const actions = loadActions();
+  actions.forEach(a => {
+    if (!a || typeof a !== 'object') return;
+    if (a.dueOriginal === undefined) a.dueOriginal = (a.due != null ? a.due : null);
+    if (!Array.isArray(a.dueChanges)) a.dueChanges = [];
+    if (a.startedAt === undefined) a.startedAt = null;
+  });
+  saveActions(actions);
+
+  // --- meetings.agendas[].decision → 独立Decisionへ展開 ---
+  const meetings = loadMeetings();
+  const decisions = loadDecisions();
+  meetings.forEach(m => {
+    if (!m) return;
+    (m.agendas || []).forEach(a => {
+      if (!a || !a.decision) return;
+      decisions.push({
+        id: genId(),
+        seriesId: m.seriesId || null,
+        stepNo: (m.stepNo != null ? m.stepNo : null),
+        meetingId: m.id || null,
+        text: a.decision,
+        basis: '',
+        rejectedOptions: [],
+        dissent: a.dissent || '',
+        notifyTo: [],
+        decidedAt: (m.endMs != null ? m.endMs : (m.startMs != null ? m.startMs : null))
+      });
+    });
+  });
+  saveDecisions(decisions);
+
+  localStorage.setItem(SCHEMA_KEY, SCHEMA_VERSION);
+}
+
+// ---------- データ管理（エクスポート／インポート／バックアップ） Issue #24 ----------
+// 全 sekisho.* キーを1つのJSONへ書き出し、別端末やバックアップとして持ち運ぶ。
+// インポートは全置換（schema違いは migrateSchema を通す）。実行前に現在の全データを
+// sekisho.backup.last へ自動退避し、ワンクリックで直前状態に戻せる。
+const BACKUP_LAST_KEY = 'sekisho.backup.last'; // インポート直前の自動バックアップ
+const KNOWN_IMPORT_SCHEMAS = ['2', '3'];       // 受け入れ可能なスキーマ（v2/v3）
+
+// 現在の sekisho.* を収集（backup.last 自身は除外）。値はJSONとして展開できれば展開、
+// 展開できなければ生文字列のまま保持する（round-trip 保証）。
+function collectAllData() {
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || k.indexOf('sekisho.') !== 0 || k === BACKUP_LAST_KEY) continue;
+    const raw = localStorage.getItem(k);
+    try { data[k] = JSON.parse(raw); } catch (e) { data[k] = raw; }
+  }
+  return data;
+}
+
+// エクスポートペイロード { schema, exportedAt, data:{...} } を生成（テストから直接検証可能）。
+function buildExportPayload() {
+  return {
+    schema: localStorage.getItem(SCHEMA_KEY) || SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: collectAllData()
+  };
+}
+
+function backupDateStamp(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return '' + y + m + day;
+}
+
+// エクスポート: Blob + a[download] でJSONをダウンロードさせる。
+function exportAllData() {
+  const payload = buildExportPayload();
+  const json = JSON.stringify(payload, null, 2);
+  const fname = 'kaigi-shoshu-backup-' + backupDateStamp(new Date()) + '.json';
+  try {
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  } catch (e) { /* ダウンロード不可環境でもペイロードは返す */ }
+  setDataMgmtStatus('エクスポートしました（' + fname + '）');
+  clearDataMgmtError();
+  return { payload: payload, json: json, filename: fname };
+}
+
+// インポート内容の検証。壊れたJSON・data欠落・未知スキーマは例外を投げる（既存データは触らない）。
+function validateImportPayload(text) {
+  let obj;
+  try { obj = JSON.parse(text); }
+  catch (e) { throw new Error('JSONとして読み込めませんでした。ファイルが壊れている可能性があります。'); }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('バックアップの形式が不正です。');
+  if (!obj.data || typeof obj.data !== 'object' || Array.isArray(obj.data)) throw new Error('data がありません。バックアップの形式が不正です。');
+  const scRaw = (obj.schema != null) ? obj.schema : obj.data[SCHEMA_KEY];
+  const sc = (scRaw == null) ? '' : String(scRaw);
+  if (KNOWN_IMPORT_SCHEMAS.indexOf(sc) < 0) throw new Error('未知のスキーマ（' + (sc || '不明') + '）です。このファイルはインポートできません。');
+  return obj;
+}
+
+// プレビュー用の件数集計。
+function importCounts(payload) {
+  const d = (payload && payload.data) || {};
+  const cnt = (k) => (Array.isArray(d[k]) ? d[k].length : 0);
+  return {
+    schema: String((payload.schema != null) ? payload.schema : (d[SCHEMA_KEY] != null ? d[SCHEMA_KEY] : '')),
+    series: cnt(SERIES_KEY),
+    meetings: cnt(MEETINGS_KEY),
+    actions: cnt(ACTIONS_KEY),
+    decisions: cnt(DECISIONS_KEY)
+  };
+}
+
+// 現在の sekisho.* を全消去（backup.last は残す）。
+function clearSekishoKeys() {
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.indexOf('sekisho.') === 0 && k !== BACKUP_LAST_KEY) toRemove.push(k);
+  }
+  toRemove.forEach(k => localStorage.removeItem(k));
+}
+
+// data マップを localStorage へ書き戻す。
+function restoreDataMap(data) {
+  Object.keys(data || {}).forEach(k => {
+    if (k.indexOf('sekisho.') !== 0 || k === BACKUP_LAST_KEY) return;
+    const v = data[k];
+    localStorage.setItem(k, (typeof v === 'string') ? v : JSON.stringify(v));
+  });
+}
+
+// インポート実行（全置換）。実行前に現在の全データを backup.last へ自動退避し、
+// schema違いは migrateSchema で正規化する。
+function applyImport(payload) {
+  const backup = { schema: localStorage.getItem(SCHEMA_KEY), savedAt: new Date().toISOString(), data: collectAllData() };
+  localStorage.setItem(BACKUP_LAST_KEY, JSON.stringify(backup));
+  clearSekishoKeys();
+  restoreDataMap(payload.data);
+  migrateSchema();       // schema違いを通す（冪等）
+  refreshAllViews();
+}
+
+// 直前バックアップへ復元。
+function restoreLastBackup() {
+  const raw = localStorage.getItem(BACKUP_LAST_KEY);
+  if (!raw) { setDataMgmtStatus('復元できるバックアップがありません。'); return false; }
+  let backup;
+  try { backup = JSON.parse(raw); } catch (e) { setDataMgmtError('バックアップが壊れています。'); return false; }
+  if (!backup || !backup.data) { setDataMgmtError('バックアップが壊れています。'); return false; }
+  clearSekishoKeys();
+  restoreDataMap(backup.data);
+  migrateSchema();
+  refreshAllViews();
+  clearDataMgmtError();
+  setDataMgmtStatus('直前の状態に復元しました。');
+  return true;
+}
+
+// ファイル選択 → 読み込み → 検証 → 確認モーダル。
+function handleImportFile(input) {
+  clearDataMgmtError();
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    input.value = ''; // 同じファイルを再選択できるようにリセット
+    let payload;
+    try { payload = validateImportPayload(String(reader.result)); }
+    catch (e) { setDataMgmtError('インポートできませんでした: ' + e.message); return; }
+    openImportConfirm(payload);
+  };
+  reader.onerror = () => { input.value = ''; setDataMgmtError('ファイルを読み込めませんでした。'); };
+  reader.readAsText(file);
+}
+
+// インポート確認モーダル（プレビュー＋上書き警告）。
+function openImportConfirm(payload) {
+  const counts = importCounts(payload);
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  if (!title || !body || !actions) { // モーダル不在環境では即適用しない（安全側）
+    setDataMgmtError('確認画面を表示できませんでした。');
+    return;
+  }
+  title.textContent = 'インポートの確認';
+  body.innerHTML =
+    '<div class="alert bad" style="margin-top:0">現在のこの端末のデータは<b>全て上書き</b>されます。実行前に現在のデータは自動バックアップされ、「直前の状態に戻す」で復元できます。</div>' +
+    '<p class="note" style="margin:8px 0 4px">読み込むデータ（schema ' + counts.schema + '）:</p>' +
+    '<ul style="margin:0 0 4px 18px; padding:0">' +
+    '<li>案件数: <b>' + counts.series + '</b></li>' +
+    '<li>会議数: <b>' + counts.meetings + '</b></li>' +
+    '<li>アクション数: <b>' + counts.actions + '</b></li>' +
+    '<li>Decision数: <b>' + counts.decisions + '</b></li>' +
+    '</ul>';
+  actions.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'ghost'; cancel.textContent = 'キャンセル';
+  cancel.onclick = () => closeModal();
+  const ok = document.createElement('button');
+  ok.className = 'danger'; ok.textContent = '上書きしてインポート';
+  ok.onclick = () => {
+    closeModal();
+    try {
+      applyImport(payload);
+      clearDataMgmtError();
+      setDataMgmtStatus('インポートが完了しました（案件 ' + counts.series + ' 件 / 会議 ' + counts.meetings + ' 件 / アクション ' + counts.actions + ' 件）。');
+    } catch (e) { setDataMgmtError('インポートに失敗しました: ' + e.message); }
+  };
+  actions.appendChild(cancel);
+  actions.appendChild(ok);
+  showModal();
+}
+
+// 各ビューの再描画（存在する関数のみ安全に呼ぶ）。
+function refreshAllViews() {
+  try { stats = loadStats(); } catch (e) {}
+  ['renderSeriesOptions', 'renderDesign', 'renderDash', 'renderA3', 'renderDataMgmt'].forEach(fn => {
+    try { if (typeof window[fn] === 'function') window[fn](); } catch (e) {}
+  });
+}
+
+function setDataMgmtStatus(msg) {
+  const el = document.getElementById('data-mgmt-status');
+  if (el) el.textContent = msg || '';
+}
+function setDataMgmtError(msg) {
+  const el = document.getElementById('data-mgmt-error');
+  if (el) { el.textContent = msg || ''; el.classList.toggle('hidden', !msg); }
+}
+function clearDataMgmtError() { setDataMgmtError(''); }
+
+// 「直前の状態に戻す」ボタンの活性状態を backup.last の有無で更新する。
+function renderDataMgmt() {
+  const btn = document.getElementById('data-restore-btn');
+  if (btn) btn.disabled = (localStorage.getItem(BACKUP_LAST_KEY) === null);
+}
 
 // ---------- AIアシスト（v3土台: 設定・共通クライアント・フォールバック） ----------
 // 設計原則: ①オフラインファースト（OFFでもv2全機能が完全動作）
@@ -807,7 +1303,7 @@ window.LLM_UNAVAILABLE_MSG = LLM_UNAVAILABLE_MSG;
 function createSeries(title, goal) {
   const steps = {};
   for (let i = 1; i <= 8; i++) {
-    steps[String(i)] = { status: 'todo', content: '', filledBy: null, meetingId: null, updatedAt: null };
+    steps[String(i)] = { status: 'todo', content: '', filledBy: null, meetingId: null, updatedAt: null, artifacts: [], history: [] };
   }
   const s = {
     id: genId(),
@@ -839,8 +1335,12 @@ function closeSeries(id) {
 function addAction(fields) {
   const a = Object.assign({
     id: genId(), seriesId: null, meetingId: null, what: '', owner: '',
-    due: null, status: 'open', carriedCount: 0, createdAt: Date.now(), doneAt: null
+    due: null, status: 'open', carriedCount: 0, createdAt: Date.now(), doneAt: null,
+    dueOriginal: null, dueChanges: [], startedAt: null
   }, fields || {});
+  // 当初期限は明示指定が無ければ due と同値で補完
+  if (a.dueOriginal == null && a.due != null) a.dueOriginal = a.due;
+  if (!Array.isArray(a.dueChanges)) a.dueChanges = [];
   const list = loadActions();
   list.push(a);
   saveActions(list);
@@ -864,6 +1364,105 @@ function carryAction(id, reason) {
   if (reason != null) a.carryReason = reason;
   saveActions(list);
   return a;
+}
+// アクションの期限を変更し、dueChanges 履歴へ追記＋Event Log に記録する。
+function changeActionDue(id, newDue, reason) {
+  const list = loadActions();
+  const a = list.find(x => x.id === id);
+  if (!a) return null;
+  const from = (a.due != null ? a.due : null);
+  a.due = (newDue != null ? newDue : null);
+  if (!Array.isArray(a.dueChanges)) a.dueChanges = [];
+  a.dueChanges.push({ at: Date.now(), from, to: a.due, reason: (reason != null ? reason : '') });
+  saveActions(list);
+  logEvent('action', a.id, 'due_changed', { from, to: a.due, reason: (reason != null ? reason : '') });
+  return a;
+}
+// アクションの着手時刻を記録する（初回のみ）。
+function startAction(id, atMs) {
+  const list = loadActions();
+  const a = list.find(x => x.id === id);
+  if (!a) return null;
+  if (a.startedAt == null) {
+    a.startedAt = (atMs != null ? atMs : Date.now());
+    saveActions(list);
+    logEvent('action', a.id, 'started', { startedAt: a.startedAt });
+  }
+  return a;
+}
+
+// --- decisions CRUD（独立エンティティ） ---
+// meetingId は任意。会議を経由しないDecision（非同期決裁など）も作成できる。
+function addDecision(fields) {
+  const d = Object.assign({
+    id: genId(), seriesId: null, stepNo: null, meetingId: null,
+    text: '', basis: '', rejectedOptions: [], dissent: '', notifyTo: [], decidedBy: '', decidedAt: Date.now()
+  }, fields || {});
+  if (!Array.isArray(d.rejectedOptions)) d.rejectedOptions = [];
+  if (!Array.isArray(d.notifyTo)) d.notifyTo = [];
+  const list = loadDecisions();
+  list.push(d);
+  saveDecisions(list);
+  logEvent('decision', d.id, 'created', { seriesId: d.seriesId, stepNo: d.stepNo, meetingId: d.meetingId });
+  return d;
+}
+function decisionsForSeries(seriesId) { return loadDecisions().filter(d => d.seriesId === seriesId); }
+
+// --- evidence CRUD（判断根拠となる事実） ---
+function addEvidence(fields) {
+  const e = Object.assign({
+    id: genId(), seriesId: null, stepNo: null, summary: '', source: '', asOf: null, createdAt: Date.now()
+  }, fields || {});
+  const list = loadEvidence();
+  list.push(e);
+  saveEvidence(list);
+  logEvent('evidence', e.id, 'created', { seriesId: e.seriesId, stepNo: e.stepNo });
+  return e;
+}
+
+// --- stakeholders CRUD（関係者） ---
+function addStakeholder(fields) {
+  const s = Object.assign({
+    id: genId(), seriesId: null, name: '', role: '', notify: false
+  }, fields || {});
+  s.notify = !!s.notify;
+  const list = loadStakeholders();
+  list.push(s);
+  saveStakeholders(list);
+  return s;
+}
+function stakeholdersForSeries(seriesId) { return loadStakeholders().filter(s => s.seriesId === seriesId); }
+
+// --- Step 状態遷移（7値）: history へ追記＋Event Log に記録 ---
+// 既存の filledBy/content/meetingId 等は破壊せず、status のみ更新して履歴を残す。
+function setStepStatus(seriesId, stepNo, toStatus, reason) {
+  if (STEP_STATUSES.indexOf(toStatus) < 0) return null;
+  const list = loadSeries();
+  const s = list.find(x => x.id === seriesId);
+  if (!s || !s.steps) return null;
+  const key = String(stepNo);
+  const st = s.steps[key];
+  if (!st) return null;
+  const fromStatus = st.status;
+  if (!Array.isArray(st.history)) st.history = [];
+  st.status = toStatus;
+  st.updatedAt = Date.now();
+  st.history.push({ at: st.updatedAt, fromStatus, toStatus, reason: (reason != null ? reason : '') });
+  saveSeries(list);
+  logEvent('step', seriesId + ':' + key, 'status_changed', { seriesId, stepNo: key, fromStatus, toStatus, reason: (reason != null ? reason : '') });
+  return st;
+}
+// Step に成果物（report/chat/meeting/action）を紐づける（複数可）。
+function addStepArtifact(seriesId, stepNo, type, refId) {
+  const list = loadSeries();
+  const s = list.find(x => x.id === seriesId);
+  if (!s || !s.steps) return null;
+  const st = s.steps[String(stepNo)];
+  if (!st) return null;
+  if (!Array.isArray(st.artifacts)) st.artifacts = [];
+  st.artifacts.push({ type, refId: (refId != null ? refId : null), at: Date.now() });
+  saveSeries(list);
+  return st;
 }
 
 // --- 導出指標ヘルパ（累積せず毎回計算） ---
@@ -902,6 +1501,98 @@ function derivedMetrics() {
     closedSeriesCount: closed.length,
     avgLeadTimeDays: leadDays.length ? leadDays.reduce((s, d) => s + d, 0) / leadDays.length : 0,
     decisionZeroMeetingCount: decisionZeroMeetingCount(meetings)
+  };
+}
+
+// ---------- v3導出ヘルパ（会議招集の前に: 判断の速さ・質のKPI） ----------
+// 既存 derivedMetrics は互換維持。ここでは新エンティティ（decisions/events）を用いた
+// 判断リードタイム系の指標を追加する。分母0の率は null（「—」表示想定）。
+//
+// 対象Stepが最後に ready へ遷移した時刻を Event Log から取得（beforeMs 以前の最新）。
+function lastStepReadyAt(seriesId, stepNo, beforeMs, events) {
+  const evs = events || loadEvents();
+  const key = String(stepNo);
+  let best = null;
+  evs.forEach(e => {
+    if (e.entity !== 'step' || e.kind !== 'status_changed' || !e.detail) return;
+    if (e.detail.seriesId !== seriesId || String(e.detail.stepNo) !== key) return;
+    if (e.detail.toStatus !== 'ready') return;
+    if (e.at == null || (beforeMs != null && e.at > beforeMs)) return;
+    if (best == null || e.at > best) best = e.at;
+  });
+  return best;
+}
+function derivedMetricsV3(nowMs) {
+  const now = (nowMs != null ? nowMs : Date.now());
+  const series = loadSeries();
+  const decisions = loadDecisions();
+  const actions = loadActions();
+  const events = loadEvents();
+
+  // (1) 判断待ち時間: Step が ready になってから decidedAt までの平均ms
+  const waits = [];
+  // (7) 判断準備不足件数: 対応Stepが ready を経ずに下された Decision 数
+  let unpreparedDecisionCount = 0;
+  decisions.forEach(d => {
+    if (d.seriesId == null || d.stepNo == null || d.decidedAt == null) return;
+    const readyAt = lastStepReadyAt(d.seriesId, d.stepNo, d.decidedAt, events);
+    if (readyAt == null) { unpreparedDecisionCount++; return; }
+    if (d.decidedAt >= readyAt) waits.push(d.decidedAt - readyAt);
+  });
+  const avgDecisionWaitMs = waits.length ? waits.reduce((s, x) => s + x, 0) / waits.length : null;
+
+  // (2) Decision→Action開始時間: 決定(decidedAt)から着手(startedAt)までの平均ms
+  const gaps = [];
+  actions.forEach(a => {
+    if (a.startedAt == null) return;
+    // meetingId 一致を優先、無ければ seriesId 一致の最新Decision
+    let d = a.meetingId != null ? decisions.find(x => x.meetingId === a.meetingId) : null;
+    if (!d) {
+      const cand = decisions.filter(x => x.seriesId != null && x.seriesId === a.seriesId && x.decidedAt != null);
+      d = cand.sort((p, q) => q.decidedAt - p.decidedAt)[0] || null;
+    }
+    if (d && d.decidedAt != null && a.startedAt >= d.decidedAt) gaps.push(a.startedAt - d.decidedAt);
+  });
+  const avgDecisionToActionStartMs = gaps.length ? gaps.reduce((s, x) => s + x, 0) / gaps.length : null;
+
+  // (3) 当初期限内完了率: 完了アクションのうち doneAt が dueOriginal 以内
+  const done = actions.filter(a => a.status === 'done');
+  const onOriginal = done.filter(a => a.dueOriginal && a.doneAt && toDateStr(a.doneAt) <= a.dueOriginal);
+  const originalDueCompletionRate = done.length ? onOriginal.length / done.length : null;
+
+  // (4) 再判断率: 再オープン/再調査を経たStepに紐づくDecision数 / 全Decision数
+  const reopenedSteps = {};
+  events.forEach(e => {
+    if (e.entity === 'step' && e.kind === 'status_changed' && e.detail &&
+        (e.detail.toStatus === 'reopened' || e.detail.toStatus === 'reinvestigate')) {
+      reopenedSteps[e.detail.seriesId + ':' + String(e.detail.stepNo)] = true;
+    }
+  });
+  const reDecisions = decisions.filter(d => reopenedSteps[d.seriesId + ':' + String(d.stepNo)]);
+  const reDecisionRate = decisions.length ? reDecisions.length / decisions.length : null;
+
+  // (5) 目標達成率（Step7記録から）: Step7に記録がある案件のうち status==='done' の割合
+  let step7Total = 0, step7Done = 0;
+  series.forEach(s => {
+    const st = s.steps && s.steps['7'];
+    if (st && st.content && String(st.content).trim()) {
+      step7Total++;
+      if (st.status === 'done') step7Done++;
+    }
+  });
+  const goalAchievementRate = step7Total ? step7Done / step7Total : null;
+
+  // (6) 停滞案件数: activeな案件のうち停滞アクションを抱える件数
+  const stalledSeriesCount = series.filter(s => s.status === 'active' && stagnantActions(s.id, now).length > 0).length;
+
+  return {
+    avgDecisionWaitMs,
+    avgDecisionToActionStartMs,
+    originalDueCompletionRate,
+    reDecisionRate,
+    goalAchievementRate,
+    stalledSeriesCount,
+    unpreparedDecisionCount
   };
 }
 
@@ -974,12 +1665,40 @@ function overLengthReportCount() {
   });
   return n;
 }
-// 異論ゼロ会議率（議題ありの会議のうち、全議題が異論・懸念ゼロ）— 分母0なら null
-function dissentZeroMeetingRate(meetings) {
-  const held = (meetings || loadMeetings()).filter(m => (m.agendas || []).length > 0);
-  if (!held.length) return null;
-  const zero = held.filter(m => m.agendas.every(a => !a.dissent || !String(a.dissent).trim()));
-  return zero.length / held.length;
+// 判断の質の検知（#32）: Decision単位で「代替案未検討／リスク未確認／判断根拠不足」を数える。
+//  - 代替案未検討: 採用しなかった案（rejectedOptions）が空
+//  - 判断根拠不足: 判断根拠（basis）が空
+//  - リスク未確認: 「決めなかった場合の影響」（会議の noDecisionImpact）未入力のまま行われた
+//                 判断セッション（meetingId 付き）のDecision
+// ※「異論ゼロ＝シャンシャン」判定は誤検知が多いため廃止（dissent欄は判断材料として維持）。
+function decisionQualityCounts(decisions, meetings) {
+  const decs = decisions || loadDecisions();
+  const ms = meetings || loadMeetings();
+  const mById = {};
+  ms.forEach(m => { if (m && m.id != null) mById[m.id] = m; });
+  let noAlternatives = 0, noBasis = 0, noRisk = 0;
+  decs.forEach(d => {
+    if (!Array.isArray(d.rejectedOptions) || d.rejectedOptions.length === 0) noAlternatives++;
+    if (!d.basis || !String(d.basis).trim()) noBasis++;
+    if (d.meetingId != null) {
+      const m = mById[d.meetingId];
+      if (m && (!m.noDecisionImpact || !String(m.noDecisionImpact).trim())) noRisk++;
+    }
+  });
+  return { noAlternatives, noBasis, noRisk };
+}
+// 期限変更回数上位のアクション（変更理由つき）— dueChanges を持つものを回数降順で返す。
+function topDueChangeActions(limit) {
+  const n = (limit != null ? limit : 5);
+  return loadActions()
+    .filter(a => Array.isArray(a.dueChanges) && a.dueChanges.length > 0)
+    .map(a => ({
+      id: a.id, what: a.what, owner: a.owner, due: a.due,
+      count: a.dueChanges.length,
+      reasons: a.dueChanges.map(c => (c && c.reason ? c.reason : '')).filter(Boolean)
+    }))
+    .sort((x, y) => y.count - x.count)
+    .slice(0, n);
 }
 // 持ち越し原因トップ（会議議題の carryCauses 最頻値）— 無ければ null
 function topCarryCause(meetings) {
@@ -1016,7 +1735,9 @@ function dashMetrics() {
     overLengthReportCount: overLengthReportCount(),
     stagnantActionCount: stagnantActionCount(),
     mannerismSeriesCount: mannerismSeriesCount(meetings),
-    dissentZeroMeetingRate: dissentZeroMeetingRate(meetings)
+    // 判断の質（#32）
+    decisionQuality: decisionQualityCounts(loadDecisions(), meetings),
+    topDueChangeActions: topDueChangeActions(5)
   };
 }
 
@@ -1026,16 +1747,18 @@ migrateSchema();
 const SCREENS = ['triage', 'design', 'cockpit', 'report', 'a3', 'dash'];
 function showScreen(name) {
   const tab = document.getElementById('tab-' + name);
-  if (tab.disabled) return;
+  // タブから外した画面（design/cockpit/report）はタブ要素を持たない＝案件カード/トリアージから直接activateする
+  if (tab && tab.disabled) return;
   SCREENS.forEach(s => {
     document.getElementById('screen-' + s).classList.toggle('active', s === name);
-    document.getElementById('tab-' + s).classList.toggle('active', s === name);
+    const t = document.getElementById('tab-' + s);
+    if (t) t.classList.toggle('active', s === name);
   });
   if (name === 'a3') renderA3();
   if (name === 'triage') renderAiRouterCard();
   if (name === 'design') renderAgendaAssist();
 }
-function unlockTab(name, on) { document.getElementById('tab-' + name).disabled = !on; }
+function unlockTab(name, on) { const t = document.getElementById('tab-' + name); if (t) t.disabled = !on; }
 
 // ---------- ① ルーター（トリアージ） ----------
 let triageKind = null; // 'past' | 'present' | 'future'
@@ -1065,9 +1788,38 @@ function triage(kind) {
     title.innerHTML = '連絡 → <span class="badge chat">チャットで済みます</span>';
     note.textContent = 'いま知らせたいことは、スピードが命。チャットに貼れば全員に同時に届き、記録も残ります。';
   }
+  document.querySelectorAll('.triage-exc').forEach(cb => { cb.checked = false; });
+  renderTriageException();
   renderTemplate();
   renderAvoided();
   result.scrollIntoView({ behavior: 'smooth' });
+}
+
+// 例外理由の選択状態を取得（チェック済みの value 配列）
+function getTriageExceptionReasons() {
+  return Array.from(document.querySelectorAll('.triage-exc:checked')).map(cb => cb.value);
+}
+
+// 例外理由チェックの変化に応じて「判断セッション推奨」導線の表示を切り替える
+function renderTriageException() {
+  const reco = document.getElementById('triage-exception-reco');
+  if (!reco) return;
+  const any = getTriageExceptionReasons().length > 0;
+  reco.classList.toggle('hidden', !any);
+}
+
+// 例外理由を引き継いで判断セッション設計へ進む（背景に例外理由を自動記載）
+function startExceptionConsult() {
+  const reasons = getTriageExceptionReasons();
+  const topic = document.getElementById('triage-topic').value.trim();
+  startSingleConsult();
+  const bgEl = document.getElementById('mtg-bg');
+  if (bgEl && reasons.length) {
+    const origin = triageKind === 'present' ? '連絡' : '報告';
+    const head = topic ? `「${topic}」について、` : '';
+    bgEl.value = `${head}当初は${origin}で済ませる想定でしたが、次の例外条件に該当するため判断セッションが必要と判断しました：\n・` + reasons.join('\n・');
+    renderInvite();
+  }
 }
 
 function renderTemplate() {
@@ -1189,6 +1941,7 @@ function recordAvoided() {
 let agendas = [];   // {q, min, goal}
 let members = [];   // {name, role, prep}
 let recipients = []; // {name}
+let decisionOptions = []; // 判断の選択肢（文字列の配列・任意入力）
 let mtgSeq = 1;     // この案件（series）における会議の連番。プリフィル/表示用。
 function computeSeq(seriesId) {
   if (!seriesId) return 1;
@@ -1205,17 +1958,37 @@ const HARD_LIMIT_MIN = 30; // トヨタ式30分ハードブロック
 // A3（8ステップ）のステップ名
 const A3_STEPS = {
   1: '背景', 2: '現状把握', 3: '目標設定', 4: '要因解析',
-  5: '対策立案', 6: '実行計画', 7: '効果確認', 8: '標準化'
+  5: '対策立案', 6: '対策実行・進捗共有', 7: '効果確認', 8: '標準化'
 };
-// 各Stepを埋める手段（報連相ルーター）: meeting=🤝会議 / report=📄レポート / chat=💬チャット
+// 各Stepの推奨手段（報連相ナビが案内し続ける）: meeting=🤝会議 / report=📄レポート / chat=💬チャット
+// v4-5: 手段は固定ではなく「推奨」。どのStepにもレポート・チャット・会議・Actionを追加できる。
 const STEP_MEANS = { 1: 'meeting', 2: 'report', 3: 'meeting', 4: 'report', 5: 'meeting', 6: 'chat', 7: 'report', 8: 'meeting' };
-const MEANS_BADGE = { report: '📄', chat: '💬', meeting: '🤝' };
-const MEANS_LABEL = { report: 'レポート', chat: 'チャット', meeting: '会議' };
-const STATUS_LABEL = { todo: '未着手', doing: '作成中', done: '完了' };
+const MEANS_BADGE = { report: '📄', chat: '💬', meeting: '🤝', action: '✅', decision: '✍️' };
+const MEANS_LABEL = { report: 'レポート', chat: 'チャット', meeting: '会議', action: 'アクション', decision: '会議外決定' };
+// 判断Step（会議で意思決定する想定のStep）。会議なしDecision登録を特に促す。
+const DECISION_STEPS = [1, 3, 5, 8];
+// Step状態7値の表示ラベル（doing は v2 互換のため残置）。
+const STATUS_LABEL = {
+  todo: '未着手', draft: '下書き', review: 'レビュー待ち', ready: '判断可能',
+  done: '完了', reinvestigate: '再調査', reopened: '再オープン', doing: '作成中'
+};
 // Step特化レポートの表題
 const STEP_REPORT_TITLE = { 2: '現状把握レポート', 4: 'なぜなぜ分析レポート', 7: '効果確認レポート' };
 // 事実ゲート: 判断Step ← 直前の事実Step
 const FACT_GATE = { 3: 2, 5: 4, 8: 7 };
+// 判断準備チェック(#28): 事実Stepの成果物を「判断可能な品質か」で確認するセルフチェック。
+// 「入力済み」ではなく「次の判断に使える品質か」を問う。全項目クリアで status='ready' に遷移可。
+const READY_CHECK_STEPS = [2, 4, 7]; // 事実Step（現状把握・要因解析・効果確認）
+const READY_CHECKLIST = [
+  { key: 'scope',       label: '対象範囲が明確' },
+  { key: 'numbers',     label: '数字または頻度がある' },
+  { key: 'period',      label: '対象期間がある' },
+  { key: 'compare',     label: '正常と異常が比較されている' },
+  { key: 'source',      label: '情報源がある' },
+  { key: 'factOpinion', label: '事実と意見が分離されている' },
+  { key: 'updated',     label: '最終更新日が分かる' },
+  { key: 'sufficient',  label: '判断に必要な事実が揃っている' }
+];
 const A3_CHAR_LIMIT = 1500; // A3・1枚メーターの目安上限
 
 function isQuestionForm(s) {
@@ -1245,7 +2018,7 @@ function addAgenda() {
     return;
   }
   if (!isQuestionForm(q)) {
-    err.textContent = '議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。「〜の報告」「〜の共有」なら、この会議は不要です——ルーターに戻ってレポート／チャットで済ませましょう。';
+    err.textContent = '議題は「未来の問い」＝疑問形（〜するか？ 〜すべきか？）で入力してください。「〜の報告」「〜の共有」なら、この会議は不要です——案件トリアージに戻ってレポート／チャットで済ませましょう。';
     err.classList.remove('hidden');
     return;
   }
@@ -1383,6 +2156,22 @@ function demoteMember(i) {
 }
 function removeRecipient(i) { recipients.splice(i, 1); renderDesign(); }
 
+// --- 判断の選択肢（任意・複数登録） ---
+function addOption() {
+  const el = document.getElementById('option-input');
+  const v = el.value.trim();
+  if (!v) return;
+  decisionOptions.push(v);
+  el.value = '';
+  renderDesign();
+}
+function removeOption(i) { decisionOptions.splice(i, 1); renderDesign(); }
+// 判断する問い・判断の材料フィールドを初期化（設計フローへ入り直すとき用）
+function clearDecisionMaterials() {
+  ['mtg-decision-question', 'mtg-recommendation', 'mtg-criteria', 'mtg-no-decision-impact', 'mtg-end-condition', 'option-input']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+}
+
 function totalPlannedMin() { return agendas.reduce((s, a) => s + a.min, 0); }
 function currentRate() { return Number(document.getElementById('mtg-rate').value) || 0; }
 function plannedBudget() { return Math.round(members.length * totalPlannedMin() * currentRate() / 60); }
@@ -1456,6 +2245,23 @@ function renderDesign() {
     rl.appendChild(li);
   });
 
+  const ol = document.getElementById('option-list');
+  if (ol) {
+    ol.innerHTML = '';
+    decisionOptions.forEach((opt, i) => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.className = 'grow';
+      span.textContent = `${i + 1}. ${opt}`;
+      const del = document.createElement('button');
+      del.className = 'ghost small';
+      del.textContent = '削除';
+      del.onclick = () => removeOption(i);
+      li.append(span, del);
+      ol.appendChild(li);
+    });
+  }
+
   renderPricetag();
 }
 
@@ -1484,12 +2290,23 @@ function renderPricetag() {
     overflowBox.classList.add('hidden');
   }
 
+  const decisionQ = (document.getElementById('mtg-decision-question').value || '').trim();
+  const hasDecider = members.some(m => m.role === 'decider');
+
   const warnings = [];
+  const blockers = [];
+  if (decisionQ === '') blockers.push('「判断する問い」が未入力です。このセッションで何を決めるのかを1つの問いにしてください（未入力では開始できません）。');
+  if (n > 0 && !hasDecider) blockers.push('「決める人（決裁者）」が1人もいません。決裁者のいない相談は決定できず、もう一度会議をやり直すことになります。開始するには決める人を追加してください。');
   if (n > 5) warnings.push(`参加者 ${n}人 は多すぎます。意思決定に6人以上は不要なことがほとんどです。「情報提供」の人は事前レポートで代替できませんか？`);
-  if (agendas.length > 0 && n > 0 && !members.some(m => m.role === 'decider')) warnings.push('「決める人」がいません。決裁者のいない相談は決定できず、もう一度会議をやり直すことになります。');
   if (n > 0 && members.every(m => !m.prep)) warnings.push('主催者が全資料を用意する会議になっています。参加者は判断材料を持ち寄る当事者です。各参加者に「期待する準備」を割り当ててください。');
   const w = document.getElementById('design-warnings');
   w.innerHTML = '';
+  blockers.forEach(t => {
+    const d = document.createElement('div');
+    d.className = 'alert bad';
+    d.textContent = t;
+    w.appendChild(d);
+  });
   warnings.forEach(t => {
     const d = document.createElement('div');
     d.className = 'alert warn';
@@ -1497,7 +2314,8 @@ function renderPricetag() {
     w.appendChild(d);
   });
 
-  document.getElementById('btn-start').disabled = !(agendas.length > 0 && n > 0 && currentRate() > 0 && !over);
+  document.getElementById('btn-start').disabled =
+    !(agendas.length > 0 && n > 0 && currentRate() > 0 && !over && decisionQ !== '' && hasDecider);
   renderInvite();
 }
 
@@ -1585,11 +2403,12 @@ function renderFactGate() {
   const factStep = FACT_GATE[stepVal];
   const s = getSeries(sid);
   const st = s && s.steps && s.steps[String(factStep)];
-  if (st && st.status === 'done') return; // 事実Stepが埋まっていれば警告不要
+  // 品質基準ゲート: 事実Stepが「判断可能(ready)」または「完了(done)」に達していれば警告不要。
+  if (st && (st.status === 'ready' || st.status === 'done')) return;
   const div = document.createElement('div');
   div.className = 'alert warn';
   div.id = 'fact-gate-warn';
-  div.textContent = `Step${stepVal}（${A3_STEPS[stepVal]}）の判断会議を設計しています。事実の Step${factStep}（${A3_STEPS[factStep]}）のレポートが未完了です。事実の説明に会議時間を使うことになります。先にレポートで共有しませんか？`;
+  div.textContent = `Step${stepVal}（${A3_STEPS[stepVal]}）の判断セッションを設計しています。判断の材料となる事実 Step${factStep}（${A3_STEPS[factStep]}）が「判断可能（ready）」に達しておらず未完了です（判断準備不足）。「入力済み」ではなく「次の判断に使える品質か」を先に確認しませんか？事実の説明に会議時間を使わずに済みます。`;
   const btn = document.createElement('button');
   btn.className = 'ghost small';
   btn.style.marginTop = '8px';
@@ -1602,6 +2421,11 @@ function renderFactGate() {
 function buildInvite() {
   const title = document.getElementById('mtg-title').value.trim() || '（無題の相談）';
   const bg = document.getElementById('mtg-bg').value.trim();
+  const decisionQ = (document.getElementById('mtg-decision-question').value || '').trim();
+  const recommendation = (document.getElementById('mtg-recommendation').value || '').trim();
+  const criteria = (document.getElementById('mtg-criteria').value || '').trim();
+  const noDecisionImpact = (document.getElementById('mtg-no-decision-impact').value || '').trim();
+  const endCondition = (document.getElementById('mtg-end-condition').value || '').trim();
   const min = totalPlannedMin();
   const n = members.length;
   const rate = currentRate();
@@ -1611,6 +2435,9 @@ function buildInvite() {
   L.push('');
   L.push('■ 背景');
   L.push(bg || '（背景を記入してください）');
+  L.push('');
+  L.push('■ 判断する問い');
+  L.push(decisionQ || '（判断する問いを記入してください）');
   L.push('');
   L.push(`■ 議題と「今日決めること」（合計 ${min}分）`);
   if (agendas.length) {
@@ -1631,6 +2458,32 @@ function buildInvite() {
       L.push('■ 位置づけ');
       L.push(`本会議はA3のStep ${stepVal}（${A3_STEPS[Number(stepVal)]}）を前進させる節目です。`);
     }
+  }
+
+  if (decisionOptions.length) {
+    L.push('');
+    L.push('■ 選択肢');
+    decisionOptions.forEach((opt, i) => L.push(`${i + 1}. ${opt}`));
+  }
+  if (recommendation) {
+    L.push('');
+    L.push('■ 推奨案');
+    L.push(recommendation);
+  }
+  if (criteria) {
+    L.push('');
+    L.push('■ 判断基準');
+    L.push(criteria);
+  }
+  if (noDecisionImpact) {
+    L.push('');
+    L.push('■ 決めなかった場合の影響');
+    L.push(noDecisionImpact);
+  }
+  if (endCondition) {
+    L.push('');
+    L.push('■ 今日の終了条件');
+    L.push(endCondition);
   }
 
   L.push('');
@@ -1659,7 +2512,7 @@ function buildInvite() {
   return L.join('\n');
 }
 
-// ---------- ③ コックピット ----------
+// ---------- 思考のコックピット ----------
 // 30分フェーズ（幅比 3:5:12:5:5、plannedMin に比例スケール）
 const PHASES = [
   { label: '目的確認',   end: 3,  hint: '今日決めることを全員で読み上げる' },
@@ -1696,6 +2549,12 @@ function startMeeting() {
     stepNo: document.getElementById('series-step').value ? Number(document.getElementById('series-step').value) : null,
     seq: mtgSeq,
     title: document.getElementById('mtg-title').value.trim() || '（無題の相談）',
+    decisionQuestion: (document.getElementById('mtg-decision-question').value || '').trim(),
+    options: decisionOptions.slice(),
+    recommendation: (document.getElementById('mtg-recommendation').value || '').trim(),
+    criteria: (document.getElementById('mtg-criteria').value || '').trim(),
+    noDecisionImpact: (document.getElementById('mtg-no-decision-impact').value || '').trim(),
+    endCondition: (document.getElementById('mtg-end-condition').value || '').trim(),
     agendas: agendas.map(a => ({
       q: a.q, min: a.min, goal: a.goal || '',
       decision: null, dissent: '', actions: [], spentSec: 0,
@@ -2042,6 +2901,65 @@ function renderCockpitAgendas() {
       dissent.value = a.dissent || '';
       div.appendChild(dissent);
 
+      // 判断根拠（なぜこれにしたか）（任意）
+      const bLabel = document.createElement('label');
+      bLabel.textContent = '判断根拠（なぜこれにしたか）（任意）';
+      div.appendChild(bLabel);
+      const basis = document.createElement('textarea');
+      basis.id = 'basis-input';
+      basis.rows = 2;
+      basis.placeholder = 'この決定に至った理由・決め手（後から「なぜこう決めたか」を辿れるように）';
+      basis.value = a.basis || '';
+      div.appendChild(basis);
+
+      // 採用しなかった案（比較した選択肢）（任意・1行1件）
+      const rLabel = document.createElement('label');
+      rLabel.textContent = '採用しなかった案（比較した選択肢）（任意・1行1件）';
+      div.appendChild(rLabel);
+      const rejected = document.createElement('textarea');
+      rejected.id = 'rejected-input';
+      rejected.rows = 2;
+      rejected.placeholder = '検討したが採らなかった案（例：9月発売案\n段階的リリース案）';
+      rejected.value = (Array.isArray(a.rejectedOptions) ? a.rejectedOptions.join('\n') : '');
+      div.appendChild(rejected);
+      // 軽い促し（#32）: 代替案未検討を防ぐ非ブロッキングの一言。
+      const rHint = document.createElement('div');
+      rHint.className = 'note';
+      rHint.id = 'rejected-hint';
+      rHint.textContent = '比較した案はありませんでしたか？（1つの案しか出ていない決定は、見落としが起きやすくなります）';
+      div.appendChild(rHint);
+
+      // 通知対象（誰に知らせるか）（任意・送付先から選択＋自由追加）
+      const nLabel = document.createElement('label');
+      nLabel.textContent = '通知対象（誰に知らせるか）（任意）';
+      div.appendChild(nLabel);
+      const notifyBox = document.createElement('div');
+      notifyBox.id = 'notify-box';
+      notifyBox.className = 'notify-list';
+      const notifyCands = (mtg.recipients || []).map(r => r.name);
+      if (notifyCands.length) {
+        notifyCands.forEach(name => {
+          const lb = document.createElement('label');
+          lb.style.marginRight = '10px';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.value = name; cb.className = 'notify-cb';
+          lb.appendChild(cb);
+          lb.appendChild(document.createTextNode(' ' + name));
+          notifyBox.appendChild(lb);
+        });
+      } else {
+        const none = document.createElement('span');
+        none.className = 'note';
+        none.textContent = '送付先リストは未登録です。下の欄に自由に追加できます。';
+        notifyBox.appendChild(none);
+      }
+      div.appendChild(notifyBox);
+      const notifyFree = document.createElement('input');
+      notifyFree.type = 'text';
+      notifyFree.id = 'notify-free';
+      notifyFree.placeholder = 'その他の通知対象（カンマ区切りで追加）';
+      div.appendChild(notifyFree);
+
       // アクション行（何を／誰が／いつまでに）
       const aLabel = document.createElement('label');
       aLabel.textContent = 'アクション（何を・誰が・いつまでに）';
@@ -2248,6 +3166,18 @@ function closeAgenda() {
   const a = mtg.agendas[mtg.current];
   a.decision = decision;
   a.dissent = (document.getElementById('dissent-input').value || '').trim();
+  // 判断根拠・採用しなかった案・通知対象（任意）
+  const basisEl = document.getElementById('basis-input');
+  a.basis = basisEl ? (basisEl.value || '').trim() : '';
+  const rejEl = document.getElementById('rejected-input');
+  const rejRaw = rejEl ? (rejEl.value || '').trim() : '';
+  a.rejectedOptions = rejRaw ? rejRaw.split('\n').map(x => x.trim()).filter(Boolean) : [];
+  const notify = [];
+  document.querySelectorAll('.notify-cb:checked').forEach(cb => notify.push(cb.value));
+  const notifyFreeEl = document.getElementById('notify-free');
+  const notifyFree = notifyFreeEl ? (notifyFreeEl.value || '').trim() : '';
+  if (notifyFree) notifyFree.split(/[,、]/).map(x => x.trim()).filter(Boolean).forEach(n => { if (notify.indexOf(n) < 0) notify.push(n); });
+  a.notifyTo = notify;
   a.spentSec = (Date.now() - mtg.agendaStartMs) / 1000;
   // アクションを sekisho.actions に owner/due つきで保存
   a.actions.forEach(act => addAction({
@@ -2322,6 +3252,12 @@ function persistMeeting() {
     stepNo: mtg.stepNo,
     seq: mtg.seq,
     title: mtg.title,
+    decisionQuestion: mtg.decisionQuestion || '',
+    options: (mtg.options || []).slice(),
+    recommendation: mtg.recommendation || '',
+    criteria: mtg.criteria || '',
+    noDecisionImpact: mtg.noDecisionImpact || '',
+    endCondition: mtg.endCondition || '',
     startMs: mtg.startMs,
     endMs: mtg.endMs,
     plannedMin: mtg.plannedMin,
@@ -2330,12 +3266,34 @@ function persistMeeting() {
     agendas: mtg.agendas.map(a => ({
       q: a.q, min: a.min, goal: a.goal,
       decision: a.decision, dissent: a.dissent,
+      basis: a.basis || '',
+      rejectedOptions: Array.isArray(a.rejectedOptions) ? a.rejectedOptions.slice() : [],
+      notifyTo: Array.isArray(a.notifyTo) ? a.notifyTo.slice() : [],
       carried: a.carried, carryCauses: a.carryCauses
     }))
   };
   const list = loadMeetings();
   list.push(meeting);
   saveMeetings(list);
+}
+
+// 会議で記録した各決定を独立Decisionエンティティとして保存（Event Logへ自動記録）。
+// meetingId は付与するが、seriesId/stepNo は会議に紐づく場合のみ設定される。
+function recordDecisionsFromMeeting() {
+  if (!mtg) return;
+  mtg.agendas.filter(a => a.decision).forEach(a => {
+    addDecision({
+      seriesId: mtg.seriesId || null,
+      stepNo: (mtg.stepNo != null ? mtg.stepNo : null),
+      meetingId: mtg.id,
+      text: a.decision,
+      basis: a.basis || '',
+      rejectedOptions: Array.isArray(a.rejectedOptions) ? a.rejectedOptions.slice() : [],
+      notifyTo: Array.isArray(a.notifyTo) ? a.notifyTo.slice() : [],
+      dissent: a.dissent || '',
+      decidedAt: (mtg.endMs != null ? mtg.endMs : Date.now())
+    });
+  });
 }
 
 // A3案件に紐づく会議なら、決定内容を該当Stepブロックへ自動保存（status=done, filledBy=meeting）
@@ -2347,11 +3305,18 @@ function saveStepFromMeeting() {
   const list = loadSeries();
   const s = list.find(x => x.id === mtg.seriesId);
   if (!s || !s.steps) return;
-  s.steps[String(mtg.stepNo)] = {
-    status: 'done', content, filledBy: 'meeting',
-    meetingId: mtg.id, updatedAt: Date.now()
+  const key = String(mtg.stepNo);
+  const prev = s.steps[key] || {};
+  const artifacts = Array.isArray(prev.artifacts) ? prev.artifacts.slice() : [];
+  artifacts.push({ type: 'meeting', refId: mtg.id, at: Date.now() });
+  s.steps[key] = {
+    status: (prev.status || 'todo'), content, filledBy: 'meeting',
+    meetingId: mtg.id, updatedAt: Date.now(),
+    artifacts, history: (Array.isArray(prev.history) ? prev.history : [])
   };
   saveSeries(list);
+  // 状態遷移を history / Event Log へ記録（fromは元の状態）
+  setStepStatus(mtg.seriesId, mtg.stepNo, 'done', '会議で決定');
 }
 
 function finalizeEnd(early) {
@@ -2377,6 +3342,7 @@ function finalizeEnd(early) {
   saveStats();
 
   persistMeeting();
+  recordDecisionsFromMeeting();
   saveStepFromMeeting();
   mtg._reportCtx = { elapsedSec, actualCost, saved };
   buildReport(elapsedSec, actualCost, saved);
@@ -2414,6 +3380,9 @@ function buildReport(elapsedSec, actualCost, saved) {
     decided.forEach((a, i) => {
       lines.push(`${i + 1}. ${a.q}`);
       lines.push(`   → ${a.decision}`);
+      if (a.basis) lines.push(`   💡 判断根拠: ${a.basis}`);
+      if (Array.isArray(a.rejectedOptions) && a.rejectedOptions.length) lines.push(`   ✗ 採用しなかった案: ${a.rejectedOptions.join(' / ')}`);
+      if (Array.isArray(a.notifyTo) && a.notifyTo.length) lines.push(`   📣 通知対象: ${a.notifyTo.join('、')}`);
       if (a.dissent) lines.push(`   ⚠ 出た異論・懸念: ${a.dissent}`);
     });
   } else {
@@ -2465,13 +3434,15 @@ function buildReport(elapsedSec, actualCost, saved) {
   lines.push(mtg.recipients.length ? mtg.recipients.map(r => r.name).join('、') : '（なし）');
   lines.push('情報は自ら取りに行く。「聞いていない」は禁句。');
 
-  // (7) シャンシャン注記: 全議題が異論・懸念ゼロで即決だった場合のみ
-  const zeroDissent = mtg.agendas.length > 0 &&
-    mtg.agendas.every(a => a.decision) &&
-    mtg.agendas.every(a => !a.dissent || !a.dissent.trim());
-  if (zeroDissent) {
+  // (7) 判断の質の注記: 判断根拠・採用しなかった案（比較検討）が空の決定があれば促す（#32）。
+  //     ※「異論ゼロ＝シャンシャン」判定は誤検知が多い（全員一致の良い決定もある）ため廃止。
+  const decidedForNote = mtg.agendas.filter(a => a.decision);
+  const noBasisCnt = decidedForNote.filter(a => !a.basis || !String(a.basis).trim()).length;
+  const noAltCnt = decidedForNote.filter(a => !Array.isArray(a.rejectedOptions) || a.rejectedOptions.length === 0).length;
+  if (noAltCnt > 0 || noBasisCnt > 0) {
     lines.push('');
-    lines.push('※ 異論ゼロ——シャンシャン会議になっていないか要確認。');
+    if (noAltCnt > 0) lines.push('※ 採用しなかった案（比較検討）が空の決定が ' + noAltCnt + '件。比較した案はありませんでしたか？');
+    if (noBasisCnt > 0) lines.push('※ 判断根拠が空の決定が ' + noBasisCnt + '件。「なぜこう決めたか」を残しましょう。');
   }
 
   document.getElementById('report-body').textContent = lines.join('\n');
@@ -2618,7 +3589,7 @@ function closeThisSeries() {
   }
   closeSeries(sid);
   status.className = 'alert ok';
-  status.textContent = 'この案件を決着（クローズ）しました。リードタイムは節約ダッシュボードに反映されます。';
+  status.textContent = 'この案件を成果確定（クローズ）しました。リードタイムはフローダッシュボードに反映されます。';
   status.classList.remove('hidden');
   document.getElementById('btn-close-series').disabled = true;
 
@@ -2781,9 +3752,15 @@ function flashCopied(btn) {
 
 function resetFlow() {
   document.getElementById('modal-overlay').classList.add('hidden');
-  agendas = []; members = []; recipients = []; mtg = null; triageKind = null;
+  agendas = []; members = []; recipients = []; decisionOptions = []; mtg = null; triageKind = null;
   document.getElementById('mtg-title').value = '';
   document.getElementById('mtg-bg').value = '';
+  document.getElementById('mtg-decision-question').value = '';
+  document.getElementById('mtg-recommendation').value = '';
+  document.getElementById('mtg-criteria').value = '';
+  document.getElementById('mtg-no-decision-impact').value = '';
+  document.getElementById('mtg-end-condition').value = '';
+  document.getElementById('option-input').value = '';
   document.getElementById('agenda-goal').value = '';
   document.getElementById('member-prep').value = '';
   document.getElementById('agenda-error').classList.add('hidden');
@@ -2842,8 +3819,9 @@ function startAsA3Case() {
 function goToStepDesign(seriesId, stepNo) {
   if (mtg && mtg.timer) clearInterval(mtg.timer);
   mtg = null;
-  agendas = []; members = []; recipients = []; mtgSeq = 1;
+  agendas = []; members = []; recipients = []; decisionOptions = []; mtgSeq = 1;
   document.getElementById('mtg-bg').value = '';
+  clearDecisionMaterials();
   document.getElementById('agenda-goal').value = '';
   document.getElementById('member-prep').value = '';
   document.getElementById('agenda-error').classList.add('hidden');
@@ -2866,9 +3844,10 @@ function goToStepDesign(seriesId, stepNo) {
 function goToEscalationDesign(seriesId) {
   if (mtg && mtg.timer) clearInterval(mtg.timer);
   mtg = null;
-  agendas = []; members = []; recipients = []; mtgSeq = 1;
+  agendas = []; members = []; recipients = []; decisionOptions = []; mtgSeq = 1;
   document.getElementById('mtg-bg').value =
     '本件は実務調整で停滞しています（2回持ち越し／期限超過7日超）。担当レベルで頑張り続けるのではなく、上位判断を仰ぐためのエスカレーション会議です。';
+  clearDecisionMaterials();
   document.getElementById('agenda-input').value = '';
   document.getElementById('agenda-goal').value = '';
   document.getElementById('member-prep').value = '';
@@ -2940,7 +3919,7 @@ function buildCaseCard(s, meetings, actions, todayStr) {
   head.appendChild(h);
   const stat = document.createElement('span');
   stat.className = 'badge ' + (s.status === 'closed' ? 'report' : 'meet');
-  stat.textContent = s.status === 'closed' ? '決着済み' : '進行中';
+  stat.textContent = s.status === 'closed' ? '成果確定済み' : '進行中';
   head.appendChild(stat);
   card.appendChild(head);
   if (s.goal) {
@@ -3028,21 +4007,21 @@ function buildCaseCard(s, meetings, actions, todayStr) {
     p.className = 'lead';
     p.style.margin = '0';
     p.textContent = s.status === 'closed'
-      ? '✅ この案件は決着済みです。'
-      : '✅ 8ステップすべて完了しています。申し送りで「この案件は決着」に進めます。';
+      ? '✅ この案件は成果確定済みです。'
+      : '✅ 8ステップすべて完了しています。決定事項と申し送りで「この案件を成果確定」に進めます。';
     nav.appendChild(p);
   } else {
     const means = STEP_MEANS[next];
     const lead = document.createElement('p');
     lead.className = 'lead';
-    lead.innerHTML = '次に埋めるべき: <b>Step' + next + '（' + A3_STEPS[next] + '）</b> — ' +
-      MEANS_BADGE[means] + ' ' + MEANS_LABEL[means] + 'で埋めます';
+    lead.innerHTML = '次に埋めるべき: <b>Step' + next + '（' + A3_STEPS[next] + '）</b> — 推奨手段は ' +
+      MEANS_BADGE[means] + ' ' + MEANS_LABEL[means] + '（下のStep詳細から他の手段も追加できます）';
     nav.appendChild(lead);
     const btn = document.createElement('button');
     btn.className = 'primary small';
     btn.dataset.navStep = String(next);
     if (means === 'meeting') {
-      btn.textContent = 'Step' + next + ' → 会議を設計する';
+      btn.textContent = 'Step' + next + ' → 判断セッションを設計する';
       btn.onclick = () => goToStepDesign(s.id, next);
     } else if (means === 'report') {
       btn.textContent = 'Step' + next + ' → ' + (STEP_REPORT_TITLE[next] || 'レポート') + 'で埋める';
@@ -3054,6 +4033,9 @@ function buildCaseCard(s, meetings, actions, todayStr) {
     nav.appendChild(btn);
   }
   card.appendChild(nav);
+
+  // v4-5: Step詳細（推奨手段・複数成果物・状態変更・再オープン/前Step戻り・変更履歴）
+  card.appendChild(buildStepsDetail(s, meetings, actions));
 
   // 会議履歴
   const hist = meetings.filter(m => m.seriesId === s.id);
@@ -3082,6 +4064,9 @@ function buildCaseCard(s, meetings, actions, todayStr) {
   }
   card.appendChild(hul);
 
+  // 決定履歴（会議内外のDecisionを時系列で一覧。会議で決定／会議外で決定をバッジで区別）
+  card.appendChild(buildDecisionHistory(s));
+
   // 未完了アクション（期限超過は赤・ここで消し込み可）
   const open = actions.filter(a => a.seriesId === s.id && a.status === 'open');
   const h3a = document.createElement('h3');
@@ -3104,12 +4089,17 @@ function buildCaseCard(s, meetings, actions, todayStr) {
       const dueCls = overdue ? 'due a3-overdue' : 'due';
       span.innerHTML = '<b>' + a.owner + '</b> が <span class="' + dueCls + '">' + (a.due || '期限未設定') +
         (overdue ? '（期限超過）' : '') + '</span> までに: ' + a.what;
+      const chg = document.createElement('button');
+      chg.className = 'ghost small a3-due-change';
+      chg.textContent = '期限変更';
+      chg.dataset.dueChangeFor = a.id;
+      chg.onclick = () => openDueChangeModal(a.id);
       const done = document.createElement('button');
       done.className = 'primary small';
       done.textContent = '完了にする';
       done.dataset.actionId = a.id;
       done.onclick = () => { completeAction(a.id); renderA3(); };
-      li.append(span, done);
+      li.append(span, chg, done);
       aul.appendChild(li);
     });
   }
@@ -3117,10 +4107,661 @@ function buildCaseCard(s, meetings, actions, todayStr) {
   return card;
 }
 
+// アクションの期限変更モーダル（#32）: 新しい期限＋理由（必須）を入力し dueChanges に記録。
+function openDueChangeModal(actionId) {
+  const a = loadActions().find(x => x.id === actionId);
+  if (!a) return;
+  if (mtg) mtg.modalOpen = true;
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  title.textContent = 'アクションの期限を変更';
+  body.innerHTML =
+    '<p class="note" style="margin:0 0 8px">「' + escapeHtml(a.what || '') + '」の期限を変更します。' +
+    '現在の期限: ' + escapeHtml(a.due || '未設定') + '</p>' +
+    '<label>新しい期限</label>' +
+    '<input type="date" id="due-change-date" value="' + escapeHtml(a.due || '') + '">' +
+    '<label>変更理由（必須）</label>' +
+    '<textarea id="due-change-reason" rows="2" placeholder="なぜ期限を動かすのか（例：前工程の遅延／要件追加）"></textarea>' +
+    '<div class="alert bad hidden" id="due-change-error">変更理由は必須です。何度も動くアクションほど理由の記録が大切です。</div>';
+  actions.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'ghost'; cancel.textContent = 'キャンセル';
+  cancel.onclick = () => closeModal();
+  actions.appendChild(cancel);
+  const save = document.createElement('button');
+  save.className = 'primary'; save.id = 'due-change-save'; save.textContent = '期限を変更';
+  save.onclick = () => saveDueChange(actionId);
+  actions.appendChild(save);
+  showModal();
+}
+function saveDueChange(actionId) {
+  const reason = (document.getElementById('due-change-reason').value || '').trim();
+  if (!reason) { document.getElementById('due-change-error').classList.remove('hidden'); return; }
+  const newDue = (document.getElementById('due-change-date').value || '').trim() || null;
+  changeActionDue(actionId, newDue, reason);
+  closeModal();
+  renderA3();
+  renderDash();
+}
+
+// ---------- v4-5: Step詳細（推奨手段・複数成果物・状態変更・再オープン/前Step戻り・変更履歴） ----------
+function buildStepsDetail(s, meetings, actions) {
+  const wrap = document.createElement('div');
+  wrap.className = 'a3-steps';
+  wrap.id = 'a3-steps-' + s.id;
+  const h3 = document.createElement('h3');
+  h3.textContent = 'Step詳細（推奨手段・成果物・状態・履歴）';
+  wrap.appendChild(h3);
+  for (let i = 1; i <= 8; i++) {
+    wrap.appendChild(buildStepDetail(s, i, meetings, actions));
+  }
+  return wrap;
+}
+
+// ---------- 決定履歴（案件単位・会議内外を時系列で一覧） ----------
+function buildDecisionHistory(s) {
+  const decs = loadDecisions()
+    .filter(d => d.seriesId === s.id)
+    .slice()
+    .sort((a, b) => (a.decidedAt || 0) - (b.decidedAt || 0));
+  const wrap = document.createElement('div');
+  wrap.className = 'a3-decisions';
+  wrap.id = 'a3-decisions-' + s.id;
+  const h3 = document.createElement('h3');
+  h3.textContent = '決定履歴（' + decs.length + '件）';
+  wrap.appendChild(h3);
+  // 判断の質の件数サマリ（#32）: 代替案未検討／判断根拠不足の件数を表示。
+  if (decs.length) {
+    const q = decisionQualityCounts(decs, loadMeetings());
+    if (q.noAlternatives > 0 || q.noBasis > 0 || q.noRisk > 0) {
+      const s = document.createElement('div');
+      s.className = 'note a3-dec-quality';
+      const parts = [];
+      if (q.noAlternatives > 0) parts.push('代替案未検討 ' + q.noAlternatives + '件');
+      if (q.noRisk > 0) parts.push('リスク未確認 ' + q.noRisk + '件');
+      if (q.noBasis > 0) parts.push('判断根拠不足 ' + q.noBasis + '件');
+      s.textContent = '⚠ 判断の質チェック: ' + parts.join(' / ');
+      wrap.appendChild(s);
+    }
+  }
+  const ul = document.createElement('ul');
+  ul.className = 'plain a3-dec-list';
+  if (decs.length === 0) {
+    const li = document.createElement('li');
+    li.style.color = 'var(--sub)';
+    li.textContent = '（まだ決定はありません）';
+    ul.appendChild(li);
+  } else {
+    decs.forEach(d => {
+      const li = document.createElement('li');
+      li.className = 'a3-dec-item';
+      li.dataset.decisionId = d.id;
+      const badge = document.createElement('span');
+      const viaMeeting = d.meetingId != null;
+      badge.className = 'badge ' + (viaMeeting ? 'meet' : 'report') + ' a3-dec-badge';
+      badge.dataset.via = viaMeeting ? 'meeting' : 'nonmeeting';
+      badge.textContent = viaMeeting ? '🤝 会議で決定' : '✍️ 会議外で決定';
+      li.appendChild(badge);
+      const when = document.createElement('span');
+      when.style.color = 'var(--sub)';
+      when.style.marginLeft = '6px';
+      when.textContent = d.decidedAt ? new Date(d.decidedAt).toLocaleDateString('ja-JP') : '';
+      li.appendChild(when);
+      if (d.stepNo) {
+        const stp = document.createElement('span');
+        stp.className = 'note';
+        stp.style.marginLeft = '6px';
+        stp.textContent = 'Step' + d.stepNo + ' ' + (A3_STEPS[d.stepNo] || '');
+        li.appendChild(stp);
+      }
+      const txt = document.createElement('div');
+      txt.style.marginTop = '2px';
+      txt.textContent = '決定: ' + (d.text || '');
+      li.appendChild(txt);
+      if (d.decidedBy) {
+        const by = document.createElement('div');
+        by.className = 'note';
+        by.textContent = '決定者: ' + d.decidedBy;
+        li.appendChild(by);
+      }
+      if (d.basis) {
+        const b = document.createElement('div');
+        b.className = 'note';
+        b.textContent = '💡 判断根拠: ' + d.basis;
+        li.appendChild(b);
+      }
+      if (Array.isArray(d.rejectedOptions) && d.rejectedOptions.length) {
+        const r = document.createElement('div');
+        r.className = 'note';
+        r.textContent = '✗ 採用しなかった案: ' + d.rejectedOptions.join(' / ');
+        li.appendChild(r);
+      } else {
+        const r = document.createElement('div');
+        r.className = 'note a3-dec-flag';
+        r.dataset.flag = 'no-alternatives';
+        r.textContent = '⚠ 採用しなかった案が未記入（代替案未検討）';
+        li.appendChild(r);
+      }
+      if (!d.basis || !String(d.basis).trim()) {
+        const bf = document.createElement('div');
+        bf.className = 'note a3-dec-flag';
+        bf.dataset.flag = 'no-basis';
+        bf.textContent = '⚠ 判断根拠が未記入';
+        li.appendChild(bf);
+      }
+      if (Array.isArray(d.notifyTo) && d.notifyTo.length) {
+        const n = document.createElement('div');
+        n.className = 'note';
+        n.textContent = '📣 通知対象: ' + d.notifyTo.join('、');
+        li.appendChild(n);
+      }
+      if (d.dissent) {
+        const di = document.createElement('div');
+        di.className = 'note';
+        di.textContent = '⚠ 出た異論・懸念: ' + d.dissent;
+        li.appendChild(di);
+      }
+      ul.appendChild(li);
+    });
+  }
+  wrap.appendChild(ul);
+  return wrap;
+}
+
+function buildStepDetail(s, i, meetings, actions) {
+  const st = (s.steps && s.steps[String(i)]) || { status: 'todo', artifacts: [], history: [] };
+  const status = st.status || 'todo';
+  const box = document.createElement('div');
+  box.className = 'a3-step-detail';
+  box.id = 'a3-step-detail-' + s.id + '-' + i;
+  box.dataset.step = String(i);
+
+  // ヘッダ: Step名 + 推奨手段バッジ + 状態バッジ
+  const head = document.createElement('div');
+  head.className = 'a3-step-detail-head';
+  const title = document.createElement('b');
+  title.textContent = 'Step' + i + ' ' + A3_STEPS[i];
+  head.appendChild(title);
+  const rm = STEP_MEANS[i];
+  const rec = document.createElement('span');
+  rec.className = 'badge rec';
+  rec.textContent = '推奨: ' + MEANS_BADGE[rm] + ' ' + MEANS_LABEL[rm];
+  head.appendChild(rec);
+  const sb = document.createElement('span');
+  sb.className = 'badge st-' + status;
+  sb.dataset.statusBadge = '1';
+  sb.textContent = STATUS_LABEL[status] || status;
+  head.appendChild(sb);
+  box.appendChild(head);
+
+  // 状態変更（手動・7値）＋ 再オープン / 前のStepに戻る
+  const ctrl = document.createElement('div');
+  ctrl.className = 'a3-step-ctrl';
+  const lbl = document.createElement('label');
+  lbl.textContent = '状態:';
+  ctrl.appendChild(lbl);
+  const sel = document.createElement('select');
+  sel.className = 'a3-status-select';
+  sel.dataset.step = String(i);
+  STEP_STATUSES.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = STATUS_LABEL[v];
+    if (v === status) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.onchange = () => onStepStatusChange(s.id, i, sel.value);
+  ctrl.appendChild(sel);
+  if (status === 'done') {
+    const rb = document.createElement('button');
+    rb.className = 'ghost small a3-reopen-btn';
+    rb.dataset.step = String(i);
+    rb.textContent = '再オープン';
+    rb.onclick = () => reopenStep(s.id, i);
+    ctrl.appendChild(rb);
+  } else if (status !== 'todo' && i > 1) {
+    const bb = document.createElement('button');
+    bb.className = 'ghost small a3-back-btn';
+    bb.dataset.step = String(i);
+    bb.textContent = '前のStepに戻る';
+    bb.onclick = () => backToPrevStep(s.id, i);
+    ctrl.appendChild(bb);
+  }
+  box.appendChild(ctrl);
+
+  // 判断準備チェック（#28）: 事実Step(2/4/7)のみ。品質チェックリスト＋Evidence記録。
+  if (READY_CHECK_STEPS.indexOf(i) >= 0) {
+    box.appendChild(buildReadinessSection(s, i, status));
+  }
+
+  // 成果物一覧（複数紐づけ）
+  const aul = document.createElement('ul');
+  aul.className = 'a3-artifacts';
+  aul.id = 'a3-artifacts-' + s.id + '-' + i;
+  const arts = Array.isArray(st.artifacts) ? st.artifacts : [];
+  if (arts.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = '（成果物はまだありません）';
+    aul.appendChild(li);
+  } else {
+    arts.forEach(a => {
+      const li = document.createElement('li');
+      const kind = document.createElement('span');
+      kind.textContent = (MEANS_BADGE[a.type] || '•') + ' ' + (MEANS_LABEL[a.type] || a.type);
+      const detail = document.createElement('span');
+      detail.className = 'grow';
+      if (a.type === 'action' && a.refId) {
+        const act = actions.find(x => x.id === a.refId);
+        if (act) detail.textContent = '：' + act.what + '（' + act.owner + '）';
+      } else if (a.type === 'meeting' && a.refId) {
+        const m = meetings.find(x => x.id === a.refId);
+        if (m) detail.textContent = '：' + (m.title || (m.seq ? '第' + m.seq + '回' : '会議'));
+      } else if (a.type === 'decision' && a.refId) {
+        const dec = loadDecisions().find(x => x.id === a.refId);
+        if (dec) detail.textContent = '：' + dec.text;
+      }
+      const dt = document.createElement('span');
+      dt.style.color = 'var(--sub)';
+      dt.textContent = a.at ? new Date(a.at).toLocaleDateString('ja-JP') : '';
+      li.append(kind, detail, dt);
+      aul.appendChild(li);
+    });
+  }
+  box.appendChild(aul);
+
+  // 成果物の追加（どのStepでも4手段を追加できる）
+  const add = document.createElement('div');
+  add.className = 'a3-art-add';
+  const mkAdd = (txt, cls, fn) => {
+    const b = document.createElement('button');
+    b.className = 'ghost small ' + cls;
+    b.dataset.step = String(i);
+    b.textContent = txt;
+    b.onclick = fn;
+    return b;
+  };
+  add.appendChild(mkAdd('📄 レポート追加', 'a3-add-report', () => openStepEditor(s.id, i, 'report')));
+  add.appendChild(mkAdd('💬 チャット追加', 'a3-add-chat', () => openStepEditor(s.id, i, 'chat')));
+  add.appendChild(mkAdd('🤝 会議を設計', 'a3-add-meeting', () => goToStepDesign(s.id, i)));
+  add.appendChild(mkAdd('✅ Action追加', 'a3-add-action', () => addStepActionUI(s.id, i)));
+  // 会議を経由しないDecision登録（メール・立ち話・上位判断など）。判断Stepでは特に推奨。
+  const decBtnLabel = (DECISION_STEPS.indexOf(i) >= 0) ? '✍️ 会議なしで決定を記録（推奨）' : '✍️ 会議なしで決定を記録';
+  add.appendChild(mkAdd(decBtnLabel, 'a3-add-decision', () => openDecisionForm(s.id, i)));
+  box.appendChild(add);
+
+  // 変更履歴（折りたたみ: いつ・どの状態から・なぜ）
+  const hist = Array.isArray(st.history) ? st.history : [];
+  const det = document.createElement('details');
+  det.className = 'a3-step-history';
+  const sum = document.createElement('summary');
+  sum.textContent = '変更履歴（' + hist.length + '件）';
+  det.appendChild(sum);
+  const hul = document.createElement('ul');
+  if (hist.length === 0) {
+    const li = document.createElement('li');
+    li.textContent = '（履歴はありません）';
+    hul.appendChild(li);
+  } else {
+    hist.slice().reverse().forEach(h => {
+      const li = document.createElement('li');
+      const dt = h.at ? new Date(h.at).toLocaleString('ja-JP') : '';
+      const from = STATUS_LABEL[h.fromStatus] || h.fromStatus || '—';
+      const to = STATUS_LABEL[h.toStatus] || h.toStatus || '—';
+      const reason = h.reason ? ('｜理由: ' + h.reason) : '';
+      li.textContent = dt + '｜' + from + ' → ' + to + reason;
+      hul.appendChild(li);
+    });
+  }
+  det.appendChild(hul);
+  box.appendChild(det);
+
+  return box;
+}
+
+// 状態を手動変更（7値）。理由は任意だが history には必ず記録する。
+function onStepStatusChange(sid, stepNo, toStatus) {
+  const s = getSeries(sid);
+  const cur = s && s.steps && s.steps[String(stepNo)];
+  if (!cur) return;
+  if ((cur.status || 'todo') === toStatus) return;
+  // 事実Stepを ready にするときは品質チェック全項目を要求（未達は遷移させず不足を提示）。
+  if (toStatus === 'ready' && READY_CHECK_STEPS.indexOf(Number(stepNo)) >= 0) {
+    const state = readyChecklistState(cur);
+    if (!state.complete) {
+      window.alert('判断可能（ready）にするには品質チェックの全項目が必要です。\n不足項目: ' + state.missing.join('、') + '\n下の「判断準備チェック」で確認してください。');
+      renderA3(); // セレクトを元の状態へ戻す
+      return;
+    }
+  }
+  const reason = window.prompt(
+    'Step' + stepNo + ' の状態を「' + (STATUS_LABEL[cur.status] || cur.status) + '」から「' +
+    STATUS_LABEL[toStatus] + '」へ変更します。変更理由（任意）:', '');
+  if (reason === null) { renderA3(); return; } // キャンセル → セレクトを元に戻す
+  setStepStatus(sid, stepNo, toStatus, (reason && reason.trim()) ? reason.trim() : '手動変更');
+  renderA3();
+}
+
+// 完了Stepの再オープン（理由必須）。成果確定済み案件は再オープンで解除する。
+function reopenStep(sid, stepNo) {
+  const reason = window.prompt('Step' + stepNo + '（' + A3_STEPS[stepNo] + '）を再オープンします。変更理由（必須）:', '');
+  if (reason === null) return;
+  if (!reason.trim()) { window.alert('再オープンには理由の入力が必要です。'); return; }
+  setStepStatus(sid, stepNo, 'reopened', reason.trim());
+  const s = getSeries(sid);
+  if (s && s.status === 'closed') reopenSeries(sid, reason.trim());
+  renderA3();
+}
+
+// 進行中Stepから前のStepへ戻る（差し戻し・理由必須）。前Stepを reopened にして履歴へ記録。
+function backToPrevStep(sid, stepNo) {
+  if (stepNo <= 1) return;
+  const prev = stepNo - 1;
+  const reason = window.prompt(
+    'Step' + stepNo + ' から前のStep' + prev + '（' + A3_STEPS[prev] + '）に戻ります。変更理由（必須）:', '');
+  if (reason === null) return;
+  if (!reason.trim()) { window.alert('前のStepに戻るには理由の入力が必要です。'); return; }
+  setStepStatus(sid, prev, 'reopened', 'Step' + stepNo + 'から差し戻し: ' + reason.trim());
+  renderA3();
+}
+
+// ---------- 判断準備チェック（#28）: 品質チェックリスト＋Evidence ----------
+// 事実Stepの成果物を「判断可能な品質か」で自己確認する。全項目クリアで ready へ遷移可。
+function readyChecklistState(st) {
+  const saved = (st && st.readyChecklist) || {};
+  const checked = [], missing = [];
+  READY_CHECKLIST.forEach(item => {
+    if (saved[item.key]) checked.push(item.label);
+    else missing.push(item.label);
+  });
+  return { checked, missing, complete: missing.length === 0 };
+}
+function evidenceForStep(sid, stepNo) {
+  return loadEvidence().filter(e => e.seriesId === sid && String(e.stepNo) === String(stepNo));
+}
+// チェックボックスの ON/OFF を Step に永続化し、不足表示とボタン活性を更新（全体再描画はしない）。
+function toggleReadyCheck(sid, stepNo, key, checked) {
+  const list = loadSeries();
+  const s = list.find(x => x.id === sid);
+  const st = s && s.steps && s.steps[String(stepNo)];
+  if (!st) return;
+  if (!st.readyChecklist) st.readyChecklist = {};
+  st.readyChecklist[key] = !!checked;
+  saveSeries(list);
+  updateReadinessView(sid, stepNo);
+}
+function updateReadinessView(sid, stepNo) {
+  const s = getSeries(sid);
+  const st = s && s.steps && s.steps[String(stepNo)];
+  if (!st) return;
+  const state = readyChecklistState(st);
+  const miss = document.getElementById('a3-ready-missing-' + sid + '-' + stepNo);
+  if (miss) {
+    miss.className = 'a3-ready-missing ' + (state.complete ? 'ok' : 'warn');
+    miss.textContent = state.complete
+      ? '全項目チェック済み。判断可能（ready）にできます。'
+      : ('不足項目（' + state.missing.length + '）: ' + state.missing.join('、'));
+  }
+  const btn = document.getElementById('a3-ready-btn-' + sid + '-' + stepNo);
+  if (btn) btn.disabled = !state.complete;
+}
+// 全項目クリアなら ready へ遷移。未クリアなら不足項目を明示してブロックし、再調査へ誘導。
+function tryMakeStepReady(sid, stepNo) {
+  const s = getSeries(sid);
+  const st = s && s.steps && s.steps[String(stepNo)];
+  if (!st) return;
+  const state = readyChecklistState(st);
+  if (!state.complete) {
+    window.alert('判断可能（ready）にするには品質チェックの全項目が必要です。\n不足項目: ' + state.missing.join('、') + '\n不足があれば「再調査に戻す」で追加調査してください。');
+    return;
+  }
+  setStepStatus(sid, stepNo, 'ready', '品質チェック全項目クリア（判断準備完了）');
+  renderA3();
+}
+// 品質不足のStepを再調査(reinvestigate)へ戻す（不足項目を提示）。
+function reinvestigateStep(sid, stepNo) {
+  const s = getSeries(sid);
+  const st = s && s.steps && s.steps[String(stepNo)];
+  if (!st) return;
+  const state = readyChecklistState(st);
+  const missTxt = state.missing.length ? ('不足: ' + state.missing.join('、')) : '不足項目なし';
+  const reason = window.prompt('Step' + stepNo + '（' + A3_STEPS[stepNo] + '）を再調査に戻します。\n' + missTxt + '\n変更理由（任意）:', '');
+  if (reason === null) return;
+  setStepStatus(sid, stepNo, 'reinvestigate', (reason && reason.trim()) ? reason.trim() : ('再調査: ' + missTxt));
+  renderA3();
+}
+// Evidence（判断根拠）として 情報源・as-of日付 を記録（#23 addEvidence）。
+function saveStepEvidence(sid, stepNo) {
+  const srcEl = document.getElementById('a3-evidence-source-' + sid + '-' + stepNo);
+  const asofEl = document.getElementById('a3-evidence-asof-' + sid + '-' + stepNo);
+  const source = (srcEl && srcEl.value.trim()) || '';
+  const asOf = (asofEl && asofEl.value) || null;
+  if (!source && !asOf) { window.alert('情報源または as-of日付を入力してください。'); return; }
+  addEvidence({ seriesId: sid, stepNo: String(stepNo), summary: source, source, asOf });
+  renderA3();
+}
+// 事実Step用の「判断準備チェック」セクションを組み立てる。
+function buildReadinessSection(s, i, status) {
+  const st = (s.steps && s.steps[String(i)]) || { status: 'todo' };
+  const wrap = document.createElement('div');
+  wrap.className = 'a3-readiness';
+  wrap.id = 'a3-readiness-' + s.id + '-' + i;
+  wrap.style.cssText = 'margin:8px 0; padding:8px 10px; border:1px solid var(--line,#ddd); border-radius:8px; background:rgba(0,0,0,0.02)';
+
+  const head = document.createElement('div');
+  head.className = 'a3-readiness-head';
+  const hb = document.createElement('b');
+  hb.textContent = '判断準備チェック（品質の確認）';
+  head.appendChild(hb);
+  const note = document.createElement('span');
+  note.className = 'note';
+  note.style.marginLeft = '8px';
+  note.textContent = '「入力済み」ではなく「次の判断に使える品質か」を確認します。';
+  head.appendChild(note);
+  wrap.appendChild(head);
+
+  // 品質チェックリスト（チェック式・保存）
+  const ul = document.createElement('ul');
+  ul.className = 'a3-ready-checklist plain';
+  const saved = st.readyChecklist || {};
+  READY_CHECKLIST.forEach(item => {
+    const li = document.createElement('li');
+    const lab = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'a3-ready-check';
+    cb.dataset.key = item.key;
+    cb.checked = !!saved[item.key];
+    cb.onchange = () => toggleReadyCheck(s.id, i, item.key, cb.checked);
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(' ' + item.label));
+    li.appendChild(lab);
+    ul.appendChild(li);
+  });
+  wrap.appendChild(ul);
+
+  // 不足項目の明示 / 完了メッセージ
+  const state = readyChecklistState(st);
+  const miss = document.createElement('div');
+  miss.id = 'a3-ready-missing-' + s.id + '-' + i;
+  miss.className = 'a3-ready-missing ' + (state.complete ? 'ok' : 'warn');
+  miss.textContent = state.complete
+    ? '全項目チェック済み。判断可能（ready）にできます。'
+    : ('不足項目（' + state.missing.length + '）: ' + state.missing.join('、'));
+  wrap.appendChild(miss);
+
+  // ボタン: 判断可能にする / 再調査に戻す
+  const btns = document.createElement('div');
+  btns.className = 'a3-ready-btns';
+  btns.style.margin = '6px 0';
+  if (status !== 'ready' && status !== 'done') {
+    const rb = document.createElement('button');
+    rb.className = 'primary small a3-ready-btn';
+    rb.id = 'a3-ready-btn-' + s.id + '-' + i;
+    rb.dataset.step = String(i);
+    rb.textContent = '判断可能（ready）にする';
+    rb.disabled = !state.complete;
+    rb.onclick = () => tryMakeStepReady(s.id, i);
+    btns.appendChild(rb);
+  }
+  const ib = document.createElement('button');
+  ib.className = 'ghost small a3-reinvestigate-btn';
+  ib.dataset.step = String(i);
+  ib.textContent = '再調査に戻す';
+  ib.onclick = () => reinvestigateStep(s.id, i);
+  btns.appendChild(ib);
+  wrap.appendChild(btns);
+
+  // Evidence（情報源・as-of日付）の記録欄＋一覧
+  const ev = document.createElement('div');
+  ev.className = 'a3-evidence';
+  const evh = document.createElement('div');
+  evh.className = 'note';
+  evh.textContent = 'Evidence（判断根拠）: 情報源と as-of日付 を記録';
+  ev.appendChild(evh);
+  const row = document.createElement('div');
+  row.className = 'a3-evidence-inputs';
+  row.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:4px 0';
+  const src = document.createElement('input');
+  src.type = 'text';
+  src.className = 'a3-evidence-source';
+  src.id = 'a3-evidence-source-' + s.id + '-' + i;
+  src.placeholder = '情報源（例: 生産管理システム／〇〇レポート）';
+  src.style.flex = '1 1 220px';
+  const asof = document.createElement('input');
+  asof.type = 'date';
+  asof.className = 'a3-evidence-asof';
+  asof.id = 'a3-evidence-asof-' + s.id + '-' + i;
+  const save = document.createElement('button');
+  save.className = 'ghost small a3-evidence-save';
+  save.dataset.step = String(i);
+  save.textContent = 'Evidenceを保存';
+  save.onclick = () => saveStepEvidence(s.id, i);
+  row.append(src, asof, save);
+  ev.appendChild(row);
+  const evul = document.createElement('ul');
+  evul.className = 'a3-evidence-list plain';
+  evul.id = 'a3-evidence-list-' + s.id + '-' + i;
+  const evs = evidenceForStep(s.id, i);
+  if (evs.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = '（Evidenceはまだありません）';
+    evul.appendChild(li);
+  } else {
+    evs.forEach(e => {
+      const li = document.createElement('li');
+      li.textContent = '📎 ' + (e.source || e.summary || '(情報源未記入)') + (e.asOf ? '（as-of ' + e.asOf + '）' : '');
+      evul.appendChild(li);
+    });
+  }
+  ev.appendChild(evul);
+  wrap.appendChild(ev);
+
+  return wrap;
+}
+
+// どのStepにもアクションを追加できる（成果物 type=action として紐づけ）。
+function addStepActionUI(sid, stepNo) {
+  const what = window.prompt('Step' + stepNo + '（' + A3_STEPS[stepNo] + '）に紐づけるアクション内容:', '');
+  if (what === null || !what.trim()) return;
+  const owner = (window.prompt('担当者:', '') || '').trim();
+  const dueRaw = (window.prompt('期限（YYYY-MM-DD、任意）:', '') || '').trim();
+  const a = addAction({ seriesId: sid, what: what.trim(), owner, due: dueRaw || null, stepNo });
+  addStepArtifact(sid, stepNo, 'action', a.id);
+  renderA3();
+}
+
+// 会議を経由しないDecisionをフォームで登録（メール・立ち話・上位判断など）。
+// meetingId なしの Decision として保存し、Stepに artifacts(type:'decision') で紐づける。
+function openDecisionForm(seriesId, stepNo) {
+  const s = getSeries(seriesId);
+  if (!s) return;
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  title.textContent = '会議なしで決定を記録';
+  // 通知対象の候補: この案件の関係者（notify対象）＋自由追加
+  const stk = loadStakeholders().filter(x => x.seriesId === seriesId);
+  let notifyRows = '';
+  if (stk.length) {
+    notifyRows = stk.map(x =>
+      '<label style="margin-right:10px"><input type="checkbox" class="dec-notify-cb" value="' +
+      escapeHtml(x.name) + '"> ' + escapeHtml(x.name) + (x.role ? '（' + escapeHtml(x.role) + '）' : '') + '</label>'
+    ).join('');
+  }
+  let stepOpts = '';
+  for (let i = 1; i <= 8; i++) {
+    stepOpts += '<option value="' + i + '"' + (i === stepNo ? ' selected' : '') + '>Step' + i + ' ' + A3_STEPS[i] + '</option>';
+  }
+  body.innerHTML =
+    '<p class="note" style="margin:0 0 8px">会議を開かずに決まったこと（メール・立ち話・上位判断など）を記録します。判断の背景も残せます。</p>' +
+    '<label>決定内容（必須）</label>' +
+    '<input type="text" id="dec-form-text" placeholder="決定事項（例：試作は外注せず社内で行う。担当:田中、期限:5/20）">' +
+    '<label>判断根拠（なぜこれにしたか）（任意）</label>' +
+    '<textarea id="dec-form-basis" rows="2" placeholder="この決定に至った理由・決め手"></textarea>' +
+    '<label>採用しなかった案（比較した選択肢）（任意・1行1件）</label>' +
+    '<textarea id="dec-form-rejected" rows="2" placeholder="検討したが採らなかった案（1行1件）"></textarea>' +
+    '<div class="note" id="dec-form-rejected-hint">比較した案はありませんでしたか？（1つの案しか出ていない決定は、見落としが起きやすくなります）</div>' +
+    '<label>決定者（任意）</label>' +
+    '<input type="text" id="dec-form-by" placeholder="誰が決めたか（例：部長 山田）">' +
+    '<label>通知対象（誰に知らせるか）（任意）</label>' +
+    '<div id="dec-form-notify-box" class="notify-list">' + (notifyRows || '<span class="note">関係者は未登録です。下の欄に自由に追加できます。</span>') + '</div>' +
+    '<input type="text" id="dec-form-notify-free" placeholder="その他の通知対象（カンマ区切りで追加）">' +
+    '<label>紐づくStep</label>' +
+    '<select id="dec-form-step">' + stepOpts + '</select>' +
+    '<div class="alert bad hidden" id="dec-form-error">決定内容は必須です。</div>';
+  actions.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'ghost'; cancel.textContent = 'キャンセル';
+  cancel.onclick = () => closeModal();
+  actions.appendChild(cancel);
+  const save = document.createElement('button');
+  save.className = 'primary'; save.id = 'dec-form-save'; save.textContent = 'この決定を記録';
+  save.onclick = () => saveDecisionForm(seriesId);
+  actions.appendChild(save);
+  showModal();
+}
+
+function saveDecisionForm(seriesId) {
+  const text = (document.getElementById('dec-form-text').value || '').trim();
+  if (!text) { document.getElementById('dec-form-error').classList.remove('hidden'); return; }
+  const basis = (document.getElementById('dec-form-basis').value || '').trim();
+  const rejRaw = (document.getElementById('dec-form-rejected').value || '').trim();
+  const rejectedOptions = rejRaw ? rejRaw.split('\n').map(x => x.trim()).filter(Boolean) : [];
+  const decidedBy = (document.getElementById('dec-form-by').value || '').trim();
+  const notifyTo = [];
+  document.querySelectorAll('.dec-notify-cb:checked').forEach(cb => notifyTo.push(cb.value));
+  const freeVal = (document.getElementById('dec-form-notify-free').value || '').trim();
+  if (freeVal) freeVal.split(/[,、]/).map(x => x.trim()).filter(Boolean).forEach(n => { if (notifyTo.indexOf(n) < 0) notifyTo.push(n); });
+  const stepNo = Number(document.getElementById('dec-form-step').value);
+  const d = addDecision({
+    seriesId, stepNo, meetingId: null,
+    text, basis, rejectedOptions, decidedBy, notifyTo,
+    decidedAt: Date.now()
+  });
+  addStepArtifact(seriesId, stepNo, 'decision', d.id);
+  closeModal();
+  renderA3();
+}
+
+// 成果確定（クローズ）の解除。理由をEvent Logへ記録する。
+function reopenSeries(id, reason) {
+  const list = loadSeries();
+  const s = list.find(x => x.id === id);
+  if (!s) return null;
+  s.status = 'active';
+  s.closedAt = null;
+  saveSeries(list);
+  logEvent('series', id, 'reopened', { reason: reason || '' });
+  return s;
+}
+
 // --- Step特化レポート／チャットテンプレの編集 ---
 function stepTemplate(stepNo, mode) {
   if (mode === 'chat') {
-    return '【進捗連絡】（Step6 実行）\n\n・対策 No / 内容:\n・進捗（%・完了/未完了）:\n・障害・遅延の有無:\n・支援してほしいこと:\n\n※確認したら 👍 リアクションをお願いします（会議は不要です）';
+    return '【進捗連絡】（対策実行・進捗共有）\n\n・対策 No / 内容:\n・進捗（%・完了/未完了）:\n・障害・遅延の有無:\n・支援してほしいこと:\n\n※確認したら 👍 リアクションをお願いします（会議は不要です）';
   }
   if (stepNo === 2) {
     return '【現状把握レポート】（Step2）\n\n■ 何が・どこで・いつ起きているか（事実の層別）\n・\n\n■ 数字（実績・件数・率・金額）\n・\n\n■ あるべき姿とのギャップ\n・\n\n■ 一次情報の出所\n・\n\n※事実のみ。原因・対策・意見は書かない。';
@@ -3258,14 +4899,22 @@ function saveStepEditor() {
   const list = loadSeries();
   const s = list.find(x => x.id === seriesId);
   if (!s || !s.steps) return;
-  s.steps[String(stepNo)] = {
-    status: 'done',
+  const key = String(stepNo);
+  const prev = s.steps[key] || {};
+  const filledBy = mode === 'chat' ? 'chat' : 'report';
+  const artifacts = Array.isArray(prev.artifacts) ? prev.artifacts.slice() : [];
+  artifacts.push({ type: filledBy, refId: null, at: Date.now() });
+  s.steps[key] = {
+    status: (prev.status || 'todo'),
     content,
-    filledBy: mode === 'chat' ? 'chat' : 'report',
+    filledBy,
     meetingId: null,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    artifacts, history: (Array.isArray(prev.history) ? prev.history : [])
   };
   saveSeries(list);
+  // 状態遷移を history / Event Log へ記録（fromは元の状態）
+  setStepStatus(seriesId, stepNo, 'done', mode === 'chat' ? 'チャットで記録' : 'レポートで記録');
   closeStepEditor();
   renderA3();
 }
@@ -3280,6 +4929,9 @@ function renderDash() {
   document.getElementById('dash-saved-min').textContent = stats.savedMin.toLocaleString() + '分';
   document.getElementById('dash-spared').textContent = stats.spared + '人';
   document.getElementById('dash-decisions').textContent = stats.decisions + '件';
+  // 参考換算の「回避した会議人時（人×時間）」＝ 解放した延べ分を人時へ言い換え（導出はそのまま）
+  document.getElementById('dash-person-hours').textContent =
+    (Math.round((stats.savedMin || 0) / 60 * 10) / 10) + '人時';
   renderDashMetrics();
 }
 // 「—」表示に統一する整形ヘルパ（NaN・0除算を出さない）
@@ -3287,8 +4939,25 @@ function fmtPct(r) { return r == null ? '—' : Math.round(r * 100) + '%'; }
 function fmtCount(n) { return (n || 0) + '件'; }
 function fmtLeadDays(d) { return d == null ? '—' : (Math.round(d * 10) / 10) + '日'; }
 function fmtTopCause(t) { return t ? (t.cause + '（' + t.count + '件）') : '—'; }
+// 経過時間（ms）を「—」/「X時間」/「X日」へ整形（24時間未満は時間、以上は日）
+function fmtDurationMs(ms) {
+  if (ms == null) return '—';
+  const h = ms / 3600000;
+  if (h < 24) return (Math.round(h * 10) / 10) + '時間';
+  return (Math.round(h / 24 * 10) / 10) + '日';
+}
 function renderDashMetrics() {
   const dm = dashMetrics();
+  // 案件の流れ（derivedMetricsV3）
+  const v3 = derivedMetricsV3();
+  document.getElementById('dash-decision-wait').textContent = fmtDurationMs(v3.avgDecisionWaitMs);
+  document.getElementById('dash-decision-action-gap').textContent = fmtDurationMs(v3.avgDecisionToActionStartMs);
+  document.getElementById('dash-original-due').textContent = fmtPct(v3.originalDueCompletionRate);
+  document.getElementById('dash-redecision-rate').textContent = fmtPct(v3.reDecisionRate);
+  document.getElementById('dash-goal-achievement').textContent = fmtPct(v3.goalAchievementRate);
+  document.getElementById('dash-stalled-series').textContent = fmtCount(v3.stalledSeriesCount);
+  document.getElementById('dash-unprepared-decision').textContent = fmtCount(v3.unpreparedDecisionCount);
+  document.getElementById('dash-lead-time').textContent = fmtLeadDays(dm.avgLeadTimeDays);
   // 速さの指標
   document.getElementById('dash-action-completion').textContent = fmtPct(dm.actionCompletionRate);
   document.getElementById('dash-ontime-completion').textContent = fmtPct(dm.onTimeCompletionRate);
@@ -3296,7 +4965,6 @@ function renderDashMetrics() {
   document.getElementById('dash-extension-rate').textContent = fmtPct(dm.extensionRate);
   document.getElementById('dash-within30-rate').textContent = fmtPct(dm.within30MinRate);
   document.getElementById('dash-closed-series').textContent = fmtCount(dm.closedSeriesCount);
-  document.getElementById('dash-lead-time').textContent = fmtLeadDays(dm.avgLeadTimeDays);
   document.getElementById('dash-overdue-actions').textContent = fmtCount(dm.overdueOpenCount);
   document.getElementById('dash-top-carry-cause').textContent = fmtTopCause(dm.topCarryCause);
   // ムダ検知
@@ -3304,8 +4972,43 @@ function renderDashMetrics() {
   document.getElementById('dash-over-report').textContent = fmtCount(dm.overLengthReportCount);
   document.getElementById('dash-stagnant-actions').textContent = fmtCount(dm.stagnantActionCount);
   document.getElementById('dash-mannerism-series').textContent = fmtCount(dm.mannerismSeriesCount);
-  document.getElementById('dash-dissent-zero-rate').textContent = fmtPct(dm.dissentZeroMeetingRate);
+  // 判断の質（#32）
+  document.getElementById('dash-dec-no-alternatives').textContent = fmtCount(dm.decisionQuality.noAlternatives);
+  document.getElementById('dash-dec-no-risk').textContent = fmtCount(dm.decisionQuality.noRisk);
+  document.getElementById('dash-dec-no-basis').textContent = fmtCount(dm.decisionQuality.noBasis);
+  renderDueChangeList(dm.topDueChangeActions);
   renderMudaDiagnose(); // R7: LLM ON時のみ「AIにムダ診断してもらう」ボタンを注入
+}
+// 期限変更回数上位のアクションを一覧描画（変更理由つき）。
+function renderDueChangeList(items) {
+  const ul = document.getElementById('dash-due-change-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  if (!items || items.length === 0) {
+    const li = document.createElement('li');
+    li.style.color = 'var(--sub)';
+    li.textContent = '（期限変更のあるアクションはありません）';
+    ul.appendChild(li);
+    return;
+  }
+  items.forEach(it => {
+    const li = document.createElement('li');
+    li.dataset.actionId = it.id;
+    const head = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = it.count + '回変更';
+    head.appendChild(b);
+    head.appendChild(document.createTextNode('｜' + (it.owner || '担当未設定') + '：' + (it.what || '') +
+      '（現期限 ' + (it.due || '未設定') + '）'));
+    li.appendChild(head);
+    if (it.reasons.length) {
+      const r = document.createElement('div');
+      r.className = 'note';
+      r.textContent = '理由: ' + it.reasons.join(' → ');
+      li.appendChild(r);
+    }
+    ul.appendChild(li);
+  });
 }
 
 // ---------- R7 ムダ診断（ダッシュボードAIアシスト） ----------
@@ -3330,15 +5033,24 @@ function renderMudaDiagnose() {
 // 速さの指標＋ムダ検知の現在値をテキスト化して diagnose に渡す入力を作る。
 function buildDiagnoseInput() {
   const dm = dashMetrics();
+  const v3 = derivedMetricsV3();
   const lines = [
+    '# 案件の流れ',
+    '案件リードタイム（作成→成果確定）: ' + fmtLeadDays(dm.avgLeadTimeDays),
+    '判断待ち時間（Step ready→Decision）: ' + fmtDurationMs(v3.avgDecisionWaitMs),
+    'DecisionからAction開始まで: ' + fmtDurationMs(v3.avgDecisionToActionStartMs),
+    '当初期限内完了率: ' + fmtPct(v3.originalDueCompletionRate),
+    '再判断率: ' + fmtPct(v3.reDecisionRate),
+    '目標達成率: ' + fmtPct(v3.goalAchievementRate),
+    '停滞案件数: ' + fmtCount(v3.stalledSeriesCount),
+    '判断準備不足件数: ' + fmtCount(v3.unpreparedDecisionCount),
     '# 速さの指標',
     'アクション完了率: ' + fmtPct(dm.actionCompletionRate),
     '期限内完了率: ' + fmtPct(dm.onTimeCompletionRate),
     '議題の持ち越し率: ' + fmtPct(dm.carriedAgendaRate),
     '会議の延長率: ' + fmtPct(dm.extensionRate),
     '30分以内終了率: ' + fmtPct(dm.within30MinRate),
-    '決着したA3案件数: ' + fmtCount(dm.closedSeriesCount),
-    '案件リードタイム: ' + fmtLeadDays(dm.avgLeadTimeDays),
+    '成果確定したA3案件数: ' + fmtCount(dm.closedSeriesCount),
     '期限超過アクション件数: ' + fmtCount(dm.overdueOpenCount),
     '持ち越し原因トップ: ' + fmtTopCause(dm.topCarryCause),
     '# ムダ検知',
@@ -3346,7 +5058,9 @@ function buildDiagnoseInput() {
     'A3・1枚超過レポート数: ' + fmtCount(dm.overLengthReportCount),
     '停滞アクション: ' + fmtCount(dm.stagnantActionCount),
     'マンネリ疑い案件数: ' + fmtCount(dm.mannerismSeriesCount),
-    '異論ゼロ会議率: ' + fmtPct(dm.dissentZeroMeetingRate)
+    '代替案未検討の決定数: ' + fmtCount(dm.decisionQuality.noAlternatives),
+    'リスク未確認の決定数: ' + fmtCount(dm.decisionQuality.noRisk),
+    '判断根拠不足の決定数: ' + fmtCount(dm.decisionQuality.noBasis)
   ];
   return lines.join('\n');
 }
@@ -3408,6 +5122,7 @@ renderA3();
 renderLlmSettings();
 renderAiRouterCard();
 renderAgendaAssist();
+renderDataMgmt();
 </script>
 </body>
 </html>
