@@ -681,7 +681,7 @@
 <section id="screen-chat" class="screen active">
   <div class="card" id="intake-card">
     <h2>💬 チャットで進める</h2>
-    <p class="note">AIの質問に答えながら、レポート・チャット・会議のどれが必要かを一緒に見極めます。会議になる場合は、この画面のまま会議招集の文面まで作れます。5往復以上やりとりすると「📋 会議招集まとめ」ボタンが出て、いつでも打ち切って文面を作れます。（AI設定がONなら自由対話、OFF・サーバー不達時はルールベースで動きます）</p>
+    <p class="note">AIの質問に答えながら、レポート・チャット・会議のどれが必要かを一緒に見極めます。会議になる場合は、この画面のまま会議招集の文面まで作れます。5往復以上やりとりすると「📋 会議招集まとめ」ボタンが出て、いつでも打ち切って文面を作れます。（この対話にはAIアシストが必要です。AI設定がONのときだけ開始できます。接続できないときはエラーと再試行ボタンが出ます）</p>
     <div id="intake-ai-note" class="note" style="background:var(--accent-soft);border-radius:8px;padding:6px 10px;margin:6px 0;"></div>
     <div class="ref-note" id="intake-reftabs-note">🗂️ 裏側で <b>トヨタA3 8ステップ</b>・<b>7つのムダ</b>・<b>報連相 仕分け</b> の3つの整理が自動で進んでいます（上のタブからいつでも参照できます）。</div>
     <div id="intake-messages" class="intake-messages" aria-live="polite"></div>
@@ -5283,20 +5283,12 @@ function resetStats() {
 }
 
 // ==================================================================
-// 対話インテーク（チャット形式の入り口・v5-1 / Issue #37）
-//   最初の問いは「案件名を教えてください。」。LLM不要のルールベース質問ツリー。
+// 対話インテーク（チャット形式の入り口・v5-1 / Issue #37, v6-4 / #46）
+//   最初の問いは「案件名を教えてください。」。以降の対話は AI（/api/v1/intake）が担う。
+//   v6-4: ルールベース質問ツリーへの自動フォールバックは廃止。AI失敗時はエラー＋再試行。
 //   回答は series（title / intakeLog）へ保存し、まとめから既存ヘルパへプリフィルする。
 // ==================================================================
-// 例外理由7種（v4 #26 の案件トリアージと同一）
-const INTAKE_EXCEPTIONS = [
-  '判断が必要', '関係者間に認識差がある', '不確実性が高い', '緊急性が高い',
-  '判断が不可逆', '部門横断の調整が必要', '決定権者の判断が必要'
-];
-const INTAKE_WANT_LABEL = {
-  past: '① 過去の結果・経緯を伝えたい',
-  present: '② いま起きていることを知らせたい',
-  future: '③ これから何かを決めたい・相談したい'
-};
+// 役割ラベル（招集メンバーの表示・招集文面生成で使用）。
 const INTAKE_ROLE_LABEL = { opinion: '意見を出す人', info: '情報を持っている人', listener: '聞くだけ（レポート送付）' };
 
 // v5-4 bugfix(#41): 複数名一括入力を分割する。区切りは , 、 ， / と改行。trim・空要素除去。
@@ -5343,44 +5335,40 @@ function newIntakeState() {
     // v6-3: AI応答の extract（a3/horenso/muda）を対話をまたいで累積する器。裏タブ反映で
     //   ルールベースのヒューリスティック反映と共存させる（intakeSyncSeriesData で統合）。
     aiExtract: { a3: {}, horenso: [], muda: {} },
-    // v5-2 AIモード: aiMode は 'ai'|'rule'。aiState はサーバへ毎回送る局面。
-    aiMode: 'rule', aiState: null, aiBusy: false
+    // v6-4 AIモード: aiMode は 'ai'（既定）|'off'（LLM設定OFF時）。aiState はサーバへ毎回送る局面。
+    //   ルールベース質問ツリーへのフォールバック（旧 'rule'）は #46 で廃止。
+    aiMode: 'ai', aiState: null, aiBusy: false
   };
 }
 
 // 対話を最初からやり直す（案件の下書きは残す）。ページ初期化からも呼ばれる。
+// v6-4(#46): LLM設定ONならAI対話を開始。OFFなら対話を開始せず案内だけ出す。
 function intakeStart() {
   intake = newIntakeState();
-  intake.aiMode = loadLlm().enabled ? 'ai' : 'rule';
+  const enabled = loadLlm().enabled;
+  intake.aiMode = enabled ? 'ai' : 'off';
   renderIntake();
   intakeRenderNotice();
+  if (!enabled) { intakeShowLlmOff(); return; }
   intakeAskName();
 }
-// 対話カードのインライン通知（ブロッキングしない包括同意）。AIモードのみ表示。
+// 対話カードのインライン通知（ブロッキングしない包括同意）。
 function intakeRenderNotice() {
   const note = document.getElementById('intake-ai-note');
   if (!note) return;
   if (intake && intake.aiMode === 'ai') {
-    note.innerHTML = '🤖 この対話はAIが応答します。内容はサーバーに保存されません（ゼロリテンション）。 ' +
-      '<a href="#" id="intake-use-rule" onclick="intakeUseRuleBased();return false;">AIを使わず進める</a>';
+    note.textContent = '🤖 この対話はAIが応答します。内容はサーバーに保存されません（ゼロリテンション）。';
     note.style.display = '';
   } else {
-    note.textContent = 'AIを使わず、ルールベースの質問で進めています。';
+    note.textContent = 'AIアシストがOFFです。設定でONにすると対話を開始できます。';
     note.style.display = '';
   }
 }
-// ユーザーが明示的にAIをやめる（ルールベースへ切替。対話は継続）。
-function intakeUseRuleBased() {
-  if (!intake || intake.aiMode !== 'ai') return;
-  intake.aiMode = 'rule';
-  intakeRenderNotice();
-  if (intake.seriesId) {
-    intakeAskWant();
-  } else {
-    intake.state = 'askName';
-    setIntakeChoices([]);
-    setIntakeInput(true, '案件名を入力…');
-  }
+// v6-4(#46): LLM設定OFF時。対話を開始せず、ONを促す案内を表示する。
+function intakeShowLlmOff() {
+  setIntakeChoices([]);
+  setIntakeInput(false);
+  intakeSay('system', 'AIアシストがOFFのため対話を開始できません。設定でONにしてください。');
 }
 
 function renderIntake() {
@@ -5477,203 +5465,27 @@ function intakeSubmitText() {
   if (inp) inp.value = '';
   intakeDispatch(v);
 }
-// 自由入力・選択肢クリックの共通入口。AIモード/ルールベースを振り分ける。
+// 自由入力・選択肢クリックの共通入口。v6-4(#46): AI対話のみ（ルールベース振り分けは廃止）。
 function intakeDispatch(v) {
   if (intake.aiBusy) return;
+  if (intake.aiMode !== 'ai') return; // LLM設定OFF時は対話を開始しない
   intakeSay('user', v);
-  if (intake.aiMode === 'ai') intakeAiTurn();
-  else intakeHandleText(v);
-}
-function intakeHandleText(v) {
-  switch (intake.state) {
-    case 'askName': intakeSetName(v); break;
-    case 'askDecisionQ': intake.decisionQuestion = v; intakeAskDecider(); break;
-    case 'askDecider': intakeSetDecider(v); intakeAskParticipants(); break;
-    case 'askParticipants': intake.pendingName = v; intakeAskParticipantRole(); break;
-    default: break;
-  }
+  intakeAiTurn();
 }
 
-// 1. 案件名 → 案件（A3）を下書き作成
+// 初回メッセージ「案件名を教えてください。」（クライアント表示。#46 で維持）。
 function intakeAskName() {
   intake.state = 'askName';
   setIntakeChoices([]);
   setIntakeInput(true, '案件名を入力…');
   intakeSay('system', '案件名を教えてください。');
 }
-function intakeSetName(v) {
-  intake.title = v;
-  const s = createSeries(v, '');
-  intake.seriesId = s.id;
-  persistIntakeLog();
-  renderA3();
-  intakeSay('system', '案件「' + v + '」を下書きとして作成しました。');
-  intakeAskWant();
-}
-
-// 2. いま一番したいこと（時制トリアージ）
-function intakeAskWant() {
-  intake.state = 'askWant';
-  setIntakeInput(false);
-  setIntakeChoices([
-    { label: INTAKE_WANT_LABEL.past, onClick: function () { intakeWant('past'); } },
-    { label: INTAKE_WANT_LABEL.present, onClick: function () { intakeWant('present'); } },
-    { label: INTAKE_WANT_LABEL.future, onClick: function () { intakeWant('future'); } }
-  ]);
-  intakeSay('system', 'この件で、いま一番したいことは何ですか？');
-}
-function intakeWant(tense) {
-  intake.tense = tense;
-  intakeSay('user', INTAKE_WANT_LABEL[tense]);
-  if (tense === 'future') intakeAskFacts();
-  else intakeAskException();
-}
-
-// 3. ①②の場合: 例外理由7種を複数選択で確認
-function intakeAskException() {
-  intake.state = 'askException';
-  intake.exceptions = [];
-  setIntakeInput(false);
-  intakeRenderExceptionChoices();
-  intakeSay('system', '以下に当てはまるものはありますか？（当てはまるものを選び「これで確定」を押してください。無ければ「該当なし」）');
-}
-function intakeRenderExceptionChoices() {
-  const choices = INTAKE_EXCEPTIONS.map(function (r) {
-    return {
-      label: (intake.exceptions.indexOf(r) >= 0 ? '☑ ' : '☐ ') + r,
-      onClick: function () {
-        const i = intake.exceptions.indexOf(r);
-        if (i >= 0) intake.exceptions.splice(i, 1); else intake.exceptions.push(r);
-        intakeRenderExceptionChoices();
-      }
-    };
-  });
-  choices.push({ label: '該当なし（会議は不要）', onClick: intakeNoException });
-  choices.push({ label: 'これで確定', onClick: intakeConfirmException });
-  setIntakeChoices(choices);
-}
-function intakeConfirmException() {
-  if (intake.exceptions.length === 0) { intakeNoException(); return; }
-  intakeSay('user', '該当あり：' + intake.exceptions.join('・'));
-  intakeSay('system', '例外条件に該当します。会議（判断セッション）が必要か、事実の観点で確認しましょう。');
-  intakeAskFacts();
-}
-function intakeNoException() {
-  intakeSay('user', '該当なし');
-  intakeConcludeNoMeeting();
-}
-
-// 会議不要ルートの終話（案件は下書きのまま残す）
-function intakeConcludeNoMeeting() {
-  intake.state = 'doneNoMeeting';
-  setIntakeInput(false);
-  const kindLabel = intake.tense === 'present' ? 'チャット' : 'レポート';
-  intakeSay('system', '会議は不要です。' + kindLabel + 'で済ませましょう。テンプレートを用意し、開かずに済んだ会議の回避コストも記録できます。案件は下書きとして残しています。');
-  setIntakeChoices([
-    { label: kindLabel + 'テンプレートを開く', onClick: intakeGoTemplate },
-    { label: '会議回避コストを記録する', onClick: intakeGoAvoided },
-    { label: '対話をやり直す', onClick: intakeStart }
-  ]);
-}
+// 会議招集の文面テンプレートへ遷移（AIの suggest_report アクションから使用）。
 function intakeGoTemplate() {
   showScreen('triage');
   triage(intake.tense === 'present' ? 'present' : 'past');
   const t = document.getElementById('triage-topic');
   if (t) { t.value = intake.title; renderTemplate(); }
-}
-function intakeGoAvoided() {
-  intakeGoTemplate();
-  const el = document.getElementById('triage-result');
-  if (el) el.scrollIntoView({ behavior: 'smooth' });
-}
-
-// 4. 事実は揃っているか
-function intakeAskFacts() {
-  intake.state = 'askFacts';
-  setIntakeInput(false);
-  setIntakeChoices([
-    { label: '揃っている', onClick: function () { intakeFacts('yes'); } },
-    { label: '揃っていない', onClick: function () { intakeFacts('no'); } },
-    { label: 'わからない', onClick: function () { intakeFacts('unknown'); } }
-  ]);
-  intakeSay('system', '決めるために、事実（数字・現状・原因）は揃っていますか？');
-}
-function intakeFacts(v) {
-  intake.factsReady = v;
-  intakeSay('user', { yes: '揃っている', no: '揃っていない', unknown: 'わからない' }[v]);
-  if (v === 'yes') intakeAskDecisionQ();
-  else intakeFactsNotReady();
-}
-function intakeFactsNotReady() {
-  intake.state = 'factsNotReady';
-  setIntakeInput(false);
-  intakeSay('system', '先に現状把握レポート（Step2）で事実を共有しましょう。会議はそれからでも遅くありません。');
-  setIntakeChoices([
-    { label: '現状把握レポート（Step2）を開く', onClick: intakeGoStep2Report },
-    { label: 'それでも今すぐ会議が必要', onClick: intakeAskDecisionQ }
-  ]);
-}
-function intakeGoStep2Report() {
-  if (!intake.seriesId) return;
-  openStepEditor(intake.seriesId, 2, 'report');
-}
-
-// 5. 何を決めるか（1つの問い）
-function intakeAskDecisionQ() {
-  intake.state = 'askDecisionQ';
-  setIntakeChoices([]);
-  setIntakeInput(true, '例）発売日をいつにするか？');
-  intakeSay('system', '何を決めますか？ 1つの問いにしてください。');
-}
-// 6. 決裁者
-function intakeAskDecider() {
-  intake.state = 'askDecider';
-  setIntakeChoices([]);
-  setIntakeInput(true, '決裁者の名前を入力…');
-  intakeSay('system', 'それを決められる人（決裁者）は誰ですか？');
-}
-// v5-4 bugfix(#41): 決裁者入力を分割。複数名なら先頭を決裁者、残りは意見を出す人として追加。
-function intakeSetDecider(v) {
-  const names = intakeSplitNames(v);
-  if (!names.length) { intake.decider = v; return; }
-  intake.decider = names[0];
-  for (let i = 1; i < names.length; i++) {
-    intake.participants.push({ name: names[i], role: 'opinion' });
-    intakeSay('system', '「' + names[i] + '」さんを' + INTAKE_ROLE_LABEL.opinion + 'として追加しました。');
-  }
-}
-// 7. 意見・情報が必要な人（聞くだけはレポート送付へ）
-function intakeAskParticipants() {
-  intake.state = 'askParticipants';
-  intake.pendingName = '';
-  setIntakeInput(true, '名前を入力（意見・情報が必要な人）');
-  setIntakeChoices([{ label: '完了（まとめへ）', onClick: intakeSummary }]);
-  intakeSay('system', '意見や情報が必要な人はいますか？ 名前を入力し役割を選んでください。聞くだけの人は招集せず、レポート送付に回します。いなければ「完了」を押してください。');
-}
-function intakeAskParticipantRole() {
-  intake.state = 'partRole';
-  setIntakeInput(false);
-  setIntakeChoices([
-    { label: '意見を出す人', onClick: function () { intakeAddParticipant('opinion'); } },
-    { label: '情報を持っている人', onClick: function () { intakeAddParticipant('info'); } },
-    { label: '聞くだけ（レポート送付）', onClick: function () { intakeAddParticipant('listener'); } }
-  ]);
-  intakeSay('system', '「' + intake.pendingName + '」さんの役割を選んでください。');
-}
-function intakeAddParticipant(role) {
-  // v5-4 bugfix(#41): pendingName に複数名が含まれる場合は分割して個別登録。
-  const names = intakeSplitNames(intake.pendingName);
-  const list = names.length ? names : [intake.pendingName];
-  intakeSay('user', INTAKE_ROLE_LABEL[role]);
-  list.forEach(function (name) {
-    intake.participants.push({ name: name, role: role });
-    const note = role === 'listener'
-      ? '「' + name + '」さんは会議に招集せず、レポート送付先に回します。'
-      : '「' + name + '」さんを' + INTAKE_ROLE_LABEL[role] + 'として追加しました。';
-    intakeSay('system', note);
-  });
-  intake.pendingName = '';
-  intakeAskParticipants();
 }
 
 // 対話の要約（背景プリフィル・まとめ表示に使う）
@@ -5690,42 +5502,6 @@ function intakeSummaryText() {
   if (active.length) L.push('招集：' + active.map(function (p) { return p.name + '（' + INTAKE_ROLE_LABEL[p.role] + '）'; }).join('、'));
   if (listeners.length) L.push('レポート送付（招集しない）：' + listeners.map(function (p) { return p.name; }).join('、'));
   return L.join('\n');
-}
-
-// 8. まとめ: 会議要否・最小化サマリ（必要人数の内訳）・値札見込み・1人減の効果
-function intakeSummary() {
-  intake.state = 'summary';
-  setIntakeInput(false);
-  const needMeeting = (intake.tense === 'future') || intake.exceptions.length > 0;
-  const deciderN = intake.decider ? 1 : 0;
-  const active = intake.participants.filter(function (p) { return p.role !== 'listener'; });
-  const opinionN = active.filter(function (p) { return p.role === 'opinion'; }).length;
-  const infoN = active.filter(function (p) { return p.role === 'info'; }).length;
-  const listeners = intake.participants.filter(function (p) { return p.role === 'listener'; });
-  const memberCount = deciderN + active.length;
-  const rate = loadRate();
-  const perPerson = Math.round(30 * rate / 60); // 1人30分あたりの値札
-  const est = memberCount * perPerson;
-  const L = [];
-  L.push('【まとめ】');
-  L.push('会議要否：' + (needMeeting ? '判断セッション（会議）を推奨' : '会議は不要（レポート／チャットで完了）'));
-  // 最小化サマリ（この判断に本当に必要な人数を、聞くだけの人と分けて明示する）
-  if (memberCount) {
-    let line = 'この判断に必要なのは ' + memberCount + '人（決める人' + deciderN + '・意見' + opinionN + '・情報' + infoN + '）です。';
-    if (listeners.length) line += '聞くだけの ' + listeners.length + '人 はレポート送付に回します。';
-    L.push(line);
-  } else {
-    L.push('この判断に必要な人（決める人・意見・情報）はまだ設定されていません。');
-  }
-  L.push('値札見込み：¥' + est.toLocaleString() + '（' + memberCount + '人 × 30分 × 単価¥' + rate.toLocaleString() + '/時）');
-  if (memberCount > 0) {
-    L.push('ヒント：1人減らすと ¥' + perPerson.toLocaleString() + '→ 節約できます。本当に「決める・意見・情報」に必要な人だけに絞りましょう。');
-  }
-  intakeSay('system', L.join('\n'));
-  setIntakeChoices([
-    { label: '判断セッション設計へ進む', onClick: intakeToDesign },
-    { label: '会議なしで進める', onClick: intakeConcludeNoMeetingFromSummary }
-  ]);
 }
 
 // まとめ → 判断セッション設計へプリフィル（判断する問い・背景=要約・参加者・案件紐づけ）
@@ -5759,16 +5535,6 @@ function intakeToDesign() {
   renderDesign();
   renderPricetag();
   renderInvite();
-}
-function intakeConcludeNoMeetingFromSummary() {
-  intake.state = 'doneNoMeeting';
-  setIntakeInput(false);
-  intakeSay('system', '会議なしで進めます。決まったことは会議外Decisionとして登録するか、レポート（Step2）で共有しましょう。案件は下書きとして残しています。');
-  setIntakeChoices([
-    { label: '現状把握レポート（Step2）を開く', onClick: intakeGoStep2Report },
-    { label: 'キャンバスで案件を見る', onClick: function () { showScreen('a3'); renderA3(); } },
-    { label: '対話をやり直す', onClick: intakeStart }
-  ]);
 }
 
 // ==================================================================
@@ -5865,9 +5631,13 @@ function intakeMeetingInvite() {
     { label: '新しい案件を始める', onClick: intakeStart }
   ]);
 }
-// まとめ出力後に対話を続ける（招集メンバーを調整し、再度まとめボタンで文面を再生成できる）。
+// まとめ出力後に対話を続ける（AI対話を再開し、再度まとめボタンで文面を再生成できる）。
+// v6-4(#46): ルールベースの参加者質問へは戻さず、自由入力のAI対話を続ける。
 function intakeResumeAfterInvite() {
-  intakeAskParticipants();
+  intake.state = 'ai';
+  intakeSay('system', '続けて修正したい点があれば教えてください。整い次第、もう一度「📋 会議招集まとめ」で文面を作り直せます。');
+  setIntakeChoices([]);
+  setIntakeInput(true, '自由に入力…');
 }
 function intakeCopyInvite(pre, btn) {
   const txt = pre.textContent;
@@ -6266,8 +6036,8 @@ function renderHorensoRef() {
 // ==================================================================
 // v5-2 AIインテーク: LLM ON（既定）時は /api/v1/intake で自由対話。
 //   包括同意は対話カード上のインライン通知（非ブロッキング）。
-//   タイムアウト/失敗時、または「AIを使わず進める」選択時は
-//   v5-1 のルールベースツリーへシームレスにフォールバック（対話は継続）。
+//   v6-4(#46): タイムアウト/失敗時はルールベースへフォールバックせず、
+//   エラーメッセージ＋「🔄 再試行」を表示する（履歴・state・userTurnsは保持）。
 // ==================================================================
 
 // 会話履歴を {role:'user'|'assistant', text} 配列にし、合計32KBに収まるよう直近へ間引く。
@@ -6309,12 +6079,14 @@ async function intakeAiTurn() {
   const resp = await intakeAiFetch(cfg.endpoint, { messages, state });
   intake.aiBusy = false;
   if (!resp || !resp.ok || !resp.result || typeof resp.result.reply !== 'string') {
-    intakeAiFallback();
+    // v6-4(#46): ルールベースへフォールバックせず、エラー＋再試行を提示（履歴・state・userTurnsは保持）。
+    intakeShowAiError();
     return;
   }
+  intake.state = 'ai';
   const r = resp.result;
   intakeSay('system', r.reply);
-  // actions を順に適用。ガード等でルールベースへ引き継いだ場合(true)はAIの選択肢描画を抑止する。
+  // actions を順に適用。ガード等で直接聞き直しに引き継いだ場合(true)はAIの選択肢描画を抑止する。
   let handedOff = false;
   if (Array.isArray(r.actions)) {
     for (let i = 0; i < r.actions.length; i++) {
@@ -6407,26 +6179,26 @@ function intakeApplyAction(a, replyText) {
   return false;
 }
 
-// v5-4 bugfix(#41): 自己参照ガード発火時。ルールベースへ引き継ぎ「何を決めるか」を直接聞き直す。
+// v5-4 bugfix(#41) / v6-4(#46): 自己参照ガード発火時。ルールベースツリーは復活させず、
+//   固定の聞き直しメッセージを1つ出して自由入力のAI対話を続ける。
 function intakeGuardDecisionQuestion() {
-  intake.aiMode = 'rule';
-  intakeRenderNotice();
-  intakeAskDecisionQ();
+  intake.state = 'ai';
+  intakeSay('system', 'では、この会議で判断すべき問いを一言で教えてください。');
+  setIntakeChoices([]);
+  setIntakeInput(true, '例）発売日をいつにするか？');
 }
 
-// フォールバック: 会話を壊さずルールベースツリーへ切替（対話は継続）。
-function intakeAiFallback() {
-  intake.aiMode = 'rule';
-  intakeRenderNotice();
-  intakeSay('system', '（AIに接続できないため、通常の質問形式に切り替えます。）');
-  let lastUser = null;
-  for (let i = intake.log.length - 1; i >= 0; i--) { if (intake.log[i].role === 'user') { lastUser = intake.log[i]; break; } }
-  if (!intake.seriesId) {
-    if (lastUser) { intake.state = 'askName'; intakeSetName(lastUser.text); }
-    else intakeAskName();
-  } else {
-    intakeAskWant();
-  }
+// v6-4(#46): AI接続失敗時のエラー表示＋再試行。対話履歴・intake state・userTurns は保持する。
+function intakeShowAiError() {
+  intake.state = 'aiError';
+  setIntakeInput(false);
+  intakeSay('system', '⚠️ AIに接続できません。接続を確認して、もう一度お試しください。');
+  setIntakeChoices([{ label: '🔄 再試行', onClick: intakeRetryAi }]);
+}
+// 直前と同じAIターンを再実行する（新たなユーザー発話は積まない）。
+function intakeRetryAi() {
+  if (!intake || intake.aiBusy) return;
+  intakeAiTurn();
 }
 
 // ---------- 初期化 ----------
