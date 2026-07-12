@@ -585,7 +585,7 @@
       <span class="flow-step">案件登録</span>
       <span class="flow-step">案件トリアージ</span>
       <span class="flow-step">報連相ナビ</span>
-      <span class="flow-step is-todo">判断準備チェック<small>（近日）</small></span>
+      <span class="flow-step">判断準備チェック</span>
       <span class="flow-step">判断セッション設計</span>
       <span class="flow-step">思考のコックピット</span>
       <span class="flow-step">決定事項と申し送り</span>
@@ -1873,6 +1873,19 @@ const STATUS_LABEL = {
 const STEP_REPORT_TITLE = { 2: '現状把握レポート', 4: 'なぜなぜ分析レポート', 7: '効果確認レポート' };
 // 事実ゲート: 判断Step ← 直前の事実Step
 const FACT_GATE = { 3: 2, 5: 4, 8: 7 };
+// 判断準備チェック(#28): 事実Stepの成果物を「判断可能な品質か」で確認するセルフチェック。
+// 「入力済み」ではなく「次の判断に使える品質か」を問う。全項目クリアで status='ready' に遷移可。
+const READY_CHECK_STEPS = [2, 4, 7]; // 事実Step（現状把握・要因解析・効果確認）
+const READY_CHECKLIST = [
+  { key: 'scope',       label: '対象範囲が明確' },
+  { key: 'numbers',     label: '数字または頻度がある' },
+  { key: 'period',      label: '対象期間がある' },
+  { key: 'compare',     label: '正常と異常が比較されている' },
+  { key: 'source',      label: '情報源がある' },
+  { key: 'factOpinion', label: '事実と意見が分離されている' },
+  { key: 'updated',     label: '最終更新日が分かる' },
+  { key: 'sufficient',  label: '判断に必要な事実が揃っている' }
+];
 const A3_CHAR_LIMIT = 1500; // A3・1枚メーターの目安上限
 
 function isQuestionForm(s) {
@@ -2242,11 +2255,12 @@ function renderFactGate() {
   const factStep = FACT_GATE[stepVal];
   const s = getSeries(sid);
   const st = s && s.steps && s.steps[String(factStep)];
-  if (st && st.status === 'done') return; // 事実Stepが埋まっていれば警告不要
+  // 品質基準ゲート: 事実Stepが「判断可能(ready)」または「完了(done)」に達していれば警告不要。
+  if (st && (st.status === 'ready' || st.status === 'done')) return;
   const div = document.createElement('div');
   div.className = 'alert warn';
   div.id = 'fact-gate-warn';
-  div.textContent = `Step${stepVal}（${A3_STEPS[stepVal]}）の判断会議を設計しています。事実の Step${factStep}（${A3_STEPS[factStep]}）のレポートが未完了です。事実の説明に会議時間を使うことになります。先にレポートで共有しませんか？`;
+  div.textContent = `Step${stepVal}（${A3_STEPS[stepVal]}）の判断セッションを設計しています。判断の材料となる事実 Step${factStep}（${A3_STEPS[factStep]}）が「判断可能（ready）」に達しておらず未完了です（判断準備不足）。「入力済み」ではなく「次の判断に使える品質か」を先に確認しませんか？事実の説明に会議時間を使わずに済みます。`;
   const btn = document.createElement('button');
   btn.className = 'ghost small';
   btn.style.marginTop = '8px';
@@ -3876,6 +3890,11 @@ function buildStepDetail(s, i, meetings, actions) {
   }
   box.appendChild(ctrl);
 
+  // 判断準備チェック（#28）: 事実Step(2/4/7)のみ。品質チェックリスト＋Evidence記録。
+  if (READY_CHECK_STEPS.indexOf(i) >= 0) {
+    box.appendChild(buildReadinessSection(s, i, status));
+  }
+
   // 成果物一覧（複数紐づけ）
   const aul = document.createElement('ul');
   aul.className = 'a3-artifacts';
@@ -3961,6 +3980,15 @@ function onStepStatusChange(sid, stepNo, toStatus) {
   const cur = s && s.steps && s.steps[String(stepNo)];
   if (!cur) return;
   if ((cur.status || 'todo') === toStatus) return;
+  // 事実Stepを ready にするときは品質チェック全項目を要求（未達は遷移させず不足を提示）。
+  if (toStatus === 'ready' && READY_CHECK_STEPS.indexOf(Number(stepNo)) >= 0) {
+    const state = readyChecklistState(cur);
+    if (!state.complete) {
+      window.alert('判断可能（ready）にするには品質チェックの全項目が必要です。\n不足項目: ' + state.missing.join('、') + '\n下の「判断準備チェック」で確認してください。');
+      renderA3(); // セレクトを元の状態へ戻す
+      return;
+    }
+  }
   const reason = window.prompt(
     'Step' + stepNo + ' の状態を「' + (STATUS_LABEL[cur.status] || cur.status) + '」から「' +
     STATUS_LABEL[toStatus] + '」へ変更します。変更理由（任意）:', '');
@@ -3990,6 +4018,202 @@ function backToPrevStep(sid, stepNo) {
   if (!reason.trim()) { window.alert('前のStepに戻るには理由の入力が必要です。'); return; }
   setStepStatus(sid, prev, 'reopened', 'Step' + stepNo + 'から差し戻し: ' + reason.trim());
   renderA3();
+}
+
+// ---------- 判断準備チェック（#28）: 品質チェックリスト＋Evidence ----------
+// 事実Stepの成果物を「判断可能な品質か」で自己確認する。全項目クリアで ready へ遷移可。
+function readyChecklistState(st) {
+  const saved = (st && st.readyChecklist) || {};
+  const checked = [], missing = [];
+  READY_CHECKLIST.forEach(item => {
+    if (saved[item.key]) checked.push(item.label);
+    else missing.push(item.label);
+  });
+  return { checked, missing, complete: missing.length === 0 };
+}
+function evidenceForStep(sid, stepNo) {
+  return loadEvidence().filter(e => e.seriesId === sid && String(e.stepNo) === String(stepNo));
+}
+// チェックボックスの ON/OFF を Step に永続化し、不足表示とボタン活性を更新（全体再描画はしない）。
+function toggleReadyCheck(sid, stepNo, key, checked) {
+  const list = loadSeries();
+  const s = list.find(x => x.id === sid);
+  const st = s && s.steps && s.steps[String(stepNo)];
+  if (!st) return;
+  if (!st.readyChecklist) st.readyChecklist = {};
+  st.readyChecklist[key] = !!checked;
+  saveSeries(list);
+  updateReadinessView(sid, stepNo);
+}
+function updateReadinessView(sid, stepNo) {
+  const s = getSeries(sid);
+  const st = s && s.steps && s.steps[String(stepNo)];
+  if (!st) return;
+  const state = readyChecklistState(st);
+  const miss = document.getElementById('a3-ready-missing-' + sid + '-' + stepNo);
+  if (miss) {
+    miss.className = 'a3-ready-missing ' + (state.complete ? 'ok' : 'warn');
+    miss.textContent = state.complete
+      ? '全項目チェック済み。判断可能（ready）にできます。'
+      : ('不足項目（' + state.missing.length + '）: ' + state.missing.join('、'));
+  }
+  const btn = document.getElementById('a3-ready-btn-' + sid + '-' + stepNo);
+  if (btn) btn.disabled = !state.complete;
+}
+// 全項目クリアなら ready へ遷移。未クリアなら不足項目を明示してブロックし、再調査へ誘導。
+function tryMakeStepReady(sid, stepNo) {
+  const s = getSeries(sid);
+  const st = s && s.steps && s.steps[String(stepNo)];
+  if (!st) return;
+  const state = readyChecklistState(st);
+  if (!state.complete) {
+    window.alert('判断可能（ready）にするには品質チェックの全項目が必要です。\n不足項目: ' + state.missing.join('、') + '\n不足があれば「再調査に戻す」で追加調査してください。');
+    return;
+  }
+  setStepStatus(sid, stepNo, 'ready', '品質チェック全項目クリア（判断準備完了）');
+  renderA3();
+}
+// 品質不足のStepを再調査(reinvestigate)へ戻す（不足項目を提示）。
+function reinvestigateStep(sid, stepNo) {
+  const s = getSeries(sid);
+  const st = s && s.steps && s.steps[String(stepNo)];
+  if (!st) return;
+  const state = readyChecklistState(st);
+  const missTxt = state.missing.length ? ('不足: ' + state.missing.join('、')) : '不足項目なし';
+  const reason = window.prompt('Step' + stepNo + '（' + A3_STEPS[stepNo] + '）を再調査に戻します。\n' + missTxt + '\n変更理由（任意）:', '');
+  if (reason === null) return;
+  setStepStatus(sid, stepNo, 'reinvestigate', (reason && reason.trim()) ? reason.trim() : ('再調査: ' + missTxt));
+  renderA3();
+}
+// Evidence（判断根拠）として 情報源・as-of日付 を記録（#23 addEvidence）。
+function saveStepEvidence(sid, stepNo) {
+  const srcEl = document.getElementById('a3-evidence-source-' + sid + '-' + stepNo);
+  const asofEl = document.getElementById('a3-evidence-asof-' + sid + '-' + stepNo);
+  const source = (srcEl && srcEl.value.trim()) || '';
+  const asOf = (asofEl && asofEl.value) || null;
+  if (!source && !asOf) { window.alert('情報源または as-of日付を入力してください。'); return; }
+  addEvidence({ seriesId: sid, stepNo: String(stepNo), summary: source, source, asOf });
+  renderA3();
+}
+// 事実Step用の「判断準備チェック」セクションを組み立てる。
+function buildReadinessSection(s, i, status) {
+  const st = (s.steps && s.steps[String(i)]) || { status: 'todo' };
+  const wrap = document.createElement('div');
+  wrap.className = 'a3-readiness';
+  wrap.id = 'a3-readiness-' + s.id + '-' + i;
+  wrap.style.cssText = 'margin:8px 0; padding:8px 10px; border:1px solid var(--line,#ddd); border-radius:8px; background:rgba(0,0,0,0.02)';
+
+  const head = document.createElement('div');
+  head.className = 'a3-readiness-head';
+  const hb = document.createElement('b');
+  hb.textContent = '判断準備チェック（品質の確認）';
+  head.appendChild(hb);
+  const note = document.createElement('span');
+  note.className = 'note';
+  note.style.marginLeft = '8px';
+  note.textContent = '「入力済み」ではなく「次の判断に使える品質か」を確認します。';
+  head.appendChild(note);
+  wrap.appendChild(head);
+
+  // 品質チェックリスト（チェック式・保存）
+  const ul = document.createElement('ul');
+  ul.className = 'a3-ready-checklist plain';
+  const saved = st.readyChecklist || {};
+  READY_CHECKLIST.forEach(item => {
+    const li = document.createElement('li');
+    const lab = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'a3-ready-check';
+    cb.dataset.key = item.key;
+    cb.checked = !!saved[item.key];
+    cb.onchange = () => toggleReadyCheck(s.id, i, item.key, cb.checked);
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(' ' + item.label));
+    li.appendChild(lab);
+    ul.appendChild(li);
+  });
+  wrap.appendChild(ul);
+
+  // 不足項目の明示 / 完了メッセージ
+  const state = readyChecklistState(st);
+  const miss = document.createElement('div');
+  miss.id = 'a3-ready-missing-' + s.id + '-' + i;
+  miss.className = 'a3-ready-missing ' + (state.complete ? 'ok' : 'warn');
+  miss.textContent = state.complete
+    ? '全項目チェック済み。判断可能（ready）にできます。'
+    : ('不足項目（' + state.missing.length + '）: ' + state.missing.join('、'));
+  wrap.appendChild(miss);
+
+  // ボタン: 判断可能にする / 再調査に戻す
+  const btns = document.createElement('div');
+  btns.className = 'a3-ready-btns';
+  btns.style.margin = '6px 0';
+  if (status !== 'ready' && status !== 'done') {
+    const rb = document.createElement('button');
+    rb.className = 'primary small a3-ready-btn';
+    rb.id = 'a3-ready-btn-' + s.id + '-' + i;
+    rb.dataset.step = String(i);
+    rb.textContent = '判断可能（ready）にする';
+    rb.disabled = !state.complete;
+    rb.onclick = () => tryMakeStepReady(s.id, i);
+    btns.appendChild(rb);
+  }
+  const ib = document.createElement('button');
+  ib.className = 'ghost small a3-reinvestigate-btn';
+  ib.dataset.step = String(i);
+  ib.textContent = '再調査に戻す';
+  ib.onclick = () => reinvestigateStep(s.id, i);
+  btns.appendChild(ib);
+  wrap.appendChild(btns);
+
+  // Evidence（情報源・as-of日付）の記録欄＋一覧
+  const ev = document.createElement('div');
+  ev.className = 'a3-evidence';
+  const evh = document.createElement('div');
+  evh.className = 'note';
+  evh.textContent = 'Evidence（判断根拠）: 情報源と as-of日付 を記録';
+  ev.appendChild(evh);
+  const row = document.createElement('div');
+  row.className = 'a3-evidence-inputs';
+  row.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:4px 0';
+  const src = document.createElement('input');
+  src.type = 'text';
+  src.className = 'a3-evidence-source';
+  src.id = 'a3-evidence-source-' + s.id + '-' + i;
+  src.placeholder = '情報源（例: 生産管理システム／〇〇レポート）';
+  src.style.flex = '1 1 220px';
+  const asof = document.createElement('input');
+  asof.type = 'date';
+  asof.className = 'a3-evidence-asof';
+  asof.id = 'a3-evidence-asof-' + s.id + '-' + i;
+  const save = document.createElement('button');
+  save.className = 'ghost small a3-evidence-save';
+  save.dataset.step = String(i);
+  save.textContent = 'Evidenceを保存';
+  save.onclick = () => saveStepEvidence(s.id, i);
+  row.append(src, asof, save);
+  ev.appendChild(row);
+  const evul = document.createElement('ul');
+  evul.className = 'a3-evidence-list plain';
+  evul.id = 'a3-evidence-list-' + s.id + '-' + i;
+  const evs = evidenceForStep(s.id, i);
+  if (evs.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = '（Evidenceはまだありません）';
+    evul.appendChild(li);
+  } else {
+    evs.forEach(e => {
+      const li = document.createElement('li');
+      li.textContent = '📎 ' + (e.source || e.summary || '(情報源未記入)') + (e.asOf ? '（as-of ' + e.asOf + '）' : '');
+      evul.appendChild(li);
+    });
+  }
+  ev.appendChild(evul);
+  wrap.appendChild(ev);
+
+  return wrap;
 }
 
 // どのStepにもアクションを追加できる（成果物 type=action として紐づけ）。
