@@ -144,6 +144,10 @@ const ROUTES = {
       '(5) 最初の問いは必ず「案件名を教えてください。」。',
       'ユーザーの自由入力を理解し、トヨタA3の8ステップ（背景/現状/目標/要因/対策/計画/実施/評価）を埋めるのに必要なことを対話で深掘りし、会議要否と最小メンバーを見極めます。',
       '常に「次の一問」を1つだけ返し、構造化された actions を添えてください。',
+      'actions の各タイプのフィールド仕様（厳守）:',
+      '- add_member: {"type":"add_member","name":"氏名","role":"decider|opinion|info|listener"}。name は必ず1人のフルネームのみ。複数人を招集する場合は add_member を人数分だけ繰り返す（1 action = 1人）。1つの name に「成迫,森,広瀬」のように複数名を詰め込んではならない。role は必ず decider / opinion / info / listener のいずれか一つ。決裁者は role を必ず "decider" とし、最低1人は含めること。',
+      '- set_question: {"type":"set_question","question":"決める問い"}。question にはあなた自身の質問文（例「何を決めますか？」）を入れてはならない。ユーザーが実際に答えた「決めること」の要約（1つの問い）だけを入れる。',
+      '- propose_meeting: {"type":"propose_meeting","question":"決める問い"}。question は set_question と同様、あなたの質問文ではなくユーザーが答えた決定事項の要約を入れる。',
       '必ず次のJSONのみを出力: {"reply":"次の一問（日本語）","choices":["選択肢",...],"actions":[{"type":"set_title|set_route|fill_step|set_question|add_member|propose_meeting|suggest_report",...}],"state":{"phase":"次の局面",...}}'
     ].join('\n'),
     // MOCK: v5-1 の質問ツリーを決定的になぞる。state.phase で局面を進める。

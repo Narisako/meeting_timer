@@ -5211,6 +5211,38 @@ const INTAKE_WANT_LABEL = {
 };
 const INTAKE_ROLE_LABEL = { opinion: '意見を出す人', info: '情報を持っている人', listener: '聞くだけ（レポート送付）' };
 
+// v5-4 bugfix(#41): 複数名一括入力を分割する。区切りは , 、 ， / と改行。trim・空要素除去。
+function intakeSplitNames(str) {
+  return String(str == null ? '' : str)
+    .split(/[,、，\/／\n\r]+/)
+    .map(function (s) { return s.trim(); })
+    .filter(function (s) { return s.length > 0; });
+}
+// v5-4 bugfix(#41): AIが返す role の表記ゆれを decider|opinion|info|listener に正規化。未知は opinion。
+function intakeNormalizeRole(role) {
+  const r = String(role == null ? '' : role).trim().toLowerCase();
+  if (/decider|decision|decide|approver|決裁|決める|決定権|決定者|裁量/.test(r)) return 'decider';
+  if (/listen|傍聴|聞くだけ|report|レポート|送付/.test(r)) return 'listener';
+  if (/info|情報/.test(r)) return 'info';
+  if (/opinion|意見/.test(r)) return 'opinion';
+  return 'opinion';
+}
+// v5-4 bugfix(#41): 自己参照ガード。set_question/propose_meeting の question が
+//   同ターンのAI自身の質問文(reply)と一致・酷似する場合 true（＝採用しない）。
+function intakeIsSelfReference(question, replyText) {
+  const norm = function (s) {
+    return String(s == null ? '' : s).replace(/\s+/g, '').replace(/[?？!！。、,，．.・]/g, '').toLowerCase();
+  };
+  const q = norm(question);
+  const rp = norm(replyText);
+  if (!q) return false;
+  if (rp && q === rp) return true;
+  if (rp && q.length >= 6 && (rp.indexOf(q) !== -1 || q.indexOf(rp) !== -1)) return true;
+  // AI質問特有のメタ表現をそのまま question に入れているケース（決定事項の要約なら現れない）
+  if (/何を(決め|きめ)|決めますか|1つの問い|ひとつの問い|一つの問い/.test(String(question || ''))) return true;
+  return false;
+}
+
 let intake = null;
 
 function newIntakeState() {
@@ -5322,7 +5354,7 @@ function intakeHandleText(v) {
   switch (intake.state) {
     case 'askName': intakeSetName(v); break;
     case 'askDecisionQ': intake.decisionQuestion = v; intakeAskDecider(); break;
-    case 'askDecider': intake.decider = v; intakeAskParticipants(); break;
+    case 'askDecider': intakeSetDecider(v); intakeAskParticipants(); break;
     case 'askParticipants': intake.pendingName = v; intakeAskParticipantRole(); break;
     default: break;
   }
@@ -5466,6 +5498,16 @@ function intakeAskDecider() {
   setIntakeInput(true, '決裁者の名前を入力…');
   intakeSay('system', 'それを決められる人（決裁者）は誰ですか？');
 }
+// v5-4 bugfix(#41): 決裁者入力を分割。複数名なら先頭を決裁者、残りは意見を出す人として追加。
+function intakeSetDecider(v) {
+  const names = intakeSplitNames(v);
+  if (!names.length) { intake.decider = v; return; }
+  intake.decider = names[0];
+  for (let i = 1; i < names.length; i++) {
+    intake.participants.push({ name: names[i], role: 'opinion' });
+    intakeSay('system', '「' + names[i] + '」さんを' + INTAKE_ROLE_LABEL.opinion + 'として追加しました。');
+  }
+}
 // 7. 意見・情報が必要な人（聞くだけはレポート送付へ）
 function intakeAskParticipants() {
   intake.state = 'askParticipants';
@@ -5485,14 +5527,18 @@ function intakeAskParticipantRole() {
   intakeSay('system', '「' + intake.pendingName + '」さんの役割を選んでください。');
 }
 function intakeAddParticipant(role) {
-  const name = intake.pendingName;
-  intake.participants.push({ name: name, role: role });
+  // v5-4 bugfix(#41): pendingName に複数名が含まれる場合は分割して個別登録。
+  const names = intakeSplitNames(intake.pendingName);
+  const list = names.length ? names : [intake.pendingName];
   intakeSay('user', INTAKE_ROLE_LABEL[role]);
-  const note = role === 'listener'
-    ? '「' + name + '」さんは会議に招集せず、レポート送付先に回します。'
-    : '「' + name + '」さんを' + INTAKE_ROLE_LABEL[role] + 'として追加しました。';
+  list.forEach(function (name) {
+    intake.participants.push({ name: name, role: role });
+    const note = role === 'listener'
+      ? '「' + name + '」さんは会議に招集せず、レポート送付先に回します。'
+      : '「' + name + '」さんを' + INTAKE_ROLE_LABEL[role] + 'として追加しました。';
+    intakeSay('system', note);
+  });
   intake.pendingName = '';
-  intakeSay('system', note);
   intakeAskParticipants();
 }
 
@@ -5642,9 +5688,15 @@ async function intakeAiTurn() {
   }
   const r = resp.result;
   intakeSay('system', r.reply);
-  if (Array.isArray(r.actions)) r.actions.forEach(a => { try { intakeApplyAction(a); } catch (e) {} });
+  // actions を順に適用。ガード等でルールベースへ引き継いだ場合(true)はAIの選択肢描画を抑止する。
+  let handedOff = false;
+  if (Array.isArray(r.actions)) {
+    for (let i = 0; i < r.actions.length; i++) {
+      try { if (intakeApplyAction(r.actions[i], r.reply)) { handedOff = true; break; } } catch (e) {}
+    }
+  }
   intake.aiState = (r.state && typeof r.state === 'object') ? r.state : intake.aiState;
-  intakeRenderAiChoices(r.choices);
+  if (!handedOff) intakeRenderAiChoices(r.choices);
 }
 
 // AI応答の choices を選択肢ボタンにする。自由入力も併用できるよう入力欄は表示のまま。
@@ -5660,8 +5712,9 @@ function intakeAiChoice(label) {
 }
 
 // AI応答の actions を既存ヘルパへ適用する（series/title/問い/メンバー/設計プリフィル等）。
-function intakeApplyAction(a) {
-  if (!a || typeof a.type !== 'string') return;
+// replyText は同ターンのAIの発話（自己参照ガード用）。戻り値 true はルールベースへ引き継いだことを示す。
+function intakeApplyAction(a, replyText) {
+  if (!a || typeof a.type !== 'string') return false;
   switch (a.type) {
     case 'set_title': {
       if (a.title) intake.title = a.title;
@@ -5680,15 +5733,33 @@ function intakeApplyAction(a) {
     case 'set_route':
       if (a.tense) intake.tense = a.tense;
       break;
-    case 'set_question':
-      intake.decisionQuestion = a.question || '';
+    case 'set_question': {
+      // v5-4 bugfix(#41): 自己参照ガード。AIが自分の質問文を question に入れてきたら採用せず直接聞き直す。
+      const q = a.question || '';
+      if (q && intakeIsSelfReference(q, replyText)) {
+        intakeGuardDecisionQuestion();
+        return true;
+      }
+      intake.decisionQuestion = q;
       break;
-    case 'add_member':
-      if (a.role === 'decider') intake.decider = a.name || '';
-      else if (a.name) intake.participants.push({ name: a.name, role: a.role || 'opinion' });
+    }
+    case 'add_member': {
+      // v5-4 bugfix(#41): name の複数名分割 + role の表記ゆれ正規化。
+      const role = intakeNormalizeRole(a.role);
+      const names = intakeSplitNames(a.name);
+      if (role === 'decider') {
+        if (names.length) {
+          intake.decider = names[0];
+          for (let i = 1; i < names.length; i++) intake.participants.push({ name: names[i], role: 'opinion' });
+        }
+      } else {
+        names.forEach(function (nm) { intake.participants.push({ name: nm, role: role }); });
+      }
       break;
+    }
     case 'propose_meeting':
-      if (a.question) intake.decisionQuestion = a.question;
+      // v5-4 bugfix(#41): question が自己参照でなければ採用（既存の決める問いは温存する）。
+      if (a.question && !intakeIsSelfReference(a.question, replyText)) intake.decisionQuestion = a.question;
       intakeToDesign();
       break;
     case 'suggest_report':
@@ -5705,6 +5776,14 @@ function intakeApplyAction(a) {
     default:
       break;
   }
+  return false;
+}
+
+// v5-4 bugfix(#41): 自己参照ガード発火時。ルールベースへ引き継ぎ「何を決めるか」を直接聞き直す。
+function intakeGuardDecisionQuestion() {
+  intake.aiMode = 'rule';
+  intakeRenderNotice();
+  intakeAskDecisionQ();
 }
 
 // フォールバック: 会話を壊さずルールベースツリーへ切替（対話は継続）。
