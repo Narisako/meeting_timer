@@ -660,14 +660,32 @@
 <section id="screen-dash" class="screen">
   <div class="card">
     <h2>フローダッシュボード</h2>
-    <p class="note">使った額ではなく、取り返した時間とお金を数えます。</p>
+    <p class="note">節約額ではなく、案件の流れ（意思決定と実行の速さ）と停滞を主役に見ます。データが無い指標は「—」で表示します。</p>
+    <h3 style="margin:14px 0 4px">案件の流れ</h3>
+    <p class="note">案件が「作成→判断→実行→成果」までどれだけ速く流れ、どこで停滞しているかを表します。</p>
     <div class="stat-grid">
-      <div class="stat gold"><div class="v" id="dash-total-saved">¥0</div><div class="k">累計節約額（回避＋短縮）</div></div>
+      <div class="stat"><div class="v" id="dash-lead-time">—</div><div class="k">案件リードタイム（作成→成果確定）</div></div>
+      <div class="stat"><div class="v" id="dash-decision-wait">—</div><div class="k">判断待ち時間（Step ready→Decision）</div></div>
+      <div class="stat"><div class="v" id="dash-decision-action-gap">—</div><div class="k">DecisionからAction開始まで</div></div>
+      <div class="stat"><div class="v" id="dash-original-due">—</div><div class="k">当初期限内完了率（当初期限基準）</div></div>
+      <div class="stat"><div class="v" id="dash-redecision-rate">—</div><div class="k">再判断率（再オープン後の再Decision）</div></div>
+      <div class="stat"><div class="v" id="dash-goal-achievement">—</div><div class="k">目標達成率（Step7の目標対実績）</div></div>
+      <div class="stat"><div class="v red" id="dash-stalled-series">0件</div><div class="k">停滞案件数</div></div>
+      <div class="stat"><div class="v red" id="dash-unprepared-decision">0件</div><div class="k">判断準備不足件数</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>会議削減効果（参考換算）</h2>
+    <p class="note">回避・短縮した会議を、解放した会議人時・業務時間と参考換算額で表します。<b>※参考換算額は実際の現金支出の削減額ではありません（社内レート×時間の目安です）。</b></p>
+    <div class="stat-grid">
+      <div class="stat gold"><div class="v" id="dash-total-saved">¥0</div><div class="k">参考換算額（累計・回避＋短縮）</div></div>
+      <div class="stat"><div class="v" id="dash-person-hours">0人時</div><div class="k">回避した会議人時（人×時間）</div></div>
+      <div class="stat"><div class="v" id="dash-saved-min">0分</div><div class="k">解放した業務時間（延べ）</div></div>
       <div class="stat"><div class="v" id="dash-avoided-count">0件</div><div class="k">開かずに済ませた会議</div></div>
-      <div class="stat"><div class="v" id="dash-avoided-cost">¥0</div><div class="k">会議回避による節約</div></div>
+      <div class="stat"><div class="v" id="dash-avoided-cost">¥0</div><div class="k">会議回避の参考換算額</div></div>
       <div class="stat"><div class="v" id="dash-held-count">0件</div><div class="k">開いた会議</div></div>
-      <div class="stat"><div class="v" id="dash-shorten-cost">¥0</div><div class="k">予定より早く終えた節約</div></div>
-      <div class="stat"><div class="v" id="dash-saved-min">0分</div><div class="k">取り返した延べ時間</div></div>
+      <div class="stat"><div class="v" id="dash-shorten-cost">¥0</div><div class="k">早期終了の参考換算額</div></div>
       <div class="stat"><div class="v" id="dash-spared">0人</div><div class="k">会議に呼ばずに済んだ人（延べ）</div></div>
       <div class="stat"><div class="v" id="dash-decisions">0件</div><div class="k">記録された決定</div></div>
     </div>
@@ -678,7 +696,7 @@
 
   <div class="card">
     <h2>速さの指標</h2>
-    <p class="note">評価は「会議時間の削減%」ではなく、意思決定と実行がどれだけ速くなったか。データが無い指標は「—」で表示します。</p>
+    <p class="note">意思決定と実行の速さ・質を会議単位で見る補助指標です。データが無い指標は「—」で表示します。</p>
     <div class="stat-grid">
       <div class="stat"><div class="v" id="dash-action-completion">—</div><div class="k">アクション完了率</div></div>
       <div class="stat"><div class="v" id="dash-ontime-completion">—</div><div class="k">期限内完了率</div></div>
@@ -686,7 +704,6 @@
       <div class="stat"><div class="v" id="dash-extension-rate">—</div><div class="k">会議の延長率</div></div>
       <div class="stat"><div class="v" id="dash-within30-rate">—</div><div class="k">30分以内終了率</div></div>
       <div class="stat"><div class="v" id="dash-closed-series">0件</div><div class="k">成果確定したA3案件数</div></div>
-      <div class="stat"><div class="v" id="dash-lead-time">—</div><div class="k">案件リードタイム（作成→成果確定）</div></div>
       <div class="stat"><div class="v red" id="dash-overdue-actions">0件</div><div class="k">期限超過アクション件数</div></div>
       <div class="stat"><div class="v" id="dash-top-carry-cause">—</div><div class="k">持ち越し原因トップ</div></div>
     </div>
@@ -4796,6 +4813,9 @@ function renderDash() {
   document.getElementById('dash-saved-min').textContent = stats.savedMin.toLocaleString() + '分';
   document.getElementById('dash-spared').textContent = stats.spared + '人';
   document.getElementById('dash-decisions').textContent = stats.decisions + '件';
+  // 参考換算の「回避した会議人時（人×時間）」＝ 解放した延べ分を人時へ言い換え（導出はそのまま）
+  document.getElementById('dash-person-hours').textContent =
+    (Math.round((stats.savedMin || 0) / 60 * 10) / 10) + '人時';
   renderDashMetrics();
 }
 // 「—」表示に統一する整形ヘルパ（NaN・0除算を出さない）
@@ -4803,8 +4823,25 @@ function fmtPct(r) { return r == null ? '—' : Math.round(r * 100) + '%'; }
 function fmtCount(n) { return (n || 0) + '件'; }
 function fmtLeadDays(d) { return d == null ? '—' : (Math.round(d * 10) / 10) + '日'; }
 function fmtTopCause(t) { return t ? (t.cause + '（' + t.count + '件）') : '—'; }
+// 経過時間（ms）を「—」/「X時間」/「X日」へ整形（24時間未満は時間、以上は日）
+function fmtDurationMs(ms) {
+  if (ms == null) return '—';
+  const h = ms / 3600000;
+  if (h < 24) return (Math.round(h * 10) / 10) + '時間';
+  return (Math.round(h / 24 * 10) / 10) + '日';
+}
 function renderDashMetrics() {
   const dm = dashMetrics();
+  // 案件の流れ（derivedMetricsV3）
+  const v3 = derivedMetricsV3();
+  document.getElementById('dash-decision-wait').textContent = fmtDurationMs(v3.avgDecisionWaitMs);
+  document.getElementById('dash-decision-action-gap').textContent = fmtDurationMs(v3.avgDecisionToActionStartMs);
+  document.getElementById('dash-original-due').textContent = fmtPct(v3.originalDueCompletionRate);
+  document.getElementById('dash-redecision-rate').textContent = fmtPct(v3.reDecisionRate);
+  document.getElementById('dash-goal-achievement').textContent = fmtPct(v3.goalAchievementRate);
+  document.getElementById('dash-stalled-series').textContent = fmtCount(v3.stalledSeriesCount);
+  document.getElementById('dash-unprepared-decision').textContent = fmtCount(v3.unpreparedDecisionCount);
+  document.getElementById('dash-lead-time').textContent = fmtLeadDays(dm.avgLeadTimeDays);
   // 速さの指標
   document.getElementById('dash-action-completion').textContent = fmtPct(dm.actionCompletionRate);
   document.getElementById('dash-ontime-completion').textContent = fmtPct(dm.onTimeCompletionRate);
@@ -4812,7 +4849,6 @@ function renderDashMetrics() {
   document.getElementById('dash-extension-rate').textContent = fmtPct(dm.extensionRate);
   document.getElementById('dash-within30-rate').textContent = fmtPct(dm.within30MinRate);
   document.getElementById('dash-closed-series').textContent = fmtCount(dm.closedSeriesCount);
-  document.getElementById('dash-lead-time').textContent = fmtLeadDays(dm.avgLeadTimeDays);
   document.getElementById('dash-overdue-actions').textContent = fmtCount(dm.overdueOpenCount);
   document.getElementById('dash-top-carry-cause').textContent = fmtTopCause(dm.topCarryCause);
   // ムダ検知
@@ -4846,7 +4882,17 @@ function renderMudaDiagnose() {
 // 速さの指標＋ムダ検知の現在値をテキスト化して diagnose に渡す入力を作る。
 function buildDiagnoseInput() {
   const dm = dashMetrics();
+  const v3 = derivedMetricsV3();
   const lines = [
+    '# 案件の流れ',
+    '案件リードタイム（作成→成果確定）: ' + fmtLeadDays(dm.avgLeadTimeDays),
+    '判断待ち時間（Step ready→Decision）: ' + fmtDurationMs(v3.avgDecisionWaitMs),
+    'DecisionからAction開始まで: ' + fmtDurationMs(v3.avgDecisionToActionStartMs),
+    '当初期限内完了率: ' + fmtPct(v3.originalDueCompletionRate),
+    '再判断率: ' + fmtPct(v3.reDecisionRate),
+    '目標達成率: ' + fmtPct(v3.goalAchievementRate),
+    '停滞案件数: ' + fmtCount(v3.stalledSeriesCount),
+    '判断準備不足件数: ' + fmtCount(v3.unpreparedDecisionCount),
     '# 速さの指標',
     'アクション完了率: ' + fmtPct(dm.actionCompletionRate),
     '期限内完了率: ' + fmtPct(dm.onTimeCompletionRate),
@@ -4854,7 +4900,6 @@ function buildDiagnoseInput() {
     '会議の延長率: ' + fmtPct(dm.extensionRate),
     '30分以内終了率: ' + fmtPct(dm.within30MinRate),
     '成果確定したA3案件数: ' + fmtCount(dm.closedSeriesCount),
-    '案件リードタイム: ' + fmtLeadDays(dm.avgLeadTimeDays),
     '期限超過アクション件数: ' + fmtCount(dm.overdueOpenCount),
     '持ち越し原因トップ: ' + fmtTopCause(dm.topCarryCause),
     '# ムダ検知',
