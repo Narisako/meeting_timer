@@ -717,7 +717,14 @@
       <div class="stat"><div class="v red" id="dash-over-report">0件</div><div class="k">A3・1枚超過レポート数</div></div>
       <div class="stat"><div class="v red" id="dash-stagnant-actions">0件</div><div class="k">停滞アクション（エスカレ候補）</div></div>
       <div class="stat"><div class="v red" id="dash-mannerism-series">0件</div><div class="k">マンネリ疑い案件数</div></div>
-      <div class="stat"><div class="v red" id="dash-dissent-zero-rate">—</div><div class="k">異論ゼロ会議率（シャンシャン）</div></div>
+      <div class="stat"><div class="v red" id="dash-dec-no-alternatives">0件</div><div class="k">代替案未検討の決定数</div></div>
+      <div class="stat"><div class="v red" id="dash-dec-no-risk">0件</div><div class="k">リスク未確認の決定数</div></div>
+      <div class="stat"><div class="v red" id="dash-dec-no-basis">0件</div><div class="k">判断根拠不足の決定数</div></div>
+    </div>
+    <div id="dash-due-change-wrap" style="margin-top:14px">
+      <h3 style="margin:0 0 6px;font-size:15px">期限変更回数の多いアクション</h3>
+      <p class="note" style="margin:0 0 6px">期限を何度も動かしているアクションは、見積り前提の崩れや停滞の兆候です（変更理由つき）。</p>
+      <ul class="plain" id="dash-due-change-list"><li style="color:var(--sub)">（期限変更のあるアクションはありません）</li></ul>
     </div>
     <details class="muda-poster">
       <summary>事技系職場の7つのムダ（ポスター全文）</summary>
@@ -1658,12 +1665,40 @@ function overLengthReportCount() {
   });
   return n;
 }
-// 異論ゼロ会議率（議題ありの会議のうち、全議題が異論・懸念ゼロ）— 分母0なら null
-function dissentZeroMeetingRate(meetings) {
-  const held = (meetings || loadMeetings()).filter(m => (m.agendas || []).length > 0);
-  if (!held.length) return null;
-  const zero = held.filter(m => m.agendas.every(a => !a.dissent || !String(a.dissent).trim()));
-  return zero.length / held.length;
+// 判断の質の検知（#32）: Decision単位で「代替案未検討／リスク未確認／判断根拠不足」を数える。
+//  - 代替案未検討: 採用しなかった案（rejectedOptions）が空
+//  - 判断根拠不足: 判断根拠（basis）が空
+//  - リスク未確認: 「決めなかった場合の影響」（会議の noDecisionImpact）未入力のまま行われた
+//                 判断セッション（meetingId 付き）のDecision
+// ※「異論ゼロ＝シャンシャン」判定は誤検知が多いため廃止（dissent欄は判断材料として維持）。
+function decisionQualityCounts(decisions, meetings) {
+  const decs = decisions || loadDecisions();
+  const ms = meetings || loadMeetings();
+  const mById = {};
+  ms.forEach(m => { if (m && m.id != null) mById[m.id] = m; });
+  let noAlternatives = 0, noBasis = 0, noRisk = 0;
+  decs.forEach(d => {
+    if (!Array.isArray(d.rejectedOptions) || d.rejectedOptions.length === 0) noAlternatives++;
+    if (!d.basis || !String(d.basis).trim()) noBasis++;
+    if (d.meetingId != null) {
+      const m = mById[d.meetingId];
+      if (m && (!m.noDecisionImpact || !String(m.noDecisionImpact).trim())) noRisk++;
+    }
+  });
+  return { noAlternatives, noBasis, noRisk };
+}
+// 期限変更回数上位のアクション（変更理由つき）— dueChanges を持つものを回数降順で返す。
+function topDueChangeActions(limit) {
+  const n = (limit != null ? limit : 5);
+  return loadActions()
+    .filter(a => Array.isArray(a.dueChanges) && a.dueChanges.length > 0)
+    .map(a => ({
+      id: a.id, what: a.what, owner: a.owner, due: a.due,
+      count: a.dueChanges.length,
+      reasons: a.dueChanges.map(c => (c && c.reason ? c.reason : '')).filter(Boolean)
+    }))
+    .sort((x, y) => y.count - x.count)
+    .slice(0, n);
 }
 // 持ち越し原因トップ（会議議題の carryCauses 最頻値）— 無ければ null
 function topCarryCause(meetings) {
@@ -1700,7 +1735,9 @@ function dashMetrics() {
     overLengthReportCount: overLengthReportCount(),
     stagnantActionCount: stagnantActionCount(),
     mannerismSeriesCount: mannerismSeriesCount(meetings),
-    dissentZeroMeetingRate: dissentZeroMeetingRate(meetings)
+    // 判断の質（#32）
+    decisionQuality: decisionQualityCounts(loadDecisions(), meetings),
+    topDueChangeActions: topDueChangeActions(5)
   };
 }
 
@@ -2885,6 +2922,12 @@ function renderCockpitAgendas() {
       rejected.placeholder = '検討したが採らなかった案（例：9月発売案\n段階的リリース案）';
       rejected.value = (Array.isArray(a.rejectedOptions) ? a.rejectedOptions.join('\n') : '');
       div.appendChild(rejected);
+      // 軽い促し（#32）: 代替案未検討を防ぐ非ブロッキングの一言。
+      const rHint = document.createElement('div');
+      rHint.className = 'note';
+      rHint.id = 'rejected-hint';
+      rHint.textContent = '比較した案はありませんでしたか？（1つの案しか出ていない決定は、見落としが起きやすくなります）';
+      div.appendChild(rHint);
 
       // 通知対象（誰に知らせるか）（任意・送付先から選択＋自由追加）
       const nLabel = document.createElement('label');
@@ -3391,13 +3434,15 @@ function buildReport(elapsedSec, actualCost, saved) {
   lines.push(mtg.recipients.length ? mtg.recipients.map(r => r.name).join('、') : '（なし）');
   lines.push('情報は自ら取りに行く。「聞いていない」は禁句。');
 
-  // (7) シャンシャン注記: 全議題が異論・懸念ゼロで即決だった場合のみ
-  const zeroDissent = mtg.agendas.length > 0 &&
-    mtg.agendas.every(a => a.decision) &&
-    mtg.agendas.every(a => !a.dissent || !a.dissent.trim());
-  if (zeroDissent) {
+  // (7) 判断の質の注記: 判断根拠・採用しなかった案（比較検討）が空の決定があれば促す（#32）。
+  //     ※「異論ゼロ＝シャンシャン」判定は誤検知が多い（全員一致の良い決定もある）ため廃止。
+  const decidedForNote = mtg.agendas.filter(a => a.decision);
+  const noBasisCnt = decidedForNote.filter(a => !a.basis || !String(a.basis).trim()).length;
+  const noAltCnt = decidedForNote.filter(a => !Array.isArray(a.rejectedOptions) || a.rejectedOptions.length === 0).length;
+  if (noAltCnt > 0 || noBasisCnt > 0) {
     lines.push('');
-    lines.push('※ 異論ゼロ——シャンシャン会議になっていないか要確認。');
+    if (noAltCnt > 0) lines.push('※ 採用しなかった案（比較検討）が空の決定が ' + noAltCnt + '件。比較した案はありませんでしたか？');
+    if (noBasisCnt > 0) lines.push('※ 判断根拠が空の決定が ' + noBasisCnt + '件。「なぜこう決めたか」を残しましょう。');
   }
 
   document.getElementById('report-body').textContent = lines.join('\n');
@@ -4044,17 +4089,60 @@ function buildCaseCard(s, meetings, actions, todayStr) {
       const dueCls = overdue ? 'due a3-overdue' : 'due';
       span.innerHTML = '<b>' + a.owner + '</b> が <span class="' + dueCls + '">' + (a.due || '期限未設定') +
         (overdue ? '（期限超過）' : '') + '</span> までに: ' + a.what;
+      const chg = document.createElement('button');
+      chg.className = 'ghost small a3-due-change';
+      chg.textContent = '期限変更';
+      chg.dataset.dueChangeFor = a.id;
+      chg.onclick = () => openDueChangeModal(a.id);
       const done = document.createElement('button');
       done.className = 'primary small';
       done.textContent = '完了にする';
       done.dataset.actionId = a.id;
       done.onclick = () => { completeAction(a.id); renderA3(); };
-      li.append(span, done);
+      li.append(span, chg, done);
       aul.appendChild(li);
     });
   }
   card.appendChild(aul);
   return card;
+}
+
+// アクションの期限変更モーダル（#32）: 新しい期限＋理由（必須）を入力し dueChanges に記録。
+function openDueChangeModal(actionId) {
+  const a = loadActions().find(x => x.id === actionId);
+  if (!a) return;
+  if (mtg) mtg.modalOpen = true;
+  const title = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const actions = document.getElementById('modal-actions');
+  title.textContent = 'アクションの期限を変更';
+  body.innerHTML =
+    '<p class="note" style="margin:0 0 8px">「' + escapeHtml(a.what || '') + '」の期限を変更します。' +
+    '現在の期限: ' + escapeHtml(a.due || '未設定') + '</p>' +
+    '<label>新しい期限</label>' +
+    '<input type="date" id="due-change-date" value="' + escapeHtml(a.due || '') + '">' +
+    '<label>変更理由（必須）</label>' +
+    '<textarea id="due-change-reason" rows="2" placeholder="なぜ期限を動かすのか（例：前工程の遅延／要件追加）"></textarea>' +
+    '<div class="alert bad hidden" id="due-change-error">変更理由は必須です。何度も動くアクションほど理由の記録が大切です。</div>';
+  actions.innerHTML = '';
+  const cancel = document.createElement('button');
+  cancel.className = 'ghost'; cancel.textContent = 'キャンセル';
+  cancel.onclick = () => closeModal();
+  actions.appendChild(cancel);
+  const save = document.createElement('button');
+  save.className = 'primary'; save.id = 'due-change-save'; save.textContent = '期限を変更';
+  save.onclick = () => saveDueChange(actionId);
+  actions.appendChild(save);
+  showModal();
+}
+function saveDueChange(actionId) {
+  const reason = (document.getElementById('due-change-reason').value || '').trim();
+  if (!reason) { document.getElementById('due-change-error').classList.remove('hidden'); return; }
+  const newDue = (document.getElementById('due-change-date').value || '').trim() || null;
+  changeActionDue(actionId, newDue, reason);
+  closeModal();
+  renderA3();
+  renderDash();
 }
 
 // ---------- v4-5: Step詳細（推奨手段・複数成果物・状態変更・再オープン/前Step戻り・変更履歴） ----------
@@ -4083,6 +4171,20 @@ function buildDecisionHistory(s) {
   const h3 = document.createElement('h3');
   h3.textContent = '決定履歴（' + decs.length + '件）';
   wrap.appendChild(h3);
+  // 判断の質の件数サマリ（#32）: 代替案未検討／判断根拠不足の件数を表示。
+  if (decs.length) {
+    const q = decisionQualityCounts(decs, loadMeetings());
+    if (q.noAlternatives > 0 || q.noBasis > 0 || q.noRisk > 0) {
+      const s = document.createElement('div');
+      s.className = 'note a3-dec-quality';
+      const parts = [];
+      if (q.noAlternatives > 0) parts.push('代替案未検討 ' + q.noAlternatives + '件');
+      if (q.noRisk > 0) parts.push('リスク未確認 ' + q.noRisk + '件');
+      if (q.noBasis > 0) parts.push('判断根拠不足 ' + q.noBasis + '件');
+      s.textContent = '⚠ 判断の質チェック: ' + parts.join(' / ');
+      wrap.appendChild(s);
+    }
+  }
   const ul = document.createElement('ul');
   ul.className = 'plain a3-dec-list';
   if (decs.length === 0) {
@@ -4134,6 +4236,19 @@ function buildDecisionHistory(s) {
         r.className = 'note';
         r.textContent = '✗ 採用しなかった案: ' + d.rejectedOptions.join(' / ');
         li.appendChild(r);
+      } else {
+        const r = document.createElement('div');
+        r.className = 'note a3-dec-flag';
+        r.dataset.flag = 'no-alternatives';
+        r.textContent = '⚠ 採用しなかった案が未記入（代替案未検討）';
+        li.appendChild(r);
+      }
+      if (!d.basis || !String(d.basis).trim()) {
+        const bf = document.createElement('div');
+        bf.className = 'note a3-dec-flag';
+        bf.dataset.flag = 'no-basis';
+        bf.textContent = '⚠ 判断根拠が未記入';
+        li.appendChild(bf);
       }
       if (Array.isArray(d.notifyTo) && d.notifyTo.length) {
         const n = document.createElement('div');
@@ -4588,6 +4703,7 @@ function openDecisionForm(seriesId, stepNo) {
     '<textarea id="dec-form-basis" rows="2" placeholder="この決定に至った理由・決め手"></textarea>' +
     '<label>採用しなかった案（比較した選択肢）（任意・1行1件）</label>' +
     '<textarea id="dec-form-rejected" rows="2" placeholder="検討したが採らなかった案（1行1件）"></textarea>' +
+    '<div class="note" id="dec-form-rejected-hint">比較した案はありませんでしたか？（1つの案しか出ていない決定は、見落としが起きやすくなります）</div>' +
     '<label>決定者（任意）</label>' +
     '<input type="text" id="dec-form-by" placeholder="誰が決めたか（例：部長 山田）">' +
     '<label>通知対象（誰に知らせるか）（任意）</label>' +
@@ -4856,8 +4972,43 @@ function renderDashMetrics() {
   document.getElementById('dash-over-report').textContent = fmtCount(dm.overLengthReportCount);
   document.getElementById('dash-stagnant-actions').textContent = fmtCount(dm.stagnantActionCount);
   document.getElementById('dash-mannerism-series').textContent = fmtCount(dm.mannerismSeriesCount);
-  document.getElementById('dash-dissent-zero-rate').textContent = fmtPct(dm.dissentZeroMeetingRate);
+  // 判断の質（#32）
+  document.getElementById('dash-dec-no-alternatives').textContent = fmtCount(dm.decisionQuality.noAlternatives);
+  document.getElementById('dash-dec-no-risk').textContent = fmtCount(dm.decisionQuality.noRisk);
+  document.getElementById('dash-dec-no-basis').textContent = fmtCount(dm.decisionQuality.noBasis);
+  renderDueChangeList(dm.topDueChangeActions);
   renderMudaDiagnose(); // R7: LLM ON時のみ「AIにムダ診断してもらう」ボタンを注入
+}
+// 期限変更回数上位のアクションを一覧描画（変更理由つき）。
+function renderDueChangeList(items) {
+  const ul = document.getElementById('dash-due-change-list');
+  if (!ul) return;
+  ul.innerHTML = '';
+  if (!items || items.length === 0) {
+    const li = document.createElement('li');
+    li.style.color = 'var(--sub)';
+    li.textContent = '（期限変更のあるアクションはありません）';
+    ul.appendChild(li);
+    return;
+  }
+  items.forEach(it => {
+    const li = document.createElement('li');
+    li.dataset.actionId = it.id;
+    const head = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = it.count + '回変更';
+    head.appendChild(b);
+    head.appendChild(document.createTextNode('｜' + (it.owner || '担当未設定') + '：' + (it.what || '') +
+      '（現期限 ' + (it.due || '未設定') + '）'));
+    li.appendChild(head);
+    if (it.reasons.length) {
+      const r = document.createElement('div');
+      r.className = 'note';
+      r.textContent = '理由: ' + it.reasons.join(' → ');
+      li.appendChild(r);
+    }
+    ul.appendChild(li);
+  });
 }
 
 // ---------- R7 ムダ診断（ダッシュボードAIアシスト） ----------
@@ -4907,7 +5058,9 @@ function buildDiagnoseInput() {
     'A3・1枚超過レポート数: ' + fmtCount(dm.overLengthReportCount),
     '停滞アクション: ' + fmtCount(dm.stagnantActionCount),
     'マンネリ疑い案件数: ' + fmtCount(dm.mannerismSeriesCount),
-    '異論ゼロ会議率: ' + fmtPct(dm.dissentZeroMeetingRate)
+    '代替案未検討の決定数: ' + fmtCount(dm.decisionQuality.noAlternatives),
+    'リスク未確認の決定数: ' + fmtCount(dm.decisionQuality.noRisk),
+    '判断根拠不足の決定数: ' + fmtCount(dm.decisionQuality.noBasis)
   ];
   return lines.join('\n');
 }
