@@ -198,6 +198,13 @@
     max-height: 220px; overflow: auto; margin: 8px 0 0;
   }
   .llm-dest { font-size: 13px; margin: 6px 0 0; word-break: break-all; }
+  /* v5-3: 初回のみの軽量通知（非ブロッキング・クリックを妨げない） */
+  .llm-first-notice {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    max-width: 90%; background: #1f2937; color: #fff; padding: 10px 16px;
+    border-radius: 8px; font-size: 13px; line-height: 1.5; z-index: 9999;
+    box-shadow: 0 4px 16px rgba(0,0,0,.25); pointer-events: none; display: none;
+  }
   /* A3案件ビュー */
   .a3-case { border-left: 4px solid var(--accent); }
   .a3-case.closed { border-left-color: var(--ok); opacity: .85; }
@@ -267,7 +274,70 @@
   .basic-flow .flow-step:last-child::after { content: ''; margin-left: 0; }
   .basic-flow .flow-step.is-todo { background: #eee; color: var(--sub); }
   .basic-flow .flow-step small { font-weight: 400; }
-  @media (max-width: 560px) { .a3-grid { grid-template-columns: repeat(2, 1fr); } }
+  /* 対話インテーク（チャット形式の入り口） */
+  #intake-card { border: 1px solid var(--accent); }
+  /* v6-1: チャットは専用タブとして全画面高さのUIに拡張 */
+  #screen-chat.active { display: flex; }
+  #screen-chat #intake-card { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  #screen-chat .intake-messages { flex: 1; max-height: none; min-height: 240px; }
+  .intake-messages { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; padding: 8px; background: var(--accent-soft); border-radius: 8px; margin: 8px 0; }
+  .intake-msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .intake-system { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-top-left-radius: 2px; }
+  .intake-user { align-self: flex-end; background: var(--accent); color: #fff; border-top-right-radius: 2px; }
+  .intake-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+  .intake-choices .intake-choice { text-align: left; }
+  #intake-invite-btn { font-weight: 700; }
+  /* v6-1: チャット内の会議招集文面ブロック（コピー可能な pre） */
+  .intake-invite-block { align-self: stretch; max-width: 100%; background: #fff; border: 1px solid var(--accent); border-radius: 12px; padding: 10px 12px; }
+  .intake-invite-pre { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.5; margin: 0 0 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  /* v6-5(#47): チャット内「主催者への3点アドバイス」カード */
+  .intake-advice { align-self: stretch; max-width: 100%; background: #fff; border: 1px solid var(--gold, var(--accent)); border-left: 4px solid var(--gold, var(--accent)); border-radius: 12px; padding: 10px 14px; font-size: 13px; line-height: 1.6; }
+  .intake-advice .adv-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+  .intake-advice .adv-sec { margin-top: 8px; }
+  .intake-advice .adv-sec-h { font-weight: 700; }
+  .intake-advice ul { margin: 4px 0 0; padding-left: 18px; }
+  .intake-advice li { margin: 2px 0; }
+  .intake-advice .adv-note { color: var(--sub); }
+  .intake-advice .adv-presend { color: var(--accent); font-size: 12px; }
+  .intake-advice .adv-warn { color: var(--warn); }
+  .intake-advice .adv-cost { color: var(--sub); font-size: 12px; margin-top: 2px; }
+  .intake-advice .adv-foot { color: var(--sub); font-size: 12px; margin-top: 8px; font-style: italic; }
+  /* v6-2: 参照専用3タブ（A3・ムダ・報連相の自動反映ビュー） */
+  .ref-note { background: var(--accent-soft); border-radius: 8px; padding: 6px 10px; margin: 6px 0 10px; font-size: 13px; color: var(--ink); }
+  .ref-selector { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
+  .ref-case-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+  .ref-empty { color: var(--sub); font-size: 13px; }
+  .ref-step { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; background: #fff; }
+  .ref-step-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ref-step-head .sn { font-size: 11px; font-weight: 700; color: var(--sub); }
+  .ref-step-head .nm { font-size: 14px; font-weight: 700; }
+  .ref-step-body { font-size: 13px; line-height: 1.6; margin-top: 6px; white-space: pre-wrap; word-break: break-word; }
+  .ref-step-body.empty { color: var(--sub); font-style: italic; opacity: .7; }
+  .ref-artifact { margin-top: 8px; }
+  .ref-artifact summary { font-size: 12px; cursor: pointer; color: var(--accent); }
+  .ref-artifact pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.5; margin: 6px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--paper, #f7f7f4); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .muda-ref-row { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; background: #fff; }
+  .muda-ref-mark { font-size: 18px; flex: 0 0 auto; line-height: 1.4; }
+  .muda-ref-main { flex: 1; }
+  .muda-ref-main .label { font-size: 14px; font-weight: 700; }
+  .muda-ref-main .label b { color: var(--bad); }
+  .muda-ref-main .q { font-size: 13px; color: var(--sub); margin-top: 2px; }
+  .muda-ref-status { font-size: 13px; margin-top: 4px; font-weight: 700; }
+  .muda-ref-status.ok { color: var(--ok); }
+  .muda-ref-status.warn { color: var(--warn); }
+  .muda-ref-status.none { color: var(--sub); font-weight: 400; }
+  .muda-ref-note { font-size: 12px; color: var(--sub); font-weight: 400; margin-top: 2px; }
+  .horenso-lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px; }
+  .horenso-lane { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; }
+  .horenso-lane h3 { margin: 0 0 2px; font-size: 14px; color: var(--ink); }
+  .horenso-lane .lane-desc { font-size: 12px; color: var(--sub); margin: 0 0 8px; }
+  .horenso-item { border-top: 1px dashed var(--line); padding: 8px 0; font-size: 13px; }
+  .horenso-item:first-of-type { border-top: 0; }
+  .horenso-item .presend { margin-left: 6px; }
+  .horenso-lane .lane-empty { font-size: 12px; color: var(--sub); }
+  .horenso-lane .invite-link { display: inline-block; margin-top: 8px; font-size: 12px; }
+  .badge.presend { background: var(--warn-soft); color: var(--warn); }
+  @media (max-width: 560px) { .a3-grid { grid-template-columns: repeat(2, 1fr); } .horenso-lanes { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -277,9 +347,12 @@
   <span class="tagline">ちょっと待って。その会議、必要ですか？</span>
 </header>
 <nav>
-  <button id="tab-a3" class="active" onclick="showScreen('a3')">トヨタA3 8ステップ・キャンバス</button>
-  <button id="tab-triage" onclick="showScreen('triage')">案件トリアージ</button>
-  <button id="tab-dash" onclick="showScreen('dash')">フローダッシュボード</button>
+  <button id="tab-chat" class="active" onclick="showScreen('chat')">💬 チャット</button>
+  <button id="tab-a3" onclick="showScreen('a3')">トヨタA3 8ステップ・キャンバス</button>
+  <button id="tab-muda" onclick="showScreen('muda')">7つのムダ チェックリスト</button>
+  <button id="tab-horenso" onclick="showScreen('horenso')">報連相 仕分けリスト</button>
+  <!-- v6-1: 案件トリアージ／フローダッシュボードはタブバーから外す（機能は温存）。
+       到達導線は「トヨタA3 8ステップ」タブ内の「詳細ツール」ボタン、または showScreen() から。 -->
 </nav>
 
 <main>
@@ -616,7 +689,44 @@
 </section>
 
 <!-- ===================== トヨタA3 8ステップ・キャンバス ===================== -->
-<section id="screen-a3" class="screen active">
+<!-- ===================== 💬 チャット（主役・初期表示） ===================== -->
+<section id="screen-chat" class="screen active">
+  <div class="card" id="intake-card">
+    <h2>💬 チャットで進める</h2>
+    <p class="note">AIの質問に答えながら、レポート・チャット・会議のどれが必要かを一緒に見極めます。会議になる場合は、この画面のまま会議招集の文面まで作れます。5往復以上やりとりすると「📋 会議招集まとめ」ボタンが出て、いつでも打ち切って文面を作れます。（この対話にはAIアシストが必要です。AI設定がONのときだけ開始できます。接続できないときはエラーと再試行ボタンが出ます）</p>
+    <div id="intake-ai-note" class="note" style="background:var(--accent-soft);border-radius:8px;padding:6px 10px;margin:6px 0;"></div>
+    <div class="ref-note" id="intake-reftabs-note">🗂️ 裏側で <b>トヨタA3 8ステップ</b>・<b>7つのムダ</b>・<b>報連相 仕分け</b> の3つの整理が自動で進んでいます（上のタブからいつでも参照できます）。</div>
+    <div id="intake-messages" class="intake-messages" aria-live="polite"></div>
+    <div id="intake-choices" class="intake-choices"></div>
+    <div class="row" id="intake-input-row">
+      <div style="flex:3">
+        <input type="text" id="intake-input" placeholder="ここに入力…" onkeydown="if(event.key==='Enter')intakeSubmitText()">
+      </div>
+      <div style="flex:0"><button class="primary" id="intake-send" onclick="intakeSubmitText()">送信</button></div>
+    </div>
+    <div style="margin-top:8px">
+      <button class="ghost" id="intake-restart" onclick="intakeStart()">対話をやり直す</button>
+      <span class="note" style="margin-left:8px">従来の作り方は「トヨタA3 8ステップ」タブ内の「詳細ツール」からも使えます。</span>
+    </div>
+  </div>
+</section>
+
+<section id="screen-a3" class="screen">
+  <!-- v6-2: 参照専用ビュー（チャット内容の自動反映）。編集は下部「詳細ツール」の従来キャンバスで行う。 -->
+  <div class="card" id="a3-ref">
+    <h2>トヨタA3 8ステップ（参照ビュー）</h2>
+    <p class="note">チャットのやりとりが自動で反映されます。読むだけのビューです。埋まっていないStepは「—（未記入）」と薄く表示します（<b>未完で正常です</b>。すべてを埋める必要はありません）。編集は下の「詳細ツール（従来の編集機能）」から行えます。</p>
+    <div id="a3-ref-selector" class="ref-selector"></div>
+    <div id="a3-ref-body"></div>
+  </div>
+  <div class="card" id="a3-tools">
+    <h2>詳細ツール（従来の編集機能）</h2>
+    <p class="note">通常はチャットタブだけで案件入力から会議招集まで完結します。Step編集・状態変更・決定登録など従来の個別ツールを直接使いたいときはこちらから。</p>
+    <div class="row" style="flex-wrap:wrap; gap:8px">
+      <button class="ghost" onclick="showScreen('triage')">案件トリアージを開く</button>
+      <button class="ghost" onclick="showScreen('dash')">フローダッシュボードを開く</button>
+    </div>
+  </div>
   <div class="card" id="a3-basic-flow">
     <h2>トヨタA3 8ステップ・キャンバス</h2>
     <p class="note">すべての案件を1枚で俯瞰し、意思決定と実行を前へ進める一次情報源です。会議は必要なときだけ、各案件のステップから設計します。</p>
@@ -744,10 +854,11 @@
 
   <div class="card">
     <h2>AIアシスト設定</h2>
-    <p class="note">アシストは任意です。OFFのままでも全機能がそのまま使えます（オフラインファースト）。送信は必ずボタン操作＋送信前プレビューへの同意でのみ行われ、データはこの端末のlocalStorageにだけ残ります（ゼロリテンション）。</p>
+    <p class="note">オンライン前提でAIアシストは既定でONです。送信はAIアシストのボタン操作でのみ発火し、初回だけ「サーバーへ送信します（保存されません）」を1度お知らせします（以後はワンクリック送信）。送信内容はサーバーに保存されず、設定・データはこの端末のlocalStorageにだけ残ります（ゼロリテンション）。エンドポイントは同一オリジンを自動検出します。OFFにする、またはサーバーへ届かない場合も、全機能はルールベースでそのまま使えます。</p>
     <label for="llm-endpoint">エンドポイントURL</label>
     <input type="text" id="llm-endpoint" placeholder="http://localhost:8787">
-    <label class="llm-toggle"><input type="checkbox" id="llm-enabled"><span>AIアシストを有効にする（既定: OFF）</span></label>
+    <label class="llm-toggle"><input type="checkbox" id="llm-enabled"><span>AIアシストを有効にする（既定: ON）</span></label>
+    <label class="llm-toggle"><input type="checkbox" id="llm-always-confirm"><span>送信前確認を毎回表示する（既定: OFF）</span></label>
     <div style="margin-top:14px">
       <button class="primary small" onclick="saveLlmFromUI()">設定を保存</button>
       <span id="llm-save-status" class="note" style="margin-left:8px"></span>
@@ -766,6 +877,26 @@
     </div>
     <div id="data-mgmt-error" class="alert bad hidden"></div>
     <div id="data-mgmt-status" class="note" style="margin-top:8px"></div>
+  </div>
+</section>
+
+<!-- ===================== 7つのムダ チェックリスト（参照ビュー・v6-2） ===================== -->
+<section id="screen-muda" class="screen">
+  <div class="card" id="muda-ref">
+    <h2>7つのムダ チェックリスト（参照ビュー）</h2>
+    <p class="note">チャットのやりとりから「事技系職場の7つのムダ」の兆候を自動でチェックします。読むだけのビューです。対話が浅いうちは「— 未確認」で構いません（すべてを埋める必要はありません）。</p>
+    <div id="muda-ref-selector" class="ref-selector"></div>
+    <div id="muda-ref-body"></div>
+  </div>
+</section>
+
+<!-- ===================== 報連相 仕分けリスト（参照ビュー・v6-2） ===================== -->
+<section id="screen-horenso" class="screen">
+  <div class="card" id="horenso-ref">
+    <h2>報連相 仕分けリスト（参照ビュー）</h2>
+    <p class="note">チャットのやりとりを「報告（過去）／連絡（現在）／相談（未来）」の3レーンに自動で仕分けします。読むだけのビューです。会議前に事前送付すべきものには「会議前に事前送付」バッジが付きます。</p>
+    <div id="horenso-ref-selector" class="ref-selector"></div>
+    <div id="horenso-ref-body"></div>
   </div>
 </section>
 
@@ -1170,30 +1301,46 @@ function renderDataMgmt() {
 }
 
 // ---------- AIアシスト（v3土台: 設定・共通クライアント・フォールバック） ----------
-// 設計原則: ①オフラインファースト（OFFでもv2全機能が完全動作）
-//           ②ゼロリテンション（設定はlocalStorageのみ）
-//           ③明示的送信（ボタン操作＋送信前プレビュー同意でのみ発火。自動送信はしない）
+// 設計原則: ①オフラインファースト（OFF・サーバー不達でも全機能が完全動作）
+//           ②ゼロリテンション（設定はlocalStorageのみ・送信内容はサーバーに保存しない）
+//           ③明示的送信（AIアシストは必ずボタン操作でのみ発火。自動送信はしない）
+//           ④使い勝手優先（v5-3）: 毎クリック同意モーダルは廃止。初回のみ軽量通知を1度出し、
+//             以後はワンクリック送信。毎回確認したい人向けに alwaysConfirm オプションを残す。
 const LLM_KEY = 'sekisho.llm';
 const LLM_DEFAULT_ENDPOINT = 'http://localhost:8787';
-const LLM_TIMEOUT_MS = 10000;
+const LLM_TIMEOUT_MS = 30000;
 const LLM_UNAVAILABLE_MSG = 'AIアシストは利用できません。手動で続行してください。';
+// v5-3: 初回のみの軽量通知（1度だけ表示し、以後はこのフラグで抑止する）
+const LLM_NOTICE_KEY = 'sekisho.llm.firstNoticeShown';
+const LLM_FIRST_NOTICE = 'AIアシストは、この操作の内容をサーバーへ送信します（サーバーには保存されません／ゼロリテンション）。以後この通知は表示しません。';
 
+// 既定エンドポイントの自動検出: http(s) 配信なら同一オリジン、file:// なら localhost:8787。
+function autoLlmEndpoint() {
+  try {
+    if (location.protocol === 'http:' || location.protocol === 'https:') return location.origin;
+  } catch (e) {}
+  return LLM_DEFAULT_ENDPOINT;
+}
+// v5-2: オンライン前提のため既定ON。明示的に false 保存された場合のみOFF。
 function loadLlm() {
   try {
     const v = JSON.parse(localStorage.getItem(LLM_KEY) || '{}');
     return {
-      endpoint: (typeof v.endpoint === 'string' && v.endpoint.trim()) ? v.endpoint.trim() : LLM_DEFAULT_ENDPOINT,
-      enabled: v.enabled === true
+      endpoint: (typeof v.endpoint === 'string' && v.endpoint.trim()) ? v.endpoint.trim() : autoLlmEndpoint(),
+      enabled: v.enabled === false ? false : true,
+      // v5-3: 既定は false（ワンクリック送信）。true のときのみ毎回送信前プレビューを表示する。
+      alwaysConfirm: v.alwaysConfirm === true
     };
   } catch (e) {
-    return { endpoint: LLM_DEFAULT_ENDPOINT, enabled: false };
+    return { endpoint: autoLlmEndpoint(), enabled: true, alwaysConfirm: false };
   }
 }
 function saveLlm(cfg) {
   const endpoint = (cfg && typeof cfg.endpoint === 'string' && cfg.endpoint.trim()) ? cfg.endpoint.trim() : LLM_DEFAULT_ENDPOINT;
   const enabled = !!(cfg && cfg.enabled);
-  localStorage.setItem(LLM_KEY, JSON.stringify({ endpoint, enabled }));
-  return { endpoint, enabled };
+  const alwaysConfirm = !!(cfg && cfg.alwaysConfirm);
+  localStorage.setItem(LLM_KEY, JSON.stringify({ endpoint, enabled, alwaysConfirm }));
+  return { endpoint, enabled, alwaysConfirm };
 }
 
 // 設定カードの表示・保存
@@ -1201,13 +1348,16 @@ function renderLlmSettings() {
   const cfg = loadLlm();
   const ep = document.getElementById('llm-endpoint');
   const en = document.getElementById('llm-enabled');
+  const ac = document.getElementById('llm-always-confirm');
   if (ep) ep.value = cfg.endpoint;
   if (en) en.checked = cfg.enabled;
+  if (ac) ac.checked = cfg.alwaysConfirm;
 }
 function saveLlmFromUI() {
   const ep = document.getElementById('llm-endpoint');
   const en = document.getElementById('llm-enabled');
-  const saved = saveLlm({ endpoint: ep ? ep.value : '', enabled: en ? en.checked : false });
+  const ac = document.getElementById('llm-always-confirm');
+  const saved = saveLlm({ endpoint: ep ? ep.value : '', enabled: en ? en.checked : false, alwaysConfirm: ac ? ac.checked : false });
   if (ep) ep.value = saved.endpoint; // 空入力は既定値に正規化して反映
   const st = document.getElementById('llm-save-status');
   if (st) st.textContent = '保存しました（' + (saved.enabled ? 'ON' : 'OFF') + '）';
@@ -1279,24 +1429,54 @@ function llmFetch(endpoint, kind, payload) {
   });
 }
 
-// 共通クライアント。OFF時は fetch せず null。ON時は同意モーダルを経てのみ fetch。
+// v5-3: 初回のみの軽量通知。1度だけ画面下に非ブロッキングで表示し、以後はフラグで抑止する。
+// pointer-events:none なのでボタン操作を妨げない（ワンクリック送信を阻害しない）。
+function llmFirstNoticeSeen() {
+  try { return localStorage.getItem(LLM_NOTICE_KEY) === '1'; } catch (e) { return false; }
+}
+function showLlmFirstNoticeOnce() {
+  if (llmFirstNoticeSeen()) return;
+  try { localStorage.setItem(LLM_NOTICE_KEY, '1'); } catch (e) {}
+  let el = document.getElementById('llm-first-notice');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'llm-first-notice';
+    el.className = 'llm-first-notice';
+    document.body.appendChild(el);
+  }
+  el.textContent = LLM_FIRST_NOTICE;
+  el.style.display = 'block';
+  clearTimeout(showLlmFirstNoticeOnce._t);
+  showLlmFirstNoticeOnce._t = setTimeout(() => { const e = document.getElementById('llm-first-notice'); if (e) e.style.display = 'none'; }, 6000);
+}
+
+// 共通クライアント。OFF時は fetch せず null。
+// 既定（v5-3）: ワンクリック送信（初回のみ軽量通知を1度表示）。
+// alwaysConfirm=true のときのみ従来の送信前プレビュー同意モーダルを表示する。
 // 失敗（タイムアウト/HTTPエラー/ネットワーク断/同意拒否）はすべて null で返す。
 function llmAssist(kind, payload) {
   const cfg = loadLlm();
   if (!cfg.enabled) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    openLlmConsent(
-      kind, payload, cfg.endpoint,
-      () => { resolve(llmFetch(cfg.endpoint, kind, payload)); },
-      () => { resolve(null); }
-    );
-  });
+  if (cfg.alwaysConfirm) {
+    return new Promise((resolve) => {
+      openLlmConsent(
+        kind, payload, cfg.endpoint,
+        () => { resolve(llmFetch(cfg.endpoint, kind, payload)); },
+        () => { resolve(null); }
+      );
+    });
+  }
+  // 既定: 明示的なボタン操作からのみ呼ばれる想定。ワンクリックで送信し、初回のみ通知する。
+  showLlmFirstNoticeOnce();
+  return llmFetch(cfg.endpoint, kind, payload);
 }
 
 // テスト用に公開（本Issueでは各画面への呼び出しボタンは設けない）
 window.llmAssist = llmAssist;
 window.loadLlm = loadLlm;
 window.saveLlm = saveLlm;
+window.llmFirstNoticeSeen = llmFirstNoticeSeen;
+window.LLM_NOTICE_KEY = LLM_NOTICE_KEY;
 window.LLM_UNAVAILABLE_MSG = LLM_UNAVAILABLE_MSG;
 
 // --- series CRUD ---
@@ -1744,7 +1924,7 @@ function dashMetrics() {
 migrateSchema();
 
 // ---------- 画面制御 ----------
-const SCREENS = ['triage', 'design', 'cockpit', 'report', 'a3', 'dash'];
+const SCREENS = ['chat', 'triage', 'design', 'cockpit', 'report', 'a3', 'dash', 'muda', 'horenso'];
 function showScreen(name) {
   const tab = document.getElementById('tab-' + name);
   // タブから外した画面（design/cockpit/report）はタブ要素を持たない＝案件カード/トリアージから直接activateする
@@ -1754,7 +1934,9 @@ function showScreen(name) {
     const t = document.getElementById('tab-' + s);
     if (t) t.classList.toggle('active', s === name);
   });
-  if (name === 'a3') renderA3();
+  if (name === 'a3') { renderA3(); renderA3Ref(); }
+  if (name === 'muda') renderMudaRef();
+  if (name === 'horenso') renderHorensoRef();
   if (name === 'triage') renderAiRouterCard();
   if (name === 'design') renderAgendaAssist();
 }
@@ -1844,7 +2026,7 @@ const AI_ROUTE_MAP = {
 // OFF時は空にしてDOMから撤去し、既存の手動フロー（button.primary 等の想定）を無劣化に保つ。
 const AI_ROUTER_CARD_HTML =
   '<h2>AIに仕分けてもらう <span class="badge meet">AIアシスト</span></h2>' +
-  '<p class="note">伝えたい内容をそのまま貼り付けて「仕分ける」を押すと、報告／連絡／相談のどれに当たるかをAIが判定し、テンプレートまで用意します。送信前に内容を確認する同意画面が出ます。判定に納得できないときは、下の3択から手動で選べます。</p>' +
+  '<p class="note">伝えたい内容をそのまま貼り付けて「仕分ける」を押すと、報告／連絡／相談のどれに当たるかをAIが判定し、テンプレートまで用意します。ボタンを押すとその場で送信します（初回のみ送信のお知らせを表示）。判定に納得できないときは、下の3択から手動で選べます。</p>' +
   '<label for="ai-router-input">仕分けたい自由文</label>' +
   '<textarea id="ai-router-input" rows="4" placeholder="例）先週の展示会の結果を共有したいです。来場者は前年比120%で、名刺は80枚集まりました。"></textarea>' +
   '<div class="row" style="margin-top:8px">' +
@@ -5112,6 +5294,1134 @@ function resetStats() {
   saveStats();
 }
 
+// ==================================================================
+// 対話インテーク（チャット形式の入り口・v5-1 / Issue #37, v6-4 / #46）
+//   最初の問いは「案件名を教えてください。」。以降の対話は AI（/api/v1/intake）が担う。
+//   v6-4: ルールベース質問ツリーへの自動フォールバックは廃止。AI失敗時はエラー＋再試行。
+//   回答は series（title / intakeLog）へ保存し、まとめから既存ヘルパへプリフィルする。
+// ==================================================================
+// 役割ラベル（招集メンバーの表示・招集文面生成で使用）。
+const INTAKE_ROLE_LABEL = { opinion: '意見を出す人', info: '情報を持っている人', listener: '聞くだけ（レポート送付）' };
+// v6-5(#47): 3点アドバイスカード用の役割ラベル（decider を含む）。
+const INTAKE_ADVICE_ROLE_LABEL = { decider: '決める人', opinion: '意見を出す人', info: '情報を持っている人' };
+
+// v5-4 bugfix(#41): 複数名一括入力を分割する。区切りは , 、 ， / と改行。trim・空要素除去。
+function intakeSplitNames(str) {
+  return String(str == null ? '' : str)
+    .split(/[,、，\/／\n\r]+/)
+    .map(function (s) { return s.trim(); })
+    .filter(function (s) { return s.length > 0; });
+}
+// v5-4 bugfix(#41): AIが返す role の表記ゆれを decider|opinion|info|listener に正規化。未知は opinion。
+function intakeNormalizeRole(role) {
+  const r = String(role == null ? '' : role).trim().toLowerCase();
+  if (/decider|decision|decide|approver|決裁|決める|決定権|決定者|裁量/.test(r)) return 'decider';
+  if (/listen|傍聴|聞くだけ|report|レポート|送付/.test(r)) return 'listener';
+  if (/info|情報/.test(r)) return 'info';
+  if (/opinion|意見/.test(r)) return 'opinion';
+  return 'opinion';
+}
+// v5-4 bugfix(#41): 自己参照ガード。set_question/propose_meeting の question が
+//   同ターンのAI自身の質問文(reply)と一致・酷似する場合 true（＝採用しない）。
+function intakeIsSelfReference(question, replyText) {
+  const norm = function (s) {
+    return String(s == null ? '' : s).replace(/\s+/g, '').replace(/[?？!！。、,，．.・]/g, '').toLowerCase();
+  };
+  const q = norm(question);
+  const rp = norm(replyText);
+  if (!q) return false;
+  if (rp && q === rp) return true;
+  if (rp && q.length >= 6 && (rp.indexOf(q) !== -1 || q.indexOf(rp) !== -1)) return true;
+  // AI質問特有のメタ表現をそのまま question に入れているケース（決定事項の要約なら現れない）
+  if (/何を(決め|きめ)|決めますか|1つの問い|ひとつの問い|一つの問い/.test(String(question || ''))) return true;
+  return false;
+}
+
+let intake = null;
+
+function newIntakeState() {
+  return {
+    state: 'askName', seriesId: null, title: '', tense: null,
+    exceptions: [], factsReady: null, decisionQuestion: '', decider: '',
+    participants: [], pendingName: '', log: [],
+    // v6-1: ユーザーの応答回数。5回以上（=6問目以降）で「会議招集まとめ」ボタンを常設表示する。
+    userTurns: 0,
+    // v6-3: AI応答の extract（a3/horenso/muda）を対話をまたいで累積する器。裏タブ反映で
+    //   ルールベースのヒューリスティック反映と共存させる（intakeSyncSeriesData で統合）。
+    aiExtract: { a3: {}, horenso: [], muda: {} },
+    // v6-5(#47): AI/決定的に生成した「主催者への3点アドバイス」（会議招集文面へ反映）。
+    advice: null,
+    // v6-4 AIモード: aiMode は 'ai'（既定）|'off'（LLM設定OFF時）。aiState はサーバへ毎回送る局面。
+    //   ルールベース質問ツリーへのフォールバック（旧 'rule'）は #46 で廃止。
+    aiMode: 'ai', aiState: null, aiBusy: false
+  };
+}
+
+// 対話を最初からやり直す（案件の下書きは残す）。ページ初期化からも呼ばれる。
+// v6-4(#46): LLM設定ONならAI対話を開始。OFFなら対話を開始せず案内だけ出す。
+function intakeStart() {
+  intake = newIntakeState();
+  const enabled = loadLlm().enabled;
+  intake.aiMode = enabled ? 'ai' : 'off';
+  renderIntake();
+  intakeRenderNotice();
+  if (!enabled) { intakeShowLlmOff(); return; }
+  intakeAskName();
+}
+// 対話カードのインライン通知（ブロッキングしない包括同意）。
+function intakeRenderNotice() {
+  const note = document.getElementById('intake-ai-note');
+  if (!note) return;
+  if (intake && intake.aiMode === 'ai') {
+    note.textContent = '🤖 この対話はAIが応答します。内容はサーバーに保存されません（ゼロリテンション）。';
+    note.style.display = '';
+  } else {
+    note.textContent = 'AIアシストがOFFです。設定でONにすると対話を開始できます。';
+    note.style.display = '';
+  }
+}
+// v6-4(#46): LLM設定OFF時。対話を開始せず、ONを促す案内を表示する。
+function intakeShowLlmOff() {
+  setIntakeChoices([]);
+  setIntakeInput(false);
+  intakeSay('system', 'AIアシストがOFFのため対話を開始できません。設定でONにしてください。');
+}
+
+function renderIntake() {
+  const msgs = document.getElementById('intake-messages');
+  if (!msgs || !intake) return;
+  msgs.innerHTML = '';
+  intake.log.forEach(m => {
+    if (m.kind === 'invite') {
+      const wrap = document.createElement('div');
+      wrap.className = 'intake-msg intake-system intake-invite-block';
+      const pre = document.createElement('pre');
+      pre.className = 'intake-invite-pre';
+      pre.textContent = m.text;
+      wrap.appendChild(pre);
+      const btn = document.createElement('button');
+      btn.className = 'ghost small';
+      btn.textContent = 'この文面をコピー';
+      btn.onclick = function () { intakeCopyInvite(pre, btn); };
+      wrap.appendChild(btn);
+      msgs.appendChild(wrap);
+      return;
+    }
+    if (m.kind === 'advice' && m.advice) {
+      msgs.appendChild(intakeRenderAdviceCard(m.advice));
+      return;
+    }
+    const div = document.createElement('div');
+    div.className = 'intake-msg intake-' + m.role;
+    div.textContent = m.text;
+    msgs.appendChild(div);
+  });
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// 発話をログに積む。案件が既にあれば intakeLog へ永続化する。
+function intakeSay(role, text) {
+  // v6-1: ユーザーの応答回数をカウント（最低5回の対話を担保するための基準）。
+  if (role === 'user') intake.userTurns = (intake.userTurns || 0) + 1;
+  intake.log.push({ role: role, text: text, at: Date.now() });
+  persistIntakeLog();
+  // v6-1: 対話の各回答から裏タブ用データ（horenso/mudaChecks）を best-effort で更新する。
+  if (intake.seriesId) intakeSyncSeriesData();
+  renderIntake();
+}
+// v6-1: 会議招集の文面ブロック（コピー可能な pre）をチャットに積む。
+function intakeSayInvite(text) {
+  intake.log.push({ role: 'system', kind: 'invite', text: text, at: Date.now() });
+  persistIntakeLog();
+  renderIntake();
+}
+// v6-5(#47): 「主催者への3点アドバイス」カードをチャットに積む（構造化データを保持し再描画に耐える）。
+function intakeSayAdvice(advice) {
+  intake.log.push({ role: 'system', kind: 'advice', advice: advice, text: '', at: Date.now() });
+  persistIntakeLog();
+  renderIntake();
+}
+// v6-5(#47): AIが返した propose_advice を防御的に正規化する（不正形状は破棄・無害化）。
+//   サーバー側でも sanitize 済みだが、クライアントでも二重に守る。
+function intakeNormalizeAdvice(a) {
+  if (!a || typeof a !== 'object') return null;
+  const arr = function (x) { return Array.isArray(x) ? x : []; };
+  const discuss = arr(a.discuss).map(function (d) {
+    if (!d || typeof d.title !== 'string' || !d.title.trim()) return null;
+    return { title: d.title.trim(), note: (typeof d.note === 'string') ? d.note.trim() : '' };
+  }).filter(Boolean);
+  const presend = arr(a.presend).map(function (p) {
+    if (!p || typeof p.text !== 'string' || !p.text.trim()) return null;
+    return { kind: (p.kind === 'chat' ? 'chat' : 'report'), text: p.text.trim() };
+  }).filter(Boolean);
+  const members = arr(a.members).map(function (m) {
+    if (!m || ['decider', 'opinion', 'info'].indexOf(m.role) < 0) return null;
+    return { name: (typeof m.name === 'string') ? m.name.trim() : '', role: m.role, reason: (typeof m.reason === 'string') ? m.reason.trim() : '' };
+  }).filter(Boolean);
+  const agenda = arr(a.agenda).map(function (g) {
+    if (!g || typeof g.title !== 'string' || !g.title.trim()) return null;
+    const min = Number(g.minutes);
+    return { title: g.title.trim(), minutes: (isFinite(min) && min > 0) ? Math.round(min) : 5, goal: (typeof g.goal === 'string') ? g.goal.trim() : '' };
+  }).filter(Boolean);
+  const memberFeedback = (typeof a.memberFeedback === 'string') ? a.memberFeedback.trim() : '';
+  if (!discuss.length && !presend.length && !members.length && !agenda.length && !memberFeedback) return null;
+  return { discuss: discuss, presend: presend, members: members, agenda: agenda, memberFeedback: memberFeedback };
+}
+// v6-5(#47): 3点アドバイスカードのDOMを組み立てる（読み取り専用・チャット内完結）。
+function intakeRenderAdviceCard(advice) {
+  const wrap = document.createElement('div');
+  wrap.className = 'intake-msg intake-advice';
+  const h = document.createElement('div');
+  h.className = 'adv-title';
+  h.textContent = '💡 会議主催者への3点アドバイス';
+  wrap.appendChild(h);
+
+  // 1. 会議で議論すべきこと（相談のみ）＋ 議論しない項目は事前送付がおすすめ
+  const s1 = document.createElement('div'); s1.className = 'adv-sec';
+  const s1h = document.createElement('div'); s1h.className = 'adv-sec-h'; s1h.textContent = '1. 会議で議論すべきこと（相談＝未来の判断のみ）';
+  s1.appendChild(s1h);
+  if (advice.discuss && advice.discuss.length) {
+    const ul = document.createElement('ul');
+    advice.discuss.forEach(function (d) {
+      const li = document.createElement('li');
+      li.textContent = d.title;
+      if (d.note) { const n = document.createElement('span'); n.className = 'adv-note'; n.textContent = '（' + d.note + '）'; li.appendChild(n); }
+      ul.appendChild(li);
+    });
+    s1.appendChild(ul);
+  } else {
+    const p = document.createElement('div'); p.className = 'adv-note'; p.textContent = '（まだ相談＝決める問いが定まっていません。対話で1つに絞ると議論が締まります）';
+    s1.appendChild(p);
+  }
+  if (advice.presend && advice.presend.length) {
+    advice.presend.forEach(function (p) {
+      const d = document.createElement('div'); d.className = 'adv-presend';
+      d.textContent = '→ ' + p.text + '（会議で扱わず、会議前に' + (p.kind === 'chat' ? 'チャット' : 'レポート') + 'で済ませるのがおすすめ）';
+      s1.appendChild(d);
+    });
+  }
+  wrap.appendChild(s1);
+
+  // 2. 招集すべき人（必要最小限＋役割・理由）＋ 適切性フィードバック＋参考換算額
+  const s2 = document.createElement('div'); s2.className = 'adv-sec';
+  const s2h = document.createElement('div'); s2h.className = 'adv-sec-h'; s2h.textContent = '2. 招集すべき人（必要最小限・役割つき）';
+  s2.appendChild(s2h);
+  if (advice.members && advice.members.length) {
+    const ul = document.createElement('ul');
+    advice.members.forEach(function (m) {
+      const li = document.createElement('li');
+      const label = INTAKE_ADVICE_ROLE_LABEL[m.role] || m.role;
+      li.textContent = (m.name ? m.name + '（' + label + '）' : label) + (m.reason ? '… ' + m.reason : '');
+      ul.appendChild(li);
+    });
+    s2.appendChild(ul);
+  } else {
+    const p = document.createElement('div'); p.className = 'adv-note'; p.textContent = '（決める人1名＋意見・情報を持つ人だけに絞りましょう。「聞くだけ」の人は議事レポート送付へ）';
+    s2.appendChild(p);
+  }
+  if (advice.memberFeedback) {
+    const fb = document.createElement('div'); fb.className = 'adv-warn'; fb.textContent = '⚠️ ' + advice.memberFeedback;
+    s2.appendChild(fb);
+  }
+  const cost = intakeAdviceCostText(advice);
+  if (cost) { const c = document.createElement('div'); c.className = 'adv-cost'; c.textContent = cost; s2.appendChild(c); }
+  wrap.appendChild(s2);
+
+  // 3. アジェンダ案（タイムボックス／今日決めること）
+  const s3 = document.createElement('div'); s3.className = 'adv-sec';
+  const s3h = document.createElement('div'); s3h.className = 'adv-sec-h'; s3h.textContent = '3. アジェンダ案（タイムボックス／今日決めること）';
+  s3.appendChild(s3h);
+  if (advice.agenda && advice.agenda.length) {
+    const total = advice.agenda.reduce(function (n, g) { return n + (g.minutes || 0); }, 0);
+    const ul = document.createElement('ul');
+    advice.agenda.forEach(function (g) {
+      const li = document.createElement('li');
+      li.textContent = g.title + '（' + (g.minutes || 0) + '分）' + (g.goal ? '／今日決めること: ' + g.goal : '');
+      ul.appendChild(li);
+    });
+    s3.appendChild(ul);
+    const t = document.createElement('div'); t.className = 'adv-note'; t.textContent = '合計 ' + total + '分';
+    s3.appendChild(t);
+    if (total > 30) { const w = document.createElement('div'); w.className = 'adv-warn'; w.textContent = '⚠️ 30分を超えています。分割して次回へ回すのもおすすめです（強制ではありません）。'; s3.appendChild(w); }
+  } else {
+    const p = document.createElement('div'); p.className = 'adv-note'; p.textContent = '（冒頭に目的確認・末尾に決定確認を置き、合計30分以内を目安に）';
+    s3.appendChild(p);
+  }
+  wrap.appendChild(s3);
+
+  const foot = document.createElement('div'); foot.className = 'adv-foot';
+  foot.textContent = 'あくまでおすすめです。対話を続けて自由に変更できます。';
+  wrap.appendChild(foot);
+  return wrap;
+}
+// v6-5(#47): アドバイスの招集メンバー人数から参考換算額を出す（1人減らす意思決定を後押し）。
+function intakeAdviceCostText(advice) {
+  const rate = loadRate();
+  let count = (advice && Array.isArray(advice.members)) ? advice.members.length : 0;
+  // 対話で集めた最小メンバー（決裁者＋招集する人）も考慮し、多い方を使う。
+  const active = (intake && intake.participants) ? intake.participants.filter(function (p) { return p.role !== 'listener'; }) : [];
+  const collected = (intake && intake.decider ? 1 : 0) + active.length;
+  count = Math.max(count, collected);
+  if (!count) return '';
+  const perPerson = Math.round(30 * rate / 60);
+  const est = count * perPerson;
+  return '参考: この会議の値札（見込み）¥' + est.toLocaleString() + '（' + count + '人 × 30分 × 人時単価 ¥' + rate.toLocaleString() + '）。1人減らすと¥' + perPerson.toLocaleString() + '節約。';
+}
+function persistIntakeLog() {
+  if (!intake.seriesId) return;
+  const list = loadSeries();
+  const s = list.find(x => x.id === intake.seriesId);
+  if (s) { s.intakeLog = intake.log.slice(); saveSeries(list); }
+}
+
+// 選択肢ボタン群を差し替える。choices: [{label, onClick}]
+function setIntakeChoices(choices) {
+  const box = document.getElementById('intake-choices');
+  if (!box) return;
+  box.innerHTML = '';
+  (choices || []).forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'ghost intake-choice';
+    b.textContent = c.label;
+    b.onclick = c.onClick;
+    box.appendChild(b);
+  });
+  // v6-1: 対話5往復以上（=6問目以降）は「会議招集まとめ」ボタンを常設。
+  //   押すと対話を打ち切り、その時点の情報で会議招集文面をチャット内に出力する。
+  if (intakeShouldShowInviteButton()) {
+    const b = document.createElement('button');
+    b.className = 'primary intake-choice';
+    b.id = 'intake-invite-btn';
+    b.textContent = '📋 会議招集まとめ';
+    b.onclick = intakeMeetingInvite;
+    box.appendChild(b);
+  }
+}
+// v6-1: まとめボタンを出す条件。最低5回の応答を担保し、終話系の局面では出さない。
+function intakeShouldShowInviteButton() {
+  if (!intake) return false;
+  if ((intake.userTurns || 0) < 5) return false;
+  return ['summary', 'doneNoMeeting', 'inviteDone'].indexOf(intake.state) < 0;
+}
+function setIntakeInput(show, placeholder) {
+  const row = document.getElementById('intake-input-row');
+  const inp = document.getElementById('intake-input');
+  if (row) row.style.display = show ? '' : 'none';
+  if (inp && show) { inp.placeholder = placeholder || ''; inp.value = ''; inp.focus(); }
+}
+
+function intakeSubmitText() {
+  const inp = document.getElementById('intake-input');
+  const v = (inp && inp.value || '').trim();
+  if (!v) return;
+  if (inp) inp.value = '';
+  intakeDispatch(v);
+}
+// 自由入力・選択肢クリックの共通入口。v6-4(#46): AI対話のみ（ルールベース振り分けは廃止）。
+function intakeDispatch(v) {
+  if (intake.aiBusy) return;
+  if (intake.aiMode !== 'ai') return; // LLM設定OFF時は対話を開始しない
+  intakeSay('user', v);
+  intakeAiTurn();
+}
+
+// 初回メッセージ「案件名を教えてください。」（クライアント表示。#46 で維持）。
+function intakeAskName() {
+  intake.state = 'askName';
+  setIntakeChoices([]);
+  setIntakeInput(true, '案件名を入力…');
+  intakeSay('system', '案件名を教えてください。');
+}
+// 会議招集の文面テンプレートへ遷移（AIの suggest_report アクションから使用）。
+function intakeGoTemplate() {
+  showScreen('triage');
+  triage(intake.tense === 'present' ? 'present' : 'past');
+  const t = document.getElementById('triage-topic');
+  if (t) { t.value = intake.title; renderTemplate(); }
+}
+
+// 対話の要約（背景プリフィル・まとめ表示に使う）
+function intakeSummaryText() {
+  const L = [];
+  L.push('案件：' + (intake.title || '（無題）'));
+  if (intake.tense) L.push('入口：' + { past: '報告（過去）', present: '連絡（現在）', future: '相談（未来）' }[intake.tense]);
+  if (intake.exceptions.length) L.push('例外条件：' + intake.exceptions.join('・'));
+  if (intake.factsReady) L.push('事実の状況：' + { yes: '揃っている', no: '揃っていない', unknown: 'わからない' }[intake.factsReady]);
+  if (intake.decisionQuestion) L.push('決めること：' + intake.decisionQuestion);
+  if (intake.decider) L.push('決裁者：' + intake.decider);
+  const active = intake.participants.filter(function (p) { return p.role !== 'listener'; });
+  const listeners = intake.participants.filter(function (p) { return p.role === 'listener'; });
+  if (active.length) L.push('招集：' + active.map(function (p) { return p.name + '（' + INTAKE_ROLE_LABEL[p.role] + '）'; }).join('、'));
+  if (listeners.length) L.push('レポート送付（招集しない）：' + listeners.map(function (p) { return p.name; }).join('、'));
+  return L.join('\n');
+}
+
+// まとめ → 判断セッション設計へプリフィル（判断する問い・背景=要約・参加者・案件紐づけ）
+//   ・議題は「判断する問い」1件・タイムボックス最小（10分既定）でプリフィル（追加はユーザー判断）
+//   ・「事実が揃っていない」と答えた案件は、事実ゲートのあるStep3（目標設定）で設計を開き、
+//     判断準備不足の警告（#28）を確実に連動させる（揃っている案件はStep1で開く）。
+function intakeToDesign() {
+  const sid = intake.seriesId;
+  if (!sid) return;
+  // 「事実が揃っていない／わからない」と明示的に答えた場合のみ、事実ゲートのあるStep3で開いて
+  // 判断準備不足の警告（#28）を連動させる。それ以外（揃っている・AI対話で未捕捉=null）はStep1。
+  const factsNotReady = (intake.factsReady === 'no' || intake.factsReady === 'unknown');
+  const stepNo = factsNotReady ? 3 : 1;
+  goToStepDesign(sid, stepNo);
+  const dq = document.getElementById('mtg-decision-question');
+  if (dq) dq.value = intake.decisionQuestion || '';
+  const bg = document.getElementById('mtg-bg');
+  if (bg) bg.value = intakeSummaryText();
+  // 議題は「判断する問い」1件・10分でプリフィル（問いが空なら追加しない）
+  agendas = [];
+  if (intake.decisionQuestion) {
+    agendas.push({ q: intake.decisionQuestion, min: 10, goal: 'この問いに結論を出し、担当と期限まで決める' });
+  }
+  members = [];
+  recipients = [];
+  if (intake.decider) members.push({ name: intake.decider, role: 'decider', prep: '' });
+  intake.participants.forEach(function (p) {
+    if (p.role === 'listener') recipients.push({ name: p.name });
+    else members.push({ name: p.name, role: p.role, prep: '' });
+  });
+  renderDesign();
+  renderPricetag();
+  renderInvite();
+}
+
+// ==================================================================
+// v6-1 チャット内での会議招集文面出力（クライアント側の決定的ロジック）。
+//   ・埋まっていない項目は省略し、完璧を期さない。
+//   ・成果物として series に保存（artifacts type:'meeting-invite'）。
+//   ・「事実が揃っていない/わからない」と判明していれば【会議までに事前送付のお願い】を付す。
+// ==================================================================
+
+// v6-5(#47): 3点アドバイスの素材（propose_advice があれば優先、無ければ対話情報から決定的生成）。
+function intakeAdviceData() {
+  return (intake && intake.advice && typeof intake.advice === 'object') ? intake.advice : null;
+}
+// ①会議で議論すべきこと（相談のみ）。[{title, note}]
+function intakeDiscussItems() {
+  const ad = intakeAdviceData();
+  if (ad && Array.isArray(ad.discuss) && ad.discuss.length) {
+    return ad.discuss.map(function (d) { return { title: d.title, note: d.note || '' }; });
+  }
+  if (intake.decisionQuestion) return [{ title: intake.decisionQuestion, note: '未来の判断が必要な相談です' }];
+  return [];
+}
+// ③アジェンダ（タイムボックス／今日決めること）。[{title, minutes, goal}]
+function intakeAgendaItems() {
+  const ad = intakeAdviceData();
+  if (ad && Array.isArray(ad.agenda) && ad.agenda.length) {
+    return ad.agenda.map(function (g) { return { title: g.title, minutes: g.minutes || 5, goal: g.goal || '' }; });
+  }
+  if (intake.decisionQuestion) {
+    return [
+      { title: '目的・ゴールの確認', minutes: 3, goal: 'この会議で決めることを全員で共有' },
+      { title: intake.decisionQuestion, minutes: 20, goal: 'この問いに結論を出し、担当と期限まで決める' },
+      { title: '決定事項とO/D/N（宿題・次アクション）の確認', minutes: 5, goal: '決定・担当・期限・次アクションを確認' }
+    ];
+  }
+  return [];
+}
+
+// 会議前に事前送付を依頼すべき資料の列挙（該当がなければ空配列＝セクション省略）。
+function intakePresendItems() {
+  const items = [];
+  const who = intake.decider || '決裁者または情報を持っている人';
+  const factsNotReady = (intake.factsReady === 'no' || intake.factsReady === 'unknown');
+  if (factsNotReady) {
+    items.push('現状把握レポート（Step2）を会議前に事前送付してください（担当: ' + who + '）');
+  }
+  // v6-3: AI対話由来の presend=true の報連相（事前送付すべき資料）も事前送付セクションへ反映。
+  const ax = (intake && intake.aiExtract && Array.isArray(intake.aiExtract.horenso)) ? intake.aiExtract.horenso : [];
+  ax.forEach(function (h) {
+    if (!h || !h.presend || !h.text) return;
+    const line = h.text + 'を会議前に事前送付してください（担当: ' + who + '）';
+    // 既存項目と実質重複しないときだけ追加（現状把握レポートは上で既出になり得る）。
+    if (!items.some(function (x) { return x.indexOf(h.text) >= 0; })) items.push(line);
+  });
+  // v6-5(#47): アドバイスの presend（会議で扱わず会議前に済ませる報告/連絡）も反映。
+  const ad = intakeAdviceData();
+  if (ad && Array.isArray(ad.presend)) {
+    ad.presend.forEach(function (p) {
+      if (!p || !p.text) return;
+      // 大まかなキーで重複判定（「現状把握レポート（Step2）で事実を〜」等の言い回し差を吸収）。
+      const key = String(p.text).replace(/で事実を.*$|を会議前.*$/, '').trim();
+      if (key && items.some(function (x) { return x.indexOf(key) >= 0; })) return;
+      items.push(p.text + 'を会議前に' + (p.kind === 'chat' ? 'チャットで共有' : '事前送付') + 'してください（担当: ' + who + '）');
+    });
+  }
+  return items;
+}
+
+// 会議招集の文面を決定的に組み立てる（LLMに任せない）。
+function intakeBuildInviteText() {
+  const rate = loadRate();
+  const active = intake.participants.filter(function (p) { return p.role !== 'listener'; });
+  const listeners = intake.participants.filter(function (p) { return p.role === 'listener'; });
+  const memberCount = (intake.decider ? 1 : 0) + active.length;
+  const perPerson = Math.round(30 * rate / 60);
+  const est = memberCount * perPerson;
+  const L = [];
+  L.push('【会議招集】' + (intake.title || '（無題の相談）'));
+  L.push('');
+  L.push('■ 背景');
+  L.push(intakeSummaryText());
+  // v6-5(#47) ①会議で議論すべきこと（相談＝未来の判断のみ）
+  const discuss = intakeDiscussItems();
+  if (discuss.length) {
+    L.push('');
+    L.push('■ 会議で議論すること（相談＝未来の判断のみ）');
+    discuss.forEach(function (d, i) {
+      L.push((i + 1) + '. ' + d.title);
+      if (d.note) L.push('   ' + d.note);
+    });
+  }
+  if (intake.decisionQuestion) {
+    L.push('');
+    L.push('■ 判断する問い');
+    L.push(intake.decisionQuestion);
+  }
+  // v6-5(#47) ③アジェンダ（タイムボックス／今日決めること）。ヘッダは既存互換のため「議題と今日決めること」を維持。
+  const agenda = intakeAgendaItems();
+  if (agenda.length) {
+    const totalMin = agenda.reduce(function (n, g) { return n + (g.minutes || 0); }, 0);
+    L.push('');
+    L.push('■ 議題と今日決めること（合計 ' + totalMin + '分）');
+    agenda.forEach(function (g, i) {
+      L.push((i + 1) + '. ' + g.title + '（' + (g.minutes || 0) + '分）');
+      if (g.goal) L.push('   今日決めること: ' + g.goal);
+    });
+    if (totalMin > 30) L.push('※ 合計が30分を超えています。分割して次回へ回すのがおすすめです（強制ではありません）。');
+  }
+  L.push('');
+  L.push('■ 招集メンバー（役割つき・最小）');
+  if (memberCount) {
+    if (intake.decider) L.push('・' + intake.decider + '（決める人）');
+    active.forEach(function (p) { L.push('・' + p.name + '（' + INTAKE_ROLE_LABEL[p.role] + '）'); });
+    const ad = intakeAdviceData();
+    if (ad && ad.memberFeedback) L.push('（' + ad.memberFeedback + '）');
+  } else {
+    L.push('（招集メンバーは未設定です。決める人・意見・情報の役割で最小限に絞ってください）');
+  }
+  if (listeners.length) {
+    L.push('');
+    L.push('■ レポート送付（会議には呼びません／聞くだけの人）');
+    L.push(listeners.map(function (p) { return p.name; }).join('、'));
+  }
+  L.push('');
+  L.push('■ この会議の値札（見込み）');
+  L.push('¥' + est.toLocaleString() + '（' + memberCount + '人 × 30分 × 人時単価 ¥' + rate.toLocaleString() + '）');
+  const presend = intakePresendItems();
+  if (presend.length) {
+    L.push('');
+    L.push('■ 【会議までに事前送付のお願い】');
+    presend.forEach(function (item) { L.push('・' + item); });
+  }
+  L.push('');
+  L.push('■ 運用ルール');
+  L.push('・事前の個別回り（根回し）は不要です。判断材料は会議に持ち寄ってください');
+  L.push('・説明は本案内と事前資料で完了。会議は判断と合意に使います');
+  L.push('・前後30分はバッファを空けてください');
+  L.push('・結論から話す。事実と意見を分ける');
+  return L.join('\n');
+}
+
+// 「📋 会議招集まとめ」押下: 文面を生成し、チャット内に出力・成果物保存・裏タブ用データ反映。
+function intakeMeetingInvite() {
+  intake.state = 'inviteDone';
+  setIntakeInput(false);
+  const text = intakeBuildInviteText();
+  intakeSyncSeriesData();
+  intakeSaveInviteArtifact(text);
+  intakeSay('system', '会議招集の文面を作成しました。以下をコピーして送付してください。（不足項目は省いています）');
+  intakeSayInvite(text);
+  setIntakeChoices([
+    { label: '対話を続けて修正する', onClick: intakeResumeAfterInvite },
+    { label: '新しい案件を始める', onClick: intakeStart }
+  ]);
+}
+// まとめ出力後に対話を続ける（AI対話を再開し、再度まとめボタンで文面を再生成できる）。
+// v6-4(#46): ルールベースの参加者質問へは戻さず、自由入力のAI対話を続ける。
+function intakeResumeAfterInvite() {
+  intake.state = 'ai';
+  intakeSay('system', '続けて修正したい点があれば教えてください。整い次第、もう一度「📋 会議招集まとめ」で文面を作り直せます。');
+  setIntakeChoices([]);
+  setIntakeInput(true, '自由に入力…');
+}
+function intakeCopyInvite(pre, btn) {
+  const txt = pre.textContent;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function () { flashCopied(btn); }).catch(function () {});
+  }
+}
+// series に成果物として会議招集文面を保存（既存 artifacts 機構に倣い series 直下へ）。
+function intakeSaveInviteArtifact(text) {
+  if (!intake.seriesId) return;
+  const list = loadSeries();
+  const s = list.find(function (x) { return x.id === intake.seriesId; });
+  if (!s) return;
+  if (!Array.isArray(s.artifacts)) s.artifacts = [];
+  s.artifacts.push({ type: 'meeting-invite', text: text, at: Date.now() });
+  saveSeries(list);
+}
+
+// v6-3: AI応答の extract（{a3,horenso,muda}）を intake.aiExtract に累積する。
+//   ルールベース反映と「同じ器」（horenso/mudaChecks/steps）へ統合するため、ここでは器へ溜め、
+//   実際の series 反映は intakeSyncSeriesData 側でルールベース分と合流させる。best-effort・完璧を期さない。
+function intakeMergeExtract(extract) {
+  if (!intake || !extract || typeof extract !== 'object' || Array.isArray(extract)) return;
+  const acc = intake.aiExtract || (intake.aiExtract = { a3: {}, horenso: [], muda: {} });
+  if (!acc.a3) acc.a3 = {}; if (!Array.isArray(acc.horenso)) acc.horenso = []; if (!acc.muda) acc.muda = {};
+  // a3: ステップ番号(1-8の文字列)→断片。後着で上書き（最新の抽出を優先）。
+  if (extract.a3 && typeof extract.a3 === 'object') {
+    Object.keys(extract.a3).forEach(function (k) {
+      const n = String(k).trim();
+      const v = extract.a3[k];
+      if (/^[1-8]$/.test(n) && typeof v === 'string' && v.trim()) acc.a3[n] = v.trim();
+    });
+  }
+  // horenso: {kind,text,presend} を kind+text の重複を避けて追加。
+  if (Array.isArray(extract.horenso)) {
+    extract.horenso.forEach(function (h) {
+      if (!h || typeof h !== 'object') return;
+      const kind = ['report', 'chat', 'meeting'].indexOf(h.kind) >= 0 ? h.kind : null;
+      const text = typeof h.text === 'string' ? h.text.trim() : '';
+      if (!kind || !text) return;
+      if (acc.horenso.some(function (x) { return x.kind === kind && x.text === text; })) return;
+      acc.horenso.push({ kind: kind, text: text, presend: !!h.presend });
+    });
+  }
+  // muda: ムダ番号(1-7の文字列)→{status,note}。後着で上書き。
+  if (extract.muda && typeof extract.muda === 'object') {
+    Object.keys(extract.muda).forEach(function (k) {
+      const n = String(k).trim();
+      const m = extract.muda[k];
+      if (!/^[1-7]$/.test(n) || !m || typeof m !== 'object') return;
+      const status = (m.status === 'ok' || m.status === 'warn') ? m.status : null;
+      if (!status) return;
+      acc.muda[n] = { status: status, note: typeof m.note === 'string' ? m.note : '' };
+    });
+  }
+  intakeSyncSeriesData();
+}
+
+// v6-1: 対話から裏タブ用データ（horenso / mudaChecks）へ best-effort 反映。
+//   スキーマbump不要の追加フィールド。読み側はデフォルト補完する前提。
+function intakeSyncSeriesData() {
+  if (!intake || !intake.seriesId) return;
+  const list = loadSeries();
+  const s = list.find(function (x) { return x.id === intake.seriesId; });
+  if (!s) return;
+  // 報連相の仕分け（時制回答→1件追加、事実未準備→事前送付レポートを追加）
+  const horenso = [];
+  if (intake.tense === 'past') horenso.push({ kind: 'report', text: intake.title || '', presend: false });
+  else if (intake.tense === 'present') horenso.push({ kind: 'chat', text: intake.title || '', presend: false });
+  else if (intake.tense === 'future') horenso.push({ kind: 'meeting', text: intake.decisionQuestion || intake.title || '', presend: false });
+  const factsNotReady = (intake.factsReady === 'no' || intake.factsReady === 'unknown');
+  if (factsNotReady) horenso.push({ kind: 'report', text: '現状把握レポート（Step2）', presend: true });
+  // v6-3: AI抽出の報連相を、ルールベース分と重複を避けて合流させる（同じ器に共存）。
+  const ax = (intake && intake.aiExtract && typeof intake.aiExtract === 'object') ? intake.aiExtract : null;
+  if (ax && Array.isArray(ax.horenso)) {
+    ax.horenso.forEach(function (h) {
+      if (!h || !h.text) return;
+      if (horenso.some(function (x) { return x.kind === h.kind && x.text === h.text; })) return;
+      horenso.push({ kind: h.kind, text: h.text, presend: !!h.presend });
+    });
+  }
+  s.horenso = horenso;
+  // 7つのムダの兆候（best-effort。すべて埋める必要はない）。良好な兆候は✅、疑わしければ⚠️で残す。
+  const muda = (s.mudaChecks && typeof s.mudaChecks === 'object') ? s.mudaChecks : {};
+  const wantMeeting = (intake.tense === 'future') || intake.exceptions.length > 0;
+  const active = intake.participants.filter(function (p) { return p.role !== 'listener'; });
+  const memberCount = (intake.decider ? 1 : 0) + active.length;
+  const opinionCount = active.filter(function (p) { return p.role === 'opinion'; }).length;
+  if (wantMeeting) {
+    if (!intake.decider) muda['1'] = { status: 'warn', note: '決裁者が未定のまま会議を検討している' };
+    else muda['1'] = { status: 'ok', note: '決める人が明確（' + intake.decider + '）' };
+  }
+  if (memberCount >= 6) muda['2'] = { status: 'warn', note: '招集メンバーが6人以上（根回し・過招集の疑い）' };
+  if (/定例|レギュラー|毎週|毎月|恒例/.test(intake.title || '')) muda['6'] = { status: 'warn', note: '「定例」の気配（マンネリ会議の疑い）' };
+  if (wantMeeting && intake.decisionQuestion) {
+    if (opinionCount === 0) muda['7'] = { status: 'warn', note: '異論を出す役がいない（選択肢・異論の検討なしで結論ありきの疑い）' };
+    else muda['7'] = { status: 'ok', note: '意見を出す役がいる（結論ありきを回避）' };
+  }
+  // v6-3: AI抽出の7つのムダ兆候を合流（後着で上書き。ルールベース分と共存）。
+  if (ax && ax.muda && typeof ax.muda === 'object') {
+    Object.keys(ax.muda).forEach(function (k) {
+      const m = ax.muda[k];
+      if (/^[1-7]$/.test(String(k)) && m && (m.status === 'ok' || m.status === 'warn')) {
+        muda[k] = { status: m.status, note: typeof m.note === 'string' ? m.note : '' };
+      }
+    });
+  }
+  s.mudaChecks = muda;
+  // v6-2: 参照ビュー（A3タブ）用に対話由来の構造化サマリを永続化（追加フィールド）。
+  //   打ち切っても後から参照できるよう series に残す。編集キャンバスの steps.content とは別枠。
+  s.reflection = {
+    title: intake.title || '',
+    tense: intake.tense || null,
+    factsReady: intake.factsReady || null,
+    decisionQuestion: intake.decisionQuestion || '',
+    decider: intake.decider || '',
+    members: active.map(function (p) { return { name: p.name, role: p.role }; }),
+    background: intakeSummaryText(),
+    // v6-3: AIが対話から抽出したA3各ステップの断片（参照ビューで表示。canvas本文とは別枠）。
+    a3: (ax && ax.a3 && typeof ax.a3 === 'object') ? Object.assign({}, ax.a3) : {},
+    updatedAt: Date.now()
+  };
+  // v6-3: AI抽出のA3断片を、未記入（todo・空・手段未確定）のステップ本文へ best-effort でマージ。
+  //   ユーザー/会議が既に埋めたステップは上書きしない（共存）。
+  if (ax && ax.a3 && s.steps && typeof s.steps === 'object') {
+    Object.keys(ax.a3).forEach(function (n) {
+      if (!/^[1-8]$/.test(String(n))) return;
+      const st = s.steps[n];
+      if (st && !st.filledBy && (!st.content || !String(st.content).trim()) && (!st.status || st.status === 'todo')) {
+        st.content = ax.a3[n];
+      }
+    });
+  }
+  saveSeries(list);
+  renderRefViews();
+}
+
+// ==================================================================
+// v6-2 参照専用3タブ: A3 8ステップ／7つのムダ／報連相 の自動反映ビュー。
+//   すべて読み取り専用（入力UIを置かない）。対話が進むたびに renderRefViews() で再描画。
+//   案件が複数ある場合のみ案件セレクタ（ナビ用ボタン）を表示する。
+// ==================================================================
+
+// 7つのムダ（ポスターの問いかけ文つき）。mudaChecks のキー '1'〜'7' に対応。
+const MUDA_ITEMS = [
+  { key: '1', label: '会議のムダ', q: '「決まらない会議」「決めない人も出る会議」を開催していませんか？' },
+  { key: '2', label: '根回しのムダ', q: '自分の安心のために、"全員"に事前回りをしていませんか？' },
+  { key: '3', label: '資料のムダ', q: '報告のためだけに資料を作っていませんか？ A4／A3一枚以上の資料を準備していませんか？' },
+  { key: '4', label: '調整のムダ', q: '実務で調整していても進まない案件を、「頑張って」調整しようとしていませんか？' },
+  { key: '5', label: '上司のプライドのムダ', q: '報告がなかったという理由だけで「私は聞いていない」と言っていませんか？' },
+  { key: '6', label: 'マンネリのムダ', q: '「今までやっているから」という理由だけで、続けている業務はありませんか？' },
+  { key: '7', label: '「ごっこ」のムダ', q: '事前に練ったシナリオどおりの"シャンシャン"会議をしていませんか？' }
+];
+const HORENSO_LANES = [
+  { key: 'report', title: '報告（過去）', desc: '集まらずレポートで共有します' },
+  { key: 'chat', title: '連絡（現在）', desc: 'チャットで即共有します' },
+  { key: 'meeting', title: '相談（未来）', desc: '会議で判断します' }
+];
+
+// 参照ビューで選択中の案件ID（3タブ共通）。未指定/無効なら対話中の案件→最新案件を既定にする。
+let refSelectedSeriesId = null;
+function refCurrentSeries() {
+  const list = loadSeries();
+  if (!list.length) return null;
+  let s = refSelectedSeriesId ? list.find(function (x) { return x.id === refSelectedSeriesId; }) : null;
+  if (!s && intake && intake.seriesId) s = list.find(function (x) { return x.id === intake.seriesId; });
+  if (!s) s = list[list.length - 1];
+  refSelectedSeriesId = s.id;
+  return s;
+}
+function refSelectSeries(id) { refSelectedSeriesId = id; renderRefViews(); }
+// 案件セレクタ（案件が2件以上あるときだけボタン群を描画。1件以下なら空にする）。
+function buildRefSelector(container, activeId) {
+  if (!container) return;
+  container.innerHTML = '';
+  const list = loadSeries();
+  if (list.length <= 1) return;
+  list.slice().reverse().forEach(function (s) {
+    const b = document.createElement('button');
+    b.className = 'ghost small ref-case-btn' + (s.id === activeId ? ' active' : '');
+    b.textContent = s.title || '（無題の案件）';
+    b.onclick = function () { refSelectSeries(s.id); };
+    container.appendChild(b);
+  });
+}
+function renderRefViews() {
+  try { renderA3Ref(); } catch (e) {}
+  try { renderMudaRef(); } catch (e) {}
+  try { renderHorensoRef(); } catch (e) {}
+}
+
+// ---------- タブ1: トヨタA3 8ステップ（参照ビュー） ----------
+// Stepごとに対話由来の反映内容（Step1=背景要約／Step2=事実の状況・判断する問い）と
+// 編集キャンバスの本文・成果物（会議招集文面含む）を読み取り専用で並べる。
+function a3RefStepText(s, i) {
+  const r = s.reflection || {};
+  const parts = [];
+  if (i === 1 && r.background) parts.push(r.background);
+  if (i === 2) {
+    if (r.factsReady) parts.push('事実の状況：' + ({ yes: '揃っている', no: '揃っていない', unknown: 'わからない' }[r.factsReady] || r.factsReady));
+    if (r.decisionQuestion) parts.push('判断する問い：' + r.decisionQuestion);
+  }
+  const st = (s.steps && s.steps[String(i)]) || {};
+  if (st.content) parts.push(st.content);
+  // v6-3: AIが対話から抽出したA3断片も表示（本文に既出でなければ追記。best-effort）。
+  const ax3 = (r.a3 && typeof r.a3 === 'object') ? r.a3[String(i)] : '';
+  if (ax3 && parts.join('\n').indexOf(ax3) < 0) parts.push(ax3);
+  return parts.join('\n');
+}
+function renderA3Ref() {
+  const sel = document.getElementById('a3-ref-selector');
+  const body = document.getElementById('a3-ref-body');
+  if (!body) return;
+  const s = refCurrentSeries();
+  buildRefSelector(sel, s ? s.id : null);
+  body.innerHTML = '';
+  if (!s) {
+    const p = document.createElement('p');
+    p.className = 'ref-empty';
+    p.textContent = 'まだ案件がありません。チャットタブで対話を始めると、ここに8ステップが自動反映されます。';
+    body.appendChild(p);
+    return;
+  }
+  const title = document.createElement('h3');
+  title.textContent = '案件：' + (s.title || '（無題の案件）');
+  body.appendChild(title);
+  for (let i = 1; i <= 8; i++) {
+    const st = (s.steps && s.steps[String(i)]) || { status: 'todo', filledBy: null };
+    const wrap = document.createElement('div');
+    wrap.className = 'ref-step';
+    const head = document.createElement('div');
+    head.className = 'ref-step-head';
+    const sn = document.createElement('span');
+    sn.className = 'sn';
+    sn.textContent = 'Step ' + i;
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = A3_STEPS[i];
+    const means = STEP_MEANS[i];
+    const mb = document.createElement('span');
+    mb.className = 'badge ' + (means === 'meeting' ? 'meet' : means);
+    mb.textContent = MEANS_BADGE[means] + ' ' + MEANS_LABEL[means];
+    const stb = document.createElement('span');
+    stb.className = 'badge st-' + (st.status || 'todo');
+    stb.textContent = STATUS_LABEL[st.status || 'todo'];
+    head.append(sn, nm, mb, stb);
+    wrap.appendChild(head);
+    const txt = a3RefStepText(s, i);
+    const bodyDiv = document.createElement('div');
+    if (txt) {
+      bodyDiv.className = 'ref-step-body';
+      bodyDiv.textContent = txt;
+    } else {
+      bodyDiv.className = 'ref-step-body empty';
+      bodyDiv.textContent = '—（未記入）';
+    }
+    wrap.appendChild(bodyDiv);
+    body.appendChild(wrap);
+  }
+  // 成果物（会議招集文面含む）を読み取り専用で提示
+  const invites = (s.artifacts || []).filter(function (a) { return a && a.type === 'meeting-invite' && a.text; });
+  if (invites.length) {
+    const h = document.createElement('h3');
+    h.textContent = '成果物';
+    body.appendChild(h);
+    invites.slice().reverse().forEach(function (a) {
+      const det = document.createElement('details');
+      det.className = 'ref-artifact';
+      const sm = document.createElement('summary');
+      sm.textContent = '📋 会議招集文面（チャットで生成済み）';
+      const pre = document.createElement('pre');
+      pre.textContent = a.text;
+      det.append(sm, pre);
+      body.appendChild(det);
+    });
+  }
+}
+
+// ---------- タブ2: 7つのムダ チェックリスト（参照ビュー） ----------
+function renderMudaRef() {
+  const sel = document.getElementById('muda-ref-selector');
+  const body = document.getElementById('muda-ref-body');
+  if (!body) return;
+  const s = refCurrentSeries();
+  buildRefSelector(sel, s ? s.id : null);
+  body.innerHTML = '';
+  if (!s) {
+    const p = document.createElement('p');
+    p.className = 'ref-empty';
+    p.textContent = 'まだ案件がありません。チャットタブで対話を始めると、7つのムダの兆候が自動反映されます。';
+    body.appendChild(p);
+    return;
+  }
+  const checks = (s.mudaChecks && typeof s.mudaChecks === 'object') ? s.mudaChecks : {};
+  MUDA_ITEMS.forEach(function (item) {
+    const row = document.createElement('div');
+    row.className = 'muda-ref-row';
+    const c = checks[item.key];
+    const mark = document.createElement('div');
+    mark.className = 'muda-ref-mark';
+    const main = document.createElement('div');
+    main.className = 'muda-ref-main';
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.innerHTML = '<b>' + item.label + '</b>';
+    const q = document.createElement('div');
+    q.className = 'q';
+    q.textContent = item.q;
+    const status = document.createElement('div');
+    if (c && c.status === 'warn') {
+      mark.textContent = '⚠️';
+      status.className = 'muda-ref-status warn';
+      status.textContent = '注意';
+    } else if (c && c.status === 'ok') {
+      mark.textContent = '✅';
+      status.className = 'muda-ref-status ok';
+      status.textContent = '問題なし';
+    } else {
+      mark.textContent = '—';
+      status.className = 'muda-ref-status none';
+      status.textContent = '未確認';
+    }
+    main.append(label, q, status);
+    if (c && c.note) {
+      const note = document.createElement('div');
+      note.className = 'muda-ref-note';
+      note.textContent = c.note;
+      main.appendChild(note);
+    }
+    row.append(mark, main);
+    body.appendChild(row);
+  });
+}
+
+// ---------- タブ3: 報連相 仕分けリスト（参照ビュー） ----------
+function renderHorensoRef() {
+  const sel = document.getElementById('horenso-ref-selector');
+  const body = document.getElementById('horenso-ref-body');
+  if (!body) return;
+  const s = refCurrentSeries();
+  buildRefSelector(sel, s ? s.id : null);
+  body.innerHTML = '';
+  if (!s) {
+    const p = document.createElement('p');
+    p.className = 'ref-empty';
+    p.textContent = 'まだ案件がありません。チャットタブで対話を始めると、報告／連絡／相談に自動で仕分けされます。';
+    body.appendChild(p);
+    return;
+  }
+  const items = Array.isArray(s.horenso) ? s.horenso : [];
+  const hasInvite = (s.artifacts || []).some(function (a) { return a && a.type === 'meeting-invite'; });
+  const lanes = document.createElement('div');
+  lanes.className = 'horenso-lanes';
+  HORENSO_LANES.forEach(function (lane) {
+    const col = document.createElement('div');
+    col.className = 'horenso-lane';
+    const h = document.createElement('h3');
+    h.textContent = lane.title;
+    const desc = document.createElement('p');
+    desc.className = 'lane-desc';
+    desc.textContent = lane.desc;
+    col.append(h, desc);
+    const laneItems = items.filter(function (it) { return it.kind === lane.key; });
+    if (!laneItems.length) {
+      const e = document.createElement('div');
+      e.className = 'lane-empty';
+      e.textContent = '—（該当なし）';
+      col.appendChild(e);
+    } else {
+      laneItems.forEach(function (it) {
+        const row = document.createElement('div');
+        row.className = 'horenso-item';
+        row.textContent = it.text || '（無題）';
+        if (it.presend) {
+          const b = document.createElement('span');
+          b.className = 'badge presend';
+          b.textContent = '会議前に事前送付';
+          row.appendChild(b);
+        }
+        col.appendChild(row);
+      });
+    }
+    // 相談レーンには会議招集文面（チャットで生成済み）への参照リンクを添える
+    if (lane.key === 'meeting' && hasInvite) {
+      const a = document.createElement('button');
+      a.className = 'ghost small invite-link';
+      a.textContent = '→ 会議招集文面（チャットで生成済み）を見る';
+      a.onclick = function () { showScreen('chat'); };
+      col.appendChild(a);
+    }
+    lanes.appendChild(col);
+  });
+  body.appendChild(lanes);
+}
+
+// ==================================================================
+// v5-2 AIインテーク: LLM ON（既定）時は /api/v1/intake で自由対話。
+//   包括同意は対話カード上のインライン通知（非ブロッキング）。
+//   v6-4(#46): タイムアウト/失敗時はルールベースへフォールバックせず、
+//   エラーメッセージ＋「🔄 再試行」を表示する（履歴・state・userTurnsは保持）。
+// ==================================================================
+
+// 会話履歴を {role:'user'|'assistant', text} 配列にし、合計32KBに収まるよう直近へ間引く。
+function intakeBuildMessages() {
+  const msgs = intake.log
+    .filter(m => m.role === 'user' || m.role === 'system')
+    .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', text: String(m.text || '') }));
+  while (msgs.length > 2 && JSON.stringify(msgs).length > 32 * 1024) msgs.shift();
+  return msgs;
+}
+
+// タイムアウト/HTTPエラー/ネットワーク断はすべて捕捉して null を返す。
+function intakeAiFetch(endpoint, payload) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LLM_TIMEOUT_MS);
+  return fetch(llmUrl(endpoint, 'intake'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: ctrl.signal
+  }).then((res) => {
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return res.json().catch(() => null);
+  }).catch(() => {
+    clearTimeout(timer);
+    return null;
+  });
+}
+
+// 1ターン: 会話履歴＋状態を送り、reply/choices/actions を適用する。
+async function intakeAiTurn() {
+  const cfg = loadLlm();
+  intake.aiBusy = true;
+  setIntakeChoices([]);
+  setIntakeInput(false);
+  const messages = intakeBuildMessages();
+  const state = intake.aiState || { phase: 'askName' };
+  const resp = await intakeAiFetch(cfg.endpoint, { messages, state });
+  intake.aiBusy = false;
+  if (!resp || !resp.ok || !resp.result || typeof resp.result.reply !== 'string') {
+    // v6-4(#46): ルールベースへフォールバックせず、エラー＋再試行を提示（履歴・state・userTurnsは保持）。
+    intakeShowAiError();
+    return;
+  }
+  intake.state = 'ai';
+  const r = resp.result;
+  intakeSay('system', r.reply);
+  // actions を順に適用。ガード等で直接聞き直しに引き継いだ場合(true)はAIの選択肢描画を抑止する。
+  let handedOff = false;
+  if (Array.isArray(r.actions)) {
+    for (let i = 0; i < r.actions.length; i++) {
+      try { if (intakeApplyAction(r.actions[i], r.reply)) { handedOff = true; break; } } catch (e) {}
+    }
+  }
+  // v6-3: AI応答の extract を裏タブ用データ（A3/ムダ/報連相）へ best-effort でマージ。
+  try { intakeMergeExtract(r.extract); } catch (e) {}
+  intake.aiState = (r.state && typeof r.state === 'object') ? r.state : intake.aiState;
+  if (!handedOff) intakeRenderAiChoices(r.choices);
+}
+
+// AI応答の choices を選択肢ボタンにする。自由入力も併用できるよう入力欄は表示のまま。
+function intakeRenderAiChoices(choices) {
+  const arr = Array.isArray(choices) ? choices : [];
+  setIntakeChoices(arr.map(label => ({ label: label, onClick: function () { intakeAiChoice(label); } })));
+  setIntakeInput(true, '自由に入力…');
+}
+function intakeAiChoice(label) {
+  if (intake.aiBusy) return;
+  intakeSay('user', label);
+  intakeAiTurn();
+}
+
+// AI応答の actions を既存ヘルパへ適用する（series/title/問い/メンバー/設計プリフィル等）。
+// replyText は同ターンのAIの発話（自己参照ガード用）。戻り値 true はルールベースへ引き継いだことを示す。
+function intakeApplyAction(a, replyText) {
+  if (!a || typeof a.type !== 'string') return false;
+  switch (a.type) {
+    case 'set_title': {
+      if (a.title) intake.title = a.title;
+      if (!intake.seriesId) {
+        const s = createSeries(intake.title || '無題の案件', '');
+        intake.seriesId = s.id;
+        persistIntakeLog();
+        renderA3();
+      } else {
+        const list = loadSeries();
+        const s = list.find(x => x.id === intake.seriesId);
+        if (s) { s.title = intake.title; saveSeries(list); renderA3(); }
+      }
+      break;
+    }
+    case 'set_route':
+      if (a.tense) intake.tense = a.tense;
+      break;
+    case 'set_question': {
+      // v5-4 bugfix(#41): 自己参照ガード。AIが自分の質問文を question に入れてきたら採用せず直接聞き直す。
+      const q = a.question || '';
+      if (q && intakeIsSelfReference(q, replyText)) {
+        intakeGuardDecisionQuestion();
+        return true;
+      }
+      intake.decisionQuestion = q;
+      break;
+    }
+    case 'add_member': {
+      // v5-4 bugfix(#41): name の複数名分割 + role の表記ゆれ正規化。
+      const role = intakeNormalizeRole(a.role);
+      const names = intakeSplitNames(a.name);
+      if (role === 'decider') {
+        if (names.length) {
+          intake.decider = names[0];
+          for (let i = 1; i < names.length; i++) intake.participants.push({ name: names[i], role: 'opinion' });
+        }
+      } else {
+        names.forEach(function (nm) { intake.participants.push({ name: nm, role: role }); });
+      }
+      break;
+    }
+    case 'propose_meeting':
+      // v5-4 bugfix(#41): question が自己参照でなければ採用（既存の決める問いは温存する）。
+      if (a.question && !intakeIsSelfReference(a.question, replyText)) intake.decisionQuestion = a.question;
+      intakeToDesign();
+      break;
+    case 'propose_advice': {
+      // v6-5(#47): 主催者への3点アドバイスをチャット内に表示し、intake state / series に保持する。
+      const ad = intakeNormalizeAdvice(a);
+      if (ad) {
+        intake.advice = ad;
+        intakeSayAdvice(ad);
+        if (intake.seriesId) intakeSyncSeriesData();
+      }
+      break;
+    }
+    case 'suggest_report':
+      if (a.step === 2 && intake.seriesId) {
+        openStepEditor(intake.seriesId, 2, 'report');
+      } else {
+        intake.tense = a.kind === 'chat' ? 'present' : 'past';
+        intakeGoTemplate();
+      }
+      break;
+    case 'fill_step':
+      if (intake.seriesId && a.step) openStepEditor(intake.seriesId, a.step, a.kind || 'report');
+      break;
+    default:
+      break;
+  }
+  return false;
+}
+
+// v5-4 bugfix(#41) / v6-4(#46): 自己参照ガード発火時。ルールベースツリーは復活させず、
+//   固定の聞き直しメッセージを1つ出して自由入力のAI対話を続ける。
+function intakeGuardDecisionQuestion() {
+  intake.state = 'ai';
+  intakeSay('system', 'では、この会議で判断すべき問いを一言で教えてください。');
+  setIntakeChoices([]);
+  setIntakeInput(true, '例）発売日をいつにするか？');
+}
+
+// v6-4(#46): AI接続失敗時のエラー表示＋再試行。対話履歴・intake state・userTurns は保持する。
+function intakeShowAiError() {
+  intake.state = 'aiError';
+  setIntakeInput(false);
+  intakeSay('system', '⚠️ AIに接続できません。接続を確認して、もう一度お試しください。');
+  setIntakeChoices([{ label: '🔄 再試行', onClick: intakeRetryAi }]);
+}
+// 直前と同じAIターンを再実行する（新たなユーザー発話は積まない）。
+function intakeRetryAi() {
+  if (!intake || intake.aiBusy) return;
+  intakeAiTurn();
+}
+
 // ---------- 初期化 ----------
 document.getElementById('avoid-rate').value = loadRate();
 document.getElementById('mtg-rate').value = loadRate();
@@ -5119,6 +6429,8 @@ renderSeriesOptions();
 renderDesign();
 renderDash();
 renderA3();
+renderRefViews();
+intakeStart();
 renderLlmSettings();
 renderAiRouterCard();
 renderAgendaAssist();

@@ -36,14 +36,19 @@ MOCK_LLM=1 PORT=8787 node server/router-api.mjs
 - `http://localhost:8787/privacy` でプライバシー方針を表示。
 - `curl http://localhost:8787/healthz` で `{"ok":true,"mock":true}` を確認。
 
-### 2-2. 実キーで起動（Claude API を利用）
+### 2-2. 実 API で起動（OpenAI 互換 API を利用）
 
 ```sh
-ANTHROPIC_API_KEY=sk-ant-... PORT=8787 DAILY_LIMIT=1000 node server/router-api.mjs
+OPENAI_BASE_URL=https://<your-gateway>/v1 OPENAI_API_KEY=sk-... \
+  PORT=8787 DAILY_LIMIT=1000 node server/router-api.mjs
 ```
 
 - `MOCK_LLM` を設定しない（または `MOCK_LLM=0`）と実APIを呼びます。
-- `ANTHROPIC_API_KEY` が未設定かつモックでもない場合、AIアシストは `503 llm_unavailable` を返します（静的配信は動作します）。
+- **`OPENAI_BASE_URL` は必須の環境変数です（デフォルト値なし）。宛先は運用者が明示的に指定してください。**
+  未設定（空文字）かつ非モックの場合、AIアシストは `503 llm_unavailable` を返します（静的配信は動作します）。
+  これはクラウドメタデータサービス等への SSRF を防ぐための仕様です。
+- `OPENAI_API_KEY` は任意です。設定すると `Authorization: Bearer` ヘッダーを付与します（未設定ならゲートウェイ側の認証に委ねます）。
+- `OPENAI_MODEL`（既定 `gpt-4o`）でモデルを切り替えられます。
 
 ---
 
@@ -65,7 +70,8 @@ docker run --rm -p 8787:8787 -e MOCK_LLM=1 meeting-router:latest
 
 ```sh
 docker run --rm -p 8787:8787 \
-  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e OPENAI_BASE_URL=https://<your-gateway>/v1 \
+  -e OPENAI_API_KEY=sk-... \
   -e DAILY_LIMIT=1000 \
   meeting-router:latest
 ```
@@ -78,10 +84,12 @@ docker run --rm -p 8787:8787 \
 
 | 変数 | 既定 | 意味 |
 |------|------|------|
-| `ANTHROPIC_API_KEY` | （空） | Claude API キー。未設定かつ非モックだと AI アシストは 503。 |
+| `OPENAI_BASE_URL` | **（なし・必須）** | OpenAI 互換 API のベース URL。**デフォルト値なしの必須環境変数**。宛先は運用者が明示的に指定すること。未設定かつ非モックだと AI アシストは `503 llm_unavailable`（SSRF 対策）。 |
+| `OPENAI_API_KEY` | （空） | OpenAI 互換 API キー。設定時のみ `Authorization: Bearer` を付与（任意）。 |
+| `OPENAI_MODEL` | `gpt-4o` | 使用モデル。 |
 | `PORT` | `8787` | 待受ポート。 |
 | `DAILY_LIMIT` | `1000` | 1日あたりの LLM 呼び出し上限。超過で `503 daily_limit`。 |
-| `MOCK_LLM` | （空） | `1` で外部送信せず決定的モック応答（キー不要）。 |
+| `MOCK_LLM` | （空） | `1` で外部送信せず決定的モック応答（キー・URL 不要）。 |
 
 その他、サーバー内蔵の固定的な保護:
 
@@ -93,12 +101,11 @@ docker run --rm -p 8787:8787 \
 
 ## 5. コスト管理
 
-AIアシストはエンドポイントごとにモデルを使い分けています。
+AIアシストは全ルート共通で単一モデル（環境変数 `OPENAI_MODEL`／既定 `gpt-4o`）を使用します。宛先は `OPENAI_BASE_URL` で指定した OpenAI 互換 API です。
 
 | 用途 | モデル | 考え方 |
 |------|--------|--------|
-| 軽い分類・添削・具体化（R1〜R3） | `claude-haiku-4-5` | 短く高頻度な処理は安価な Haiku で。 |
-| 要約・A3圧縮・なぜなぜ・診断（R4〜R7） | `claude-sonnet-5` | 構造化・要約の品質が要る処理は Sonnet で。 |
+| 対話インテーク・R1〜R7 の全ルート | `OPENAI_MODEL`（既定 `gpt-4o`） | 用途ごとの切り替えはせず、運用者が選んだ1モデルで統一。コストや品質に応じて環境変数で差し替える。 |
 
 コストを抑える運用:
 

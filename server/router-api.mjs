@@ -1,7 +1,9 @@
 // 会議招集の前に ステートレスAPIバックエンド骨格 (v3-2 / Issue #14)
 // - Node 18+ 標準ライブラリ + 組み込み fetch のみ。npm 依存ゼロ。
 // - ゼロリテンション: DB・ファイル書き込み一切なし。ログはメタデータのみ（入力本文・LLM応答本文は出さない）。
-// - LLMアシスト専用。MOCK_LLM=1 で決定的モック、ANTHROPIC_API_KEY で Claude API。
+// - LLMアシスト専用。MOCK_LLM=1 で決定的モック、OpenAI API (gpt-4o) で実行。
+// - OPENAI_BASE_URL は必須の環境変数（デフォルト値なし）。宛先は運用者が明示的に指定すること。
+//   未設定（空文字）の場合、非MOCK時のLLM呼び出しは 503 llm_unavailable を返す（SSRF対策）。
 // - 静的配信: GET / → index.html、GET /privacy → privacy.html（ゼロリテンション方針は不変。本文は保持・記録しない）。
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -13,22 +15,57 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const PORT = Number(process.env.PORT || 8787);
 const MOCK = process.env.MOCK_LLM === '1';
-const API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+// SSRF対策: デフォルト値なし。運用者が明示的に指定する必須環境変数。未設定なら非MOCK時 503。
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || '';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 const DAILY_LIMIT = Number(process.env.DAILY_LIMIT || 1000);
 
 const MAX_BODY = 32 * 1024;         // 32KB
 const RATE_PER_MIN = 30;            // IPごと 30req/分
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_VERSION = '2023-06-01';
 
-const HAIKU = 'claude-haiku-4-5';
-const SONNET = 'claude-sonnet-5';
+// 全ルートで同一モデルを使用（環境変数で切替）
+const MODEL = OPENAI_MODEL;
+
+// v6-5(#47): propose_advice アクションの型ガード。不正形状のフィールドは破棄して無害化し、
+//   有効なセクションが1つも残らない場合は null（＝アクションごと破棄）を返す。
+function sanitizeAdviceAction(a) {
+  if (!a || a.type !== 'propose_advice') return a; // 対象外はそのまま通す
+  const mapFilter = (arr, fn) => Array.isArray(arr) ? arr.map(fn).filter(Boolean) : [];
+  const discuss = mapFilter(a.discuss, (d) => {
+    if (!d || typeof d.title !== 'string' || !d.title.trim()) return null;
+    const o = { title: d.title.trim() };
+    if (typeof d.note === 'string' && d.note.trim()) o.note = d.note.trim();
+    return o;
+  });
+  const presend = mapFilter(a.presend, (p) => {
+    if (!p || typeof p.text !== 'string' || !p.text.trim()) return null;
+    return { kind: (p.kind === 'chat' ? 'chat' : 'report'), text: p.text.trim() };
+  });
+  const members = mapFilter(a.members, (m) => {
+    if (!m || !['decider', 'opinion', 'info'].includes(m.role)) return null;
+    const o = { role: m.role };
+    if (typeof m.name === 'string' && m.name.trim()) o.name = m.name.trim();
+    o.reason = (typeof m.reason === 'string') ? m.reason.trim() : '';
+    return o;
+  });
+  const agenda = mapFilter(a.agenda, (g) => {
+    if (!g || typeof g.title !== 'string' || !g.title.trim()) return null;
+    const min = Number(g.minutes);
+    return { title: g.title.trim(), minutes: (Number.isFinite(min) && min > 0) ? Math.round(min) : 5, goal: (typeof g.goal === 'string') ? g.goal.trim() : '' };
+  });
+  const memberFeedback = (typeof a.memberFeedback === 'string' && a.memberFeedback.trim()) ? a.memberFeedback.trim() : '';
+  if (!discuss.length && !presend.length && !members.length && !agenda.length && !memberFeedback) return null;
+  const out = { type: 'propose_advice', discuss, presend, members, agenda };
+  if (memberFeedback) out.memberFeedback = memberFeedback;
+  return out;
+}
 
 // ---- エンドポイント定義 (path -> {model, maxTokens, system, mock, validate}) ----
 const ROUTES = {
   // R1 報連相仕分け
   'route': {
-    model: HAIKU, maxTokens: 512,
+    model: MODEL, maxTokens: 2048,
     // フロントのレーン(報告=過去/連絡=現在/相談=未来)と整合させる。
     // report=報告(すでに済んだ過去の事実), chat=連絡(いま知らせたい現在の共有), meeting=相談(これから決めたい未来の要決定=要会議)。
     system: 'あなたは日本の職場の「報連相」仕分け係です。入力メッセージを report(報告=すでに済んだ過去の事実や結果の報告)/chat(連絡=いま知らせたい現在の共有・連絡事項)/meeting(相談=これから決めたい未来の要決定事項＝要会議) のいずれかに分類し、理由と整形済み本文を返します。必ず次のJSONのみを出力: {"kind":"report|chat|meeting","reason":"日本語の短い理由","formatted":"整形済み本文"}',
@@ -50,7 +87,7 @@ const ROUTES = {
   },
   // R2 議題添削
   'refine-agenda': {
-    model: HAIKU, maxTokens: 512,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたは会議の議題を添削する専門家です。曖昧な議題を「問い」の形に磨き、達成ゴールと一言コメントを返します。必ず次のJSONのみを出力: {"question":"問いの形にした議題","goal":"この議題で決めるべきゴール","comment":"改善の一言"}',
     mock(input) {
       const t = input.trim();
@@ -67,7 +104,7 @@ const ROUTES = {
   },
   // R3 曖昧アクション具体化
   'concretize-action': {
-    model: HAIKU, maxTokens: 768,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたは曖昧なアクションを「誰が・何を・いつまで」に具体化する係です。入力から候補を抽出し配列で返します。必ず次のJSONのみを出力: {"candidates":[{"what":"具体的な作業","ownerHint":"担当の目安","dueHint":"期限の目安"}]}',
     mock(input) {
       const lines = input.split(/[\n、。]/).map(s => s.trim()).filter(Boolean).slice(0, 3);
@@ -88,7 +125,7 @@ const ROUTES = {
   },
   // R4 3行要約
   'summarize-handoff': {
-    model: SONNET, maxTokens: 512,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたは引き継ぎ要約の専門家です。入力を3行以内の要約にまとめます。必ず次のJSONのみを出力: {"summary":"3行以内の要約（改行区切り）"}',
     mock(input) {
       const t = input.replace(/\s+/g, ' ').trim();
@@ -99,7 +136,7 @@ const ROUTES = {
   },
   // R5 A3・1枚圧縮 (1500字以内)
   'compile-a3': {
-    model: SONNET, maxTokens: 2048,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたはA3一枚仕事術の編集者です。入力を1500字以内のA3ドラフト（背景/現状/目標/対策/計画）に圧縮します。必ず次のJSONのみを出力: {"a3":"1500字以内のA3本文"}',
     mock(input) {
       let a3 = `【背景】${input.trim()}\n【現状】入力${input.length}字を整理\n【目標】論点を1枚に集約\n【対策】要点を構造化\n【計画】担当と期限を割当`;
@@ -110,7 +147,7 @@ const ROUTES = {
   },
   // R6 なぜなぜ候補
   'five-whys': {
-    model: SONNET, maxTokens: 768,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたは「なぜなぜ分析」のファシリテーターです。入力の事象に対し「なぜ」を掘り下げる候補を返します。必ず次のJSONのみを出力: {"whys":["なぜ1","なぜ2","なぜ3","なぜ4","なぜ5"]}',
     mock(input) {
       const t = input.trim();
@@ -120,12 +157,233 @@ const ROUTES = {
   },
   // R7 指標からの改善提案
   'diagnose': {
-    model: SONNET, maxTokens: 768,
+    model: MODEL, maxTokens: 2048,
     system: 'あなたは会議指標のアナリストです。入力の指標データから改善提案を返します。必ず次のJSONのみを出力: {"advice":"具体的な改善提案の文章"}',
     mock(input) {
       return { advice: `指標（${input.length}字）を診断: 停滞の兆候があれば担当と期限を明確化し、決定ゼロ会議を減らす一手を打ちましょう。` };
     },
     validate(r) { return r && typeof r.advice === 'string'; }
+  },
+  // v5-2 AIインテーク（ステートレス対話）。他ルートと異なり {messages, state} を受け、
+  //   {reply, choices?, actions?, state?} を返す。chat:true でハンドラ側の分岐を切り替える。
+  'intake': {
+    model: MODEL, maxTokens: 4096, chat: true,
+    system: [
+      'あなたは「会議招集の前に」という報連相トリアージ・システムの対話ガイドです。',
+      'ユーザーとの短い対話で「会議招集の文面に足る情報」を最短で集めることがゴールです。',
+      '思想を厳守してください:',
+      '(1) 報連相を仕分け、原則はメール/チャット/レポートで済ませ、例外理由があるときだけ会議を開く。',
+      '(2) 決めるための事実（数字・現状・原因）が揃うまで会議は開かない。先に現状把握レポートで事実を共有する。',
+      '(3) 会議は最小メンバー（決裁者＋意見・情報を持つ人）に絞る。',
+      '(4) 「聞くだけ」の人は招集せず、レポート送付に回す。',
+      '【5問設計】最初の5問で会議招集文面の骨格が揃うよう、次の優先順位で1問ずつ質問してください:',
+      '  ① 案件名（最初の問いは必ず「案件名を教えてください。」）',
+      '  ② 何を決めたいか・その背景',
+      '  ③ 決めるための事実は揃っているか（足りない報告・連絡は何か）',
+      '  ④ 決裁者は誰か・最小メンバー（意見／情報を持つ人）は誰か',
+      '  ⑤ 選択肢・判断基準や、今日の会議の終了条件',
+      '6問目以降は任意の深掘りです（続けるかはユーザー次第）。深掘りでも常に「次の一問」を1つだけ返してください。',
+      'ユーザーの自由入力を理解し、トヨタA3の8ステップ（背景/現状/目標/要因/対策/計画/実施/評価）を埋めるのに必要なことを対話で深掘りし、会議要否と最小メンバーを見極めます。',
+      '常に「次の一問」を1つだけ返し、構造化された actions と extract を添えてください。',
+      'actions の各タイプのフィールド仕様（厳守）:',
+      '- add_member: {"type":"add_member","name":"氏名","role":"decider|opinion|info|listener"}。name は必ず1人のフルネームのみ。複数人を招集する場合は add_member を人数分だけ繰り返す（1 action = 1人）。1つの name に「成迫,森,広瀬」のように複数名を詰め込んではならない。role は必ず decider / opinion / info / listener のいずれか一つ。決裁者は role を必ず "decider" とし、最低1人は含めること。',
+      '- set_question: {"type":"set_question","question":"決める問い"}。question にはあなた自身の質問文（例「何を決めますか？」）を入れてはならない。ユーザーが実際に答えた「決めること」の要約（1つの問い）だけを入れる。',
+      '- propose_meeting: {"type":"propose_meeting","question":"決める問い"}。question は set_question と同様、あなたの質問文ではなくユーザーが答えた決定事項の要約を入れる。',
+      '- propose_advice: {"type":"propose_advice","discuss":[{"title":"議論すべきこと(疑問形推奨)","note":"やわらかい補足(任意)"}],"presend":[{"kind":"report|chat","text":"会議前に済ませる報告/連絡"}],"members":[{"name":"氏名(任意)","role":"decider|opinion|info","reason":"招集する理由"}],"memberFeedback":"人数や役割へのやわらかい助言(任意)","agenda":[{"title":"議題","minutes":分,"goal":"今日決めること(終了条件)"}]}。会議主催者への3点アドバイス（①会議で議論すべきこと ②招集すべき人 ③アジェンダ）をまとめる。判断基準: 「議論すべきこと」は相談（未来の判断が必要な問い）だけにし、報告（過去）・連絡（現在）は presend へ振り分ける。members は必要最小限＋役割つき（決める人は decider を1名）、「聞くだけ」の人は招集せず議事レポート送付に回す。agenda は冒頭に目的確認・末尾に決定とO/D/N確認を置き、各議題にタイムボックス（minutes）と「今日決めること」（goal）を付け、合計は30分以内を推奨する。7つのムダに触れそうな点は note や memberFeedback でやわらかく注意し、断定・禁止表現（〜してはいけない等）は使わずガイドに徹する。分かった範囲だけでよく、毎ターン返す必要はない。会議をやる流れが固まったとき（propose_meeting の前後）に1回返せばよい。',
+      '【構造化抽出 extract】対話から分かった範囲だけで、裏側のトヨタA3・7つのムダ・報連相の3フレームワークへ反映するための抽出を返してください。分かった範囲だけでよく、完璧を期す必要はありません（分からなければ空でよい）。形式:',
+      '  "extract": {',
+      '    "a3": { "該当ステップ番号(1〜8の文字列)": "その断片（1=背景/2=現状/3=目標/4=要因/5=対策/6=計画/7=実施/8=評価）" },',
+      '    "horenso": [ { "kind":"report|chat|meeting", "text":"内容の要約", "presend": true|false } ],',
+      '    "muda": { "ムダ番号(1〜7の文字列)": { "status":"ok|warn", "note":"根拠の一言" } }',
+      '  }',
+      '  ・presend は「会議までに事前送付すべき資料（例: 現状把握レポート）」のとき true。',
+      '  ・a3/muda のキーは文字列の番号。分かった項目だけ入れ、埋まらない項目は省略してよい。',
+      '必ず次のJSONのみを出力: {"reply":"次の一問（日本語）","choices":["選択肢",...],"actions":[{"type":"set_title|set_route|fill_step|set_question|add_member|propose_meeting|propose_advice|suggest_report",...}],"extract":{"a3":{},"horenso":[],"muda":{}},"state":{"phase":"次の局面",...}}'
+    ].join('\n'),
+    // MOCK: v5-1 の質問ツリーを決定的になぞる。state.phase で局面を進める。
+    mock(messages, state) {
+      const st = (state && typeof state === 'object') ? state : {};
+      const phase = st.phase || 'askName';
+      const users = messages.filter(m => m && m.role === 'user');
+      const text = users.length ? String(users[users.length - 1].text || '') : '';
+      const EXC = ['判断が必要', '関係者間に認識差がある', '不確実性が高い', '緊急性が高い', '判断が不可逆', '部門横断の調整が必要', '決定権者の判断が必要'];
+      const next = (extra) => Object.assign({}, st, extra);
+      switch (phase) {
+        case 'askName': {
+          const title = text.trim() || '無題の案件';
+          return {
+            reply: `案件「${title}」を下書きとして作成しました。この件で、いま一番したいことは何ですか？`,
+            choices: ['過去の結果・経緯を伝えたい', 'いま起きていることを知らせたい', 'これから何かを決めたい・相談したい'],
+            actions: [{ type: 'set_title', title }],
+            extract: { a3: { '1': `背景: ${title}` }, horenso: [], muda: {} },
+            state: next({ phase: 'want', title })
+          };
+        }
+        case 'want': {
+          let tense = 'future';
+          if (/過去|報告|結果|経緯|実績/.test(text)) tense = 'past';
+          else if (/いま|連絡|知らせ|共有|周知/.test(text)) tense = 'present';
+          if (tense === 'future') {
+            return {
+              reply: '決めるために、事実（数字・現状・原因）は揃っていますか？',
+              choices: ['揃っている', '揃っていない', 'わからない'],
+              actions: [{ type: 'set_route', route: 'meeting', tense }],
+              extract: { a3: {}, horenso: [{ kind: 'meeting', text: st.title || '', presend: false }], muda: {} },
+              state: next({ phase: 'facts', tense })
+            };
+          }
+          return {
+            reply: '会議が必要になりやすい例外条件に当てはまるものはありますか？無ければ「該当なし」を選んでください。',
+            choices: EXC.concat(['該当なし']),
+            actions: [{ type: 'set_route', route: tense === 'present' ? 'chat' : 'report', tense }],
+            extract: { a3: {}, horenso: [{ kind: tense === 'present' ? 'chat' : 'report', text: st.title || '', presend: false }], muda: {} },
+            state: next({ phase: 'exception', tense })
+          };
+        }
+        case 'exception': {
+          if (/該当なし|無し|ない$/.test(text.trim())) {
+            const kind = st.tense === 'present' ? 'chat' : 'report';
+            return {
+              reply: `会議は不要です。${kind === 'chat' ? 'チャット' : 'レポート'}で済ませましょう。テンプレートを用意します。`,
+              choices: ['テンプレートを開く', '対話をやり直す'],
+              actions: [{ type: 'suggest_report', kind }],
+              state: next({ phase: 'doneNoMeeting' })
+            };
+          }
+          return {
+            reply: '例外条件に該当します。では、決めるための事実（数字・現状・原因）は揃っていますか？',
+            choices: ['揃っている', '揃っていない', 'わからない'],
+            actions: [{ type: 'set_route', route: 'meeting', tense: 'future' }],
+            state: next({ phase: 'facts', tense: 'future', exception: text.trim() })
+          };
+        }
+        case 'facts': {
+          if (/揃っている|ある|はい/.test(text) && !/いない|揃っていない/.test(text)) {
+            return {
+              reply: 'では、この会議で何を決めますか？1つの問いにしてください。',
+              choices: [],
+              actions: [],
+              extract: { a3: { '2': '判断に必要な事実は揃っている' }, horenso: [], muda: { '3': { status: 'ok', note: '事実が揃っており報告のためだけの資料作りを避けられる' } } },
+              state: next({ phase: 'decisionQ' })
+            };
+          }
+          return {
+            reply: '先に現状把握レポート（Step2）で事実を共有しましょう。会議はそれからでも遅くありません。',
+            choices: ['現状把握レポート（Step2）を開く', 'それでも今すぐ会議が必要'],
+            actions: [{ type: 'suggest_report', kind: 'report', step: 2 }],
+            extract: { a3: { '2': '判断に必要な事実が未収集。現状把握レポートで先に共有する' }, horenso: [{ kind: 'report', text: '現状把握レポート（Step2）', presend: true }], muda: {} },
+            state: next({ phase: 'factsNotReady', factsNotReady: true })
+          };
+        }
+        case 'factsNotReady': {
+          if (/今すぐ|それでも|必要/.test(text)) {
+            return {
+              reply: 'わかりました。では、この会議で何を決めますか？1つの問いにしてください。',
+              choices: [],
+              actions: [],
+              state: next({ phase: 'decisionQ' })
+            };
+          }
+          return {
+            reply: '現状把握レポート（Step2）を開きます。事実が揃ってから会議を検討しましょう。',
+            choices: [],
+            actions: [{ type: 'suggest_report', kind: 'report', step: 2 }],
+            state: next({ phase: 'doneReport' })
+          };
+        }
+        case 'decisionQ': {
+          const q = text.trim();
+          return {
+            reply: 'それを決められる人（決裁者）は誰ですか？',
+            choices: [],
+            actions: [{ type: 'set_question', question: q }],
+            extract: { a3: { '3': `決める問い（目標）: ${q}` }, horenso: [], muda: {} },
+            state: next({ phase: 'decider', decisionQuestion: q })
+          };
+        }
+        case 'decider': {
+          const name = text.trim();
+          const dq = st.decisionQuestion || '';
+          // v6-5(#47): 会議をやる流れが固まったこの局面で、主催者への3点アドバイスを1回返す。
+          const advice = {
+            type: 'propose_advice',
+            discuss: dq ? [{ title: dq, note: '未来の判断が必要な相談です。会議で扱います' }] : [],
+            presend: st.factsNotReady ? [{ kind: 'report', text: '現状把握レポート（Step2）で事実を事前共有' }] : [],
+            members: [{ name, role: 'decider', reason: 'この問いを決められる決裁者（必須1名）' }],
+            memberFeedback: '「聞くだけ」の人は招集せず、議事レポートの送付に回すのがおすすめです。役割が曖昧な人は外して最小限にしましょう。',
+            agenda: [
+              { title: '目的・ゴールの確認', minutes: 3, goal: 'この会議で決めることを全員で共有' },
+              { title: dq || '決める問い', minutes: 20, goal: 'この問いに結論を出し、担当と期限まで決める' },
+              { title: '決定事項とO/D/N（宿題・次アクション）の確認', minutes: 5, goal: '決定・担当・期限・次アクションを確認' }
+            ]
+          };
+          return {
+            reply: '意見や情報が必要な人はいますか？名前を入力してください。「聞くだけ」の人は招集せずレポート送付に回します。いなければ「まとめへ」を選んでください。',
+            choices: ['まとめへ'],
+            actions: [{ type: 'add_member', name, role: 'decider' }, advice],
+            extract: { a3: {}, horenso: [], muda: { '1': { status: 'ok', note: `決める人が明確（${name}）` } } },
+            state: next({ phase: 'participants', decider: name })
+          };
+        }
+        case 'participants': {
+          if (/まとめ|完了|いない|なし/.test(text)) {
+            return {
+              reply: '【まとめ】必要な事実が揃い、決裁者と最小メンバーが決まりました。判断セッション（会議）の設計に進みましょう。',
+              choices: ['判断セッション設計へ進む'],
+              actions: [],
+              state: next({ phase: 'summary' })
+            };
+          }
+          return {
+            reply: `「${text.trim()}」さんの役割を選んでください。`,
+            choices: ['意見を出す人', '情報を持っている人', '聞くだけ（レポート送付）'],
+            actions: [],
+            state: next({ phase: 'partRole', pendingName: text.trim() })
+          };
+        }
+        case 'partRole': {
+          let role = 'opinion';
+          if (/情報/.test(text)) role = 'info';
+          else if (/聞くだけ|レポート|送付/.test(text)) role = 'listener';
+          const name = st.pendingName || '';
+          const note = role === 'listener'
+            ? `「${name}」さんはレポート送付に回します。他にいますか？いなければ「まとめへ」を選んでください。`
+            : `「${name}」さんを追加しました。他にいますか？いなければ「まとめへ」を選んでください。`;
+          return {
+            reply: note,
+            choices: ['まとめへ'],
+            actions: [{ type: 'add_member', name, role }],
+            state: next({ phase: 'participants', pendingName: '' })
+          };
+        }
+        case 'summary': {
+          return {
+            reply: '判断セッション設計へプリフィルします。決める問い・背景・最小メンバーを引き継ぎます。',
+            choices: [],
+            actions: [{ type: 'propose_meeting', question: st.decisionQuestion || '' }],
+            state: next({ phase: 'done' })
+          };
+        }
+        default:
+          return { reply: '案件名を教えてください。', choices: [], actions: [], state: { phase: 'askName' } };
+      }
+    },
+    validate(r) {
+      return r && typeof r.reply === 'string' &&
+        (r.choices === undefined || Array.isArray(r.choices)) &&
+        (r.actions === undefined || Array.isArray(r.actions)) &&
+        (r.extract === undefined || (r.extract && typeof r.extract === 'object' && !Array.isArray(r.extract))) &&
+        (r.state === undefined || (r.state && typeof r.state === 'object'));
+    },
+    // v6-5(#47): 応答内の propose_advice アクションを型ガードで無害化（不正形状は破棄）。
+    sanitize(r) {
+      if (r && Array.isArray(r.actions)) {
+        r.actions = r.actions
+          .map(a => (a && a.type === 'propose_advice') ? sanitizeAdviceAction(a) : a)
+          .filter(Boolean);
+      }
+      return r;
+    }
   }
 };
 
@@ -218,30 +476,107 @@ function extractJson(text) {
   return JSON.parse(s);
 }
 
-// ---- 実LLM呼び出し ----
+// ---- Codex モデル判定 ----
+function isCodexModel(model) {
+  return model.toLowerCase().includes('codex');
+}
+
+// ---- OpenAI 呼び出し共通ヘルパー (Chat Completions / Responses API) ----
+// system: system prompt 文字列。messages: [{role:'user'|'assistant', content}] の会話配列。
+// Codex モデルは Responses API、それ以外は Chat Completions API を使う。応答テキストを返す。
+async function openaiComplete({ model, maxTokens, system, messages }) {
+  const headers = { 'content-type': 'application/json' };
+  if (OPENAI_API_KEY) headers['authorization'] = `Bearer ${OPENAI_API_KEY}`;
+
+  if (isCodexModel(model)) {
+    // Responses API for codex models（system は instructions、会話は input に連結）
+    const input = messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
+    const url = `${OPENAI_BASE_URL}/responses`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        instructions: system,
+        input,
+        stream: false
+      })
+    });
+    if (!res.ok) throw new apiError(res.status, await res.text());
+    const data = await res.json();
+    // Extract text from output[].type=="message" -> content[].type=="output_text"
+    let text = '';
+    if (Array.isArray(data.output)) {
+      for (const out of data.output) {
+        if (out.type === 'message' && Array.isArray(out.content)) {
+          for (const c of out.content) {
+            if (c.type === 'output_text') text += c.text;
+          }
+        }
+      }
+    }
+    return text;
+  }
+
+  // Chat Completions API
+  const url = `${OPENAI_BASE_URL}/chat/completions`;
+  const payload = {
+    model,
+    max_completion_tokens: maxTokens,
+    messages: [{ role: 'system', content: system }, ...messages],
+    response_format: { type: 'json_object' }
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new apiError(res.status, await res.text());
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+// ---- 実LLM呼び出し (OpenAI Chat Completions / Responses API) ----
 async function callLlm(route, input, context) {
   const userContent = context && Object.keys(context).length
     ? `${input}\n\n# context\n${JSON.stringify(context)}`
     : input;
-  const res = await fetch(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': API_KEY,
-      'anthropic-version': ANTHROPIC_VERSION
-    },
-    body: JSON.stringify({
-      model: route.model,
-      max_tokens: route.maxTokens,
-      system: route.system,
-      messages: [{ role: 'user', content: userContent }]
-    })
+  const text = await openaiComplete({
+    model: route.model,
+    maxTokens: route.maxTokens,
+    system: route.system,
+    messages: [{ role: 'user', content: userContent }]
   });
-  if (!res.ok) throw new Error('anthropic_status_' + res.status);
-  const data = await res.json();
-  const text = Array.isArray(data.content)
-    ? data.content.filter(p => p.type === 'text').map(p => p.text).join('')
-    : '';
+  const parsed = extractJson(text);
+  if (!route.validate(parsed)) throw new Error('invalid_llm_shape');
+  return parsed;
+}
+
+// ---- apiError 型 ----
+class apiError extends Error {
+  constructor(statusCode, body) {
+    super(`openai_status_${statusCode}`);
+    this.statusCode = statusCode;
+    this.body = body;
+  }
+}
+
+// ---- 実LLM呼び出し（対話ルート: messages + state → {reply, choices?, actions?, state?}） ----
+// v5 対話インテーク特有の要件（会話履歴を {role,content} に変換し、system prompt に現在の状態を
+// JSON 埋め込みする）を維持しつつ、HTTP 呼び出しは OpenAI 共通ヘルパー（openaiComplete）に委譲する。
+async function callLlmChat(route, messages, state) {
+  const convo = messages.map(m => ({
+    role: m && m.role === 'assistant' ? 'assistant' : 'user',
+    content: String((m && m.text) || '')
+  }));
+  if (!convo.length) convo.push({ role: 'user', content: '（開始）' });
+  const system = route.system + '\n\n# 現在の状態\n' + JSON.stringify(state || {});
+  const text = await openaiComplete({
+    model: route.model,
+    maxTokens: route.maxTokens,
+    system,
+    messages: convo
+  });
   const parsed = extractJson(text);
   if (!route.validate(parsed)) throw new Error('invalid_llm_shape');
   return parsed;
@@ -302,26 +637,55 @@ const server = http.createServer(async (req, res) => {
       try { parsedReq = JSON.parse(raw || '{}'); } catch (e) {
         status = 400; sendJson(res, 400, { ok: false, error: 'bad_request' }); return;
       }
-      const input = parsedReq && typeof parsedReq.input === 'string' ? parsedReq.input : '';
-      const context = parsedReq && parsedReq.context && typeof parsedReq.context === 'object' ? parsedReq.context : undefined;
-      if (!input) {
-        status = 400; sendJson(res, 400, { ok: false, error: 'bad_request' }); return;
-      }
-      inputChars = input.length;
 
-      // LLM 実行
       let result;
-      if (MOCK) {
-        result = route.mock(input, context);
-      } else if (!API_KEY) {
-        status = 503; sendJson(res, 503, { ok: false, error: 'llm_unavailable' }); return;
+      if (route.chat) {
+        // 対話ルート: {messages:[{role,text}...], state:{...}} を受ける（ステートレス）
+        const messages = Array.isArray(parsedReq && parsedReq.messages)
+          ? parsedReq.messages.filter(m => m && typeof m.text === 'string')
+          : null;
+        const state = parsedReq && parsedReq.state && typeof parsedReq.state === 'object' ? parsedReq.state : {};
+        if (!messages) {
+          status = 400; sendJson(res, 400, { ok: false, error: 'bad_request' }); return;
+        }
+        inputChars = messages.reduce((n, m) => n + m.text.length, 0);
+        if (MOCK) {
+          result = route.mock(messages, state);
+        } else if (!OPENAI_BASE_URL) {
+          // SSRF対策: OPENAI_BASE_URL は必須。未設定なら実LLM呼び出しを行わず 503。
+          status = 503; sendJson(res, 503, { ok: false, error: 'llm_unavailable' }); return;
+        } else {
+          try {
+            result = await callLlmChat(route, messages, state);
+          } catch (e) {
+            status = 502; sendJson(res, 502, { ok: false, error: 'llm_error' }); return;
+          }
+        }
       } else {
-        try {
-          result = await callLlm(route, input, context);
-        } catch (e) {
-          status = 502; sendJson(res, 502, { ok: false, error: 'llm_error' }); return;
+        const input = parsedReq && typeof parsedReq.input === 'string' ? parsedReq.input : '';
+        const context = parsedReq && parsedReq.context && typeof parsedReq.context === 'object' ? parsedReq.context : undefined;
+        if (!input) {
+          status = 400; sendJson(res, 400, { ok: false, error: 'bad_request' }); return;
+        }
+        inputChars = input.length;
+
+        // LLM 実行
+        if (MOCK) {
+          result = route.mock(input, context);
+        } else if (!OPENAI_BASE_URL) {
+          // SSRF対策: OPENAI_BASE_URL は必須。未設定なら実LLM呼び出しを行わず 503。
+          status = 503; sendJson(res, 503, { ok: false, error: 'llm_unavailable' }); return;
+        } else {
+          try {
+            result = await callLlm(route, input, context);
+          } catch (e) {
+            status = 502; sendJson(res, 502, { ok: false, error: 'llm_error' }); return;
+          }
         }
       }
+
+      // v6-5(#47): 応答の型ガード（例: propose_advice の不正形状を破棄して無害化）。
+      if (route.sanitize && result) { try { result = route.sanitize(result); } catch (e) {} }
 
       sendJson(res, 200, {
         ok: true,
